@@ -160,7 +160,9 @@ def _load_exercise_catalog(db_session: Any) -> list[dict[str, Any]]:
     start = 0
     while True:
         page = _data(
+            # Shared catalog only: rows with an owner are someone's private custom exercises.
             db_session.table("exercises").select("id,name,muscle_group,muscles,equipment")
+            .is_("owner_id", "null")
             .order("id").range(start, start + page_size - 1).execute()
         )
         rows.extend(page)

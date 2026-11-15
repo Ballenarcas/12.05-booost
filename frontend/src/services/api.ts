@@ -688,8 +688,6 @@ const EXERCISE_LIST_TTL_MS = 30_000
 
 export async function fetchExercises(params: FetchExercisesParams = {}) {
   const query = new URLSearchParams()
-  const user = getCurrentUser()
-  if (user?.id) query.set('user_id', user.id)
   if (params.q) query.set('q', params.q)
   if (params.category) query.set('category', params.category)
   if (params.muscle_group) query.set('muscle_group', params.muscle_group)
@@ -700,9 +698,11 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
   if (params.compact) query.set('compact', 'true')
 
   const queryString = query.toString()
-  const cached = exerciseListCache.get(queryString)
+  // The list includes the signed-in user's custom exercises, so cache it per user.
+  const cacheKey = `${getCurrentUser()?.id ?? ''}|${queryString}`
+  const cached = exerciseListCache.get(cacheKey)
   if (cached && Date.now() - cached.at < EXERCISE_LIST_TTL_MS) return cached.data
-  const inflight = exerciseListInflight.get(queryString)
+  const inflight = exerciseListInflight.get(cacheKey)
   if (inflight) return inflight
 
   const request = apiFetch(`${API_URL}/api/v1/workouts/exercises${queryString ? `?${queryString}` : ''}`, {
@@ -712,14 +712,14 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
     .then(async (response) => {
       if (!response.ok) throw new Error("We couldn't load exercises. Please try again.")
       const data = (await response.json()) as import('../types').ExerciseListResponse
-      exerciseListCache.set(queryString, { at: Date.now(), data })
+      exerciseListCache.set(cacheKey, { at: Date.now(), data })
       return data
     })
     .finally(() => {
-      exerciseListInflight.delete(queryString)
+      exerciseListInflight.delete(cacheKey)
     })
 
-  exerciseListInflight.set(queryString, request)
+  exerciseListInflight.set(cacheKey, request)
   return request
 }
 
@@ -738,9 +738,7 @@ export async function fetchExerciseMuscleGroups(): Promise<string[]> {
 }
 
 export async function fetchExerciseById(exerciseId: string) {
-  const user = getCurrentUser()
-  const query = user?.id ? `?user_id=${encodeURIComponent(user.id)}` : ''
-  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/${encodeURIComponent(exerciseId)}${query}`, {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/${encodeURIComponent(exerciseId)}`, {
     cache: 'no-store',
   })
   if (!response.ok) throw new Error("We couldn't load that exercise. Please try again.")
