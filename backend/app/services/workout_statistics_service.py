@@ -10,6 +10,7 @@ from fastapi import HTTPException
 
 from app.db.supabase_client import get_supabase
 from app.schemas.workout_statistics import (
+    FatigueHistoryPoint,
     MuscleGroupVolume,
     VolumeProgressionPoint,
     WorkoutStatisticsRange,
@@ -24,6 +25,7 @@ _WORKOUT_SELECT = (
     "workout_sets(set_number,reps,weight,is_done,exercise_id,"
     "exercises(muscles))"
 )
+_FATIGUE_SELECT = "id,name,start_time,fatigue_level"
 
 
 def _shift_months(value: datetime, months: int) -> datetime:
@@ -73,6 +75,19 @@ def _to_number(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return number if math.isfinite(number) else None
+
+
+def _fatigue_level(value: Any) -> int | None:
+    """Return a valid 1-10 fatigue rating, ignoring missing or malformed values."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        return None
+    try:
+        level = int(value)
+    except (TypeError, ValueError):
+        return None
+    return level if 1 <= level <= 10 else None
 
 
 def _is_completed_set(set_row: dict[str, Any]) -> bool:
@@ -131,6 +146,68 @@ def _bucket_date(day: date, range_key: WorkoutStatisticsRange) -> date:
     return day
 
 
+def _aggregate_fatigue_history(
+    rows: Iterable[dict[str, Any]] | None,
+    *,
+    timezone_offset_minutes: int = 0,
+) -> tuple[list[FatigueHistoryPoint], int]:
+    """Group rated workouts by local workout date, keeping that day's latest rating.
+
+    Fatigue is stored on each workout row. When a user trains more than once in a
+    day, the most recent rating represents how they felt at the end of that day.
+    """
+    by_day: dict[date, dict[str, Any]] = {}
+    rated_workouts = 0
+    seen_workouts: set[str] = set()
+
+    for index, row in enumerate(rows or []):
+        if not isinstance(row, dict):
+            continue
+        workout_key = str(row.get("id") or f"fatigue-row-{index}")
+        if workout_key in seen_workouts:
+            continue
+
+        started_at = _parse_datetime(row.get("start_time"))
+        level = _fatigue_level(row.get("fatigue_level"))
+        if started_at is None or level is None:
+            continue
+
+        seen_workouts.add(workout_key)
+        rated_workouts += 1
+        day = _local_date(started_at, timezone_offset_minutes)
+        entry = by_day.get(day)
+        if entry is None:
+            by_day[day] = {
+                "workout_id": workout_key,
+                "name": str(row.get("name") or "Workout"),
+                "started_at": started_at,
+                "fatigue_level": level,
+                "workout_count": 1,
+            }
+            continue
+
+        entry["workout_count"] += 1
+        if started_at >= entry["started_at"]:
+            entry.update(
+                workout_id=workout_key,
+                name=str(row.get("name") or "Workout"),
+                started_at=started_at,
+                fatigue_level=level,
+            )
+
+    history = [
+        FatigueHistoryPoint(
+            date=day,
+            fatigue_level=entry["fatigue_level"],
+            workout_id=entry["workout_id"],
+            name=entry["name"],
+            workout_count=entry["workout_count"],
+        )
+        for day, entry in sorted(by_day.items())
+    ]
+    return history, rated_workouts
+
+
 def aggregate_workout_statistics(
     rows: Iterable[dict[str, Any]] | None,
     *,
@@ -138,17 +215,25 @@ def aggregate_workout_statistics(
     start: datetime,
     end: datetime,
     timezone_offset_minutes: int = 0,
+    fatigue_rows: Iterable[dict[str, Any]] | None = None,
 ) -> WorkoutStatisticsResponse:
-    """Aggregate completed workout rows into the basic statistics dashboard data.
+    """Aggregate completed workout rows into the statistics dashboard data.
 
     A workout is complete when it has an end_time. A set contributes weighted
     volume only when it is marked done, has positive finite reps and weight, and
     is not a duplicate. Weight is stored in kilograms by the workout log API.
+
+    Fatigue history is not limited to the statistics range. The caller can pass
+    all rated workout rows through ``fatigue_rows``; when omitted, the range rows
+    are used.
     """
     range_start = _parse_datetime(start)
     range_end = _parse_datetime(end)
     if range_start is None or range_end is None or range_start > range_end:
         raise ValueError("Statistics range bounds are invalid")
+
+    workout_rows = list(rows or [])
+    fatigue_source = workout_rows if fatigue_rows is None else list(fatigue_rows or [])
 
     total_workouts = 0
     total_volume = 0.0
@@ -160,7 +245,7 @@ def aggregate_workout_statistics(
     muscle_labels: dict[str, str] = {}
     seen_workouts: set[str] = set()
 
-    for workout_index, row in enumerate(rows or []):
+    for workout_index, row in enumerate(workout_rows):
         if not isinstance(row, dict):
             continue
         workout_key = str(row.get("id") or f"row-{workout_index}")
@@ -229,6 +314,15 @@ def aggregate_workout_statistics(
     muscle_group_distribution.sort(key=lambda item: (-item.volume_kg, item.muscle_group.casefold()))
     classified_volume = round(sum(muscle_volume.values()), 2)
     rounded_total_volume = round(total_volume, 2)
+    fatigue_history, fatigue_workouts = _aggregate_fatigue_history(
+        fatigue_source,
+        timezone_offset_minutes=timezone_offset_minutes,
+    )
+    fatigue_average = (
+        round(sum(point.fatigue_level for point in fatigue_history) / len(fatigue_history), 1)
+        if fatigue_history
+        else None
+    )
 
     return WorkoutStatisticsResponse(
         range=range_key,
@@ -244,6 +338,11 @@ def aggregate_workout_statistics(
         muscle_group_distribution=muscle_group_distribution,
         classified_volume_kg=classified_volume,
         unclassified_volume_kg=round(max(0.0, total_volume - classified_volume), 2),
+        fatigue_history=fatigue_history,
+        fatigue_workouts=fatigue_workouts,
+        fatigue_days=len(fatigue_history),
+        fatigue_average=fatigue_average,
+        fatigue_latest=fatigue_history[-1].fatigue_level if fatigue_history else None,
     )
 
 
@@ -276,10 +375,27 @@ def get_workout_statistics(
         logger.exception("Failed to load workout statistics")
         raise HTTPException(status_code=502, detail="Could not load workout statistics") from err
 
+    try:
+        fatigue_rows = (
+            supabase.table("workouts")
+            .select(_FATIGUE_SELECT)
+            .eq("user_id", str(user_id))
+            .not_.is_("end_time", "null")
+            .not_.is_("fatigue_level", "null")
+            .order("start_time")
+            .execute()
+            .data or []
+        )
+    except Exception:
+        # Keep the main statistics working until the fatigue migration is applied.
+        logger.exception("Failed to load workout fatigue history")
+        fatigue_rows = []
+
     return aggregate_workout_statistics(
         rows,
         range_key=range_key,
         start=start,
         end=end,
         timezone_offset_minutes=timezone_offset_minutes,
+        fatigue_rows=fatigue_rows,
     )

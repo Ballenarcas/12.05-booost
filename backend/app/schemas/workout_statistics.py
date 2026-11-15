@@ -17,6 +17,14 @@ class MuscleGroupVolume(BaseModel):
     volume_kg: float = Field(ge=0)
 
 
+class FatigueHistoryPoint(BaseModel):
+    date: date
+    fatigue_level: int = Field(ge=1, le=10)
+    workout_id: str
+    name: str
+    workout_count: int = Field(default=1, ge=1)
+
+
 class WorkoutStatisticsResponse(BaseModel):
     range: WorkoutStatisticsRange
     start_date: datetime
@@ -31,3 +39,8 @@ class WorkoutStatisticsResponse(BaseModel):
     muscle_group_distribution: list[MuscleGroupVolume]
     classified_volume_kg: float = Field(ge=0)
     unclassified_volume_kg: float = Field(ge=0)
+    fatigue_history: list[FatigueHistoryPoint] = Field(default_factory=list)
+    fatigue_workouts: int = Field(default=0, ge=0)
+    fatigue_days: int = Field(default=0, ge=0)
+    fatigue_average: float | None = Field(default=None, ge=1, le=10)
+    fatigue_latest: int | None = Field(default=None, ge=1, le=10)

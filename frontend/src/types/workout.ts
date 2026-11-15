@@ -118,6 +118,14 @@ export interface WorkoutStatisticsMuscleGroup {
   volume_kg: number
 }
 
+export interface WorkoutStatisticsFatiguePoint {
+  date: string
+  fatigue_level: number
+  workout_id: string
+  name: string
+  workout_count: number
+}
+
 export interface WorkoutStatistics {
   range: WorkoutStatisticsRange
   start_date: string
@@ -132,6 +140,11 @@ export interface WorkoutStatistics {
   muscle_group_distribution: WorkoutStatisticsMuscleGroup[]
   classified_volume_kg: number
   unclassified_volume_kg: number
+  fatigue_history: WorkoutStatisticsFatiguePoint[]
+  fatigue_workouts: number
+  fatigue_days: number
+  fatigue_average: number | null
+  fatigue_latest: number | null
 }
 
 export type LiveWorkoutAdjustmentAction = 'reduce_load' | 'reduce_reps' | 'drop_set' | 'stop_exercise'
