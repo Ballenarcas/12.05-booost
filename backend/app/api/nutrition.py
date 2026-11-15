@@ -8,13 +8,19 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.core.auth import current_user
 from app.schemas.nutrition import (
     DailyNutritionResponse,
+    FavoriteMeal,
+    FavoriteMealCreate,
     FoodSearchItem,
     MealCreateRequest,
     MealItem,
     MealUpdateRequest,
 )
 from app.facades.nutrition_facade import nutrition_facade
-from app.services.nutrition_service import MealIngredientStorageUnavailable
+from app.services.nutrition_service import (
+    FavoriteAlreadyExists,
+    FavoriteLimitReached,
+    MealIngredientStorageUnavailable,
+)
 
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
 logger = logging.getLogger(__name__)
@@ -57,6 +63,8 @@ def add_meal(
     except MealIngredientStorageUnavailable as err:
         logger.exception("Meal ingredient storage is unavailable")
         raise HTTPException(status_code=503, detail="Meals can't be saved right now.") from err
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
     except Exception as err:
         logger.exception("Failed to save meal")
         raise HTTPException(status_code=500, detail="Could not save this meal.") from err
@@ -93,3 +101,54 @@ def remove_meal(
     except Exception as err:
         logger.exception("Failed to delete meal")
         raise HTTPException(status_code=500, detail="Could not remove this meal.") from err
+
+
+@router.get("/favorites", response_model=list[FavoriteMeal])
+def list_favorite_meals(user_id: UUID = Depends(current_user)) -> list[FavoriteMeal]:
+    try:
+        return nutrition_facade.list_favorites(str(user_id))
+    except Exception as err:
+        logger.exception("Failed to load favorite meals")
+        raise HTTPException(status_code=500, detail="Could not load your favorite meals.") from err
+
+
+@router.post("/favorites", response_model=FavoriteMeal)
+def add_favorite_meal(payload: FavoriteMealCreate, user_id: UUID = Depends(current_user)) -> FavoriteMeal:
+    try:
+        return nutrition_facade.add_favorite(str(user_id), str(payload.meal_id))
+    except LookupError as err:
+        raise HTTPException(status_code=404, detail="Meal not found.") from err
+    except FavoriteLimitReached as err:
+        raise HTTPException(status_code=409, detail=str(err)) from err
+    except Exception as err:
+        logger.exception("Failed to save favorite meal")
+        raise HTTPException(status_code=500, detail="Could not save this favorite.") from err
+
+
+@router.put("/favorites/{favorite_id}", response_model=FavoriteMeal)
+def update_favorite_meal(
+    favorite_id: UUID,
+    payload: MealUpdateRequest,
+    user_id: UUID = Depends(current_user),
+) -> FavoriteMeal:
+    try:
+        return nutrition_facade.update_favorite(str(user_id), str(favorite_id), payload)
+    except LookupError as err:
+        raise HTTPException(status_code=404, detail="Favorite not found.") from err
+    except FavoriteAlreadyExists as err:
+        raise HTTPException(status_code=409, detail=str(err)) from err
+    except Exception as err:
+        logger.exception("Failed to update favorite meal")
+        raise HTTPException(status_code=500, detail="Could not update this favorite.") from err
+
+
+@router.delete("/favorites/{favorite_id}")
+def remove_favorite_meal(favorite_id: UUID, user_id: UUID = Depends(current_user)) -> dict[str, str]:
+    try:
+        nutrition_facade.delete_favorite(str(user_id), str(favorite_id))
+        return {"status": "success", "deleted_id": str(favorite_id)}
+    except LookupError as err:
+        raise HTTPException(status_code=404, detail="Favorite not found.") from err
+    except Exception as err:
+        logger.exception("Failed to delete favorite meal")
+        raise HTTPException(status_code=500, detail="Could not remove this favorite.") from err

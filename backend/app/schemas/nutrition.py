@@ -1,3 +1,6 @@
+from datetime import datetime
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 
@@ -46,6 +49,25 @@ class MealCreateRequest(BaseModel):
     carbs: float | None = Field(default=0.0, ge=0, le=2000)
     fats: float | None = Field(default=0.0, ge=0, le=2000)
     ingredients: list[MealIngredient] = Field(default_factory=list, max_length=50)
+    # When the meal was eaten; omitted means now. Checked in the service (no future, max 1 year back).
+    consumed_at: datetime | None = None
+
+
+class FavoriteMeal(BaseModel):
+    id: str
+    name: str
+    meal_type: str = "Meal"
+    calories: int = 0
+    proteins_g: float = 0.0
+    carbs_g: float = 0.0
+    fats_g: float = 0.0
+    quantity_g: float = 100.0
+    ingredients: list[MealIngredient] = Field(default_factory=list)
+    created_at: str | None = None
+
+
+class FavoriteMealCreate(BaseModel):
+    meal_id: UUID
 
 
 class MealUpdateRequest(BaseModel):

@@ -1096,6 +1096,63 @@ export interface MealCreateRequest {
   carbs?: number
   fats?: number
   ingredients?: MealIngredient[]
+  /** ISO instant the meal was eaten; omitted means now. */
+  consumed_at?: string
+}
+
+function clearNutritionCache(): void {
+  try {
+    Object.keys(sessionStorage)
+      .filter((key) => key.startsWith(NUTRITION_CACHE_PREFIX))
+      .forEach((key) => sessionStorage.removeItem(key))
+  } catch {
+    // The server stays authoritative when browser storage is unavailable.
+  }
+}
+
+export interface FavoriteMeal {
+  id: string
+  name: string
+  meal_type: string
+  calories: number
+  proteins_g: number
+  carbs_g: number
+  fats_g: number
+  quantity_g: number
+  ingredients: MealIngredient[]
+  created_at?: string
+}
+
+async function favoriteRequest<T>(path: string, init: RequestInit, fallback: string): Promise<T> {
+  const response = await apiFetch(`${API_URL}/api/v1/nutrition/favorites${path}`, {
+    ...init,
+    headers: init.body ? { 'Content-Type': 'application/json' } : undefined,
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : fallback)
+  }
+  return response.json() as Promise<T>
+}
+
+export function fetchFavoriteMeals(): Promise<FavoriteMeal[]> {
+  return favoriteRequest('', {}, "We couldn't load your favorite meals. Please try again.")
+}
+
+export function addFavoriteMeal(mealId: string): Promise<FavoriteMeal> {
+  return favoriteRequest('', { method: 'POST', body: JSON.stringify({ meal_id: mealId }) }, "We couldn't save this favorite. Please try again.")
+}
+
+export function updateFavoriteMeal(
+  favoriteId: string,
+  payload: { name: string; meal_type: string; ingredients: MealIngredient[] },
+): Promise<FavoriteMeal> {
+  return favoriteRequest(`/${encodeURIComponent(favoriteId)}`, { method: 'PUT', body: JSON.stringify(payload) }, "We couldn't update this favorite. Please try again.")
+}
+
+export async function deleteFavoriteMeal(favoriteId: string): Promise<void> {
+  await favoriteRequest(`/${encodeURIComponent(favoriteId)}`, { method: 'DELETE' }, "We couldn't remove this favorite. Please try again.")
 }
 
 export async function addMealLog(payload: MealCreateRequest): Promise<MealLogItem> {
@@ -1109,6 +1166,7 @@ export async function addMealLog(payload: MealCreateRequest): Promise<MealLogIte
     throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't save this meal. Please try again.")
   }
   clearDashboardCache()
+  clearNutritionCache()
   return response.json()
 }
 

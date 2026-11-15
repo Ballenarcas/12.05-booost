@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.schemas.nutrition import (
     DailyNutritionResponse,
+    FavoriteMeal,
     FoodSearchItem,
     MealCreateRequest,
     MealItem,
@@ -37,6 +38,18 @@ class NutritionFacade:
 
     def delete_meal(self, user_id: str, meal_id: str) -> bool:
         return nutrition_service.delete_user_meal(user_id, meal_id)
+
+    def list_favorites(self, user_id: str) -> list[FavoriteMeal]:
+        return nutrition_service.list_favorite_meals(user_id)
+
+    def add_favorite(self, user_id: str, meal_id: str) -> FavoriteMeal:
+        return nutrition_service.add_favorite_from_meal(user_id, meal_id)
+
+    def update_favorite(self, user_id: str, favorite_id: str, payload: MealUpdateRequest) -> FavoriteMeal:
+        return nutrition_service.update_favorite_meal(user_id, favorite_id, payload)
+
+    def delete_favorite(self, user_id: str, favorite_id: str) -> None:
+        nutrition_service.delete_favorite_meal(user_id, favorite_id)
 
 
 nutrition_facade = NutritionFacade()

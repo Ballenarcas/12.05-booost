@@ -13,6 +13,7 @@ from app.services.user_profile_service import calculate_calorie_goal
 from app.db.supabase_client import get_supabase
 from app.schemas.nutrition import (
     DailyNutritionResponse,
+    FavoriteMeal,
     FoodSearchItem,
     MealCreateRequest,
     MealIngredient,
@@ -423,6 +424,25 @@ def calculate_meal_nutrition(food_name: str, quantity_g: float) -> tuple[int, fl
     return round(130 * ratio), round(8.0 * ratio, 1), round(15.0 * ratio, 1), round(3.5 * ratio, 1)
 
 
+CONSUMED_AT_FUTURE_SLACK = timedelta(minutes=5)  # phone clocks drift a little
+CONSUMED_AT_MAX_AGE = timedelta(days=366)
+
+
+def resolve_consumed_at(consumed_at: datetime | None, now: datetime | None = None) -> datetime:
+    """When a meal was eaten: now when not given. Raises ValueError for the future or over a year back."""
+    now = now or datetime.now(timezone.utc)
+    if consumed_at is None:
+        return now
+    if consumed_at.tzinfo is None:
+        consumed_at = consumed_at.replace(tzinfo=timezone.utc)
+    consumed_at = consumed_at.astimezone(timezone.utc)
+    if consumed_at > now + CONSUMED_AT_FUTURE_SLACK:
+        raise ValueError("A meal can't be logged in the future.")
+    if consumed_at < now - CONSUMED_AT_MAX_AGE:
+        raise ValueError("A meal can only be logged up to a year back.")
+    return consumed_at
+
+
 def create_user_meal(payload: MealCreateRequest) -> MealItem:
     supabase = get_supabase(admin=True)
     if not supabase:
@@ -449,7 +469,7 @@ def create_user_meal(payload: MealCreateRequest) -> MealItem:
                 fats = calc_f
 
     meal_id = str(uuid.uuid4())
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = resolve_consumed_at(payload.consumed_at).isoformat()
     record = {
         "id": meal_id,
         "user_id": payload.user_id,
@@ -624,3 +644,167 @@ def delete_user_meal(user_id: str, meal_id: str) -> bool:
     if not response.data:
         raise LookupError("Meal not found")
     return True
+
+
+MAX_FAVORITE_MEALS = 50
+FAVORITE_COLUMNS = "id,name,meal_type,ingredients,calories,proteins_g,carbs_g,fats_g,quantity_g,created_at"
+
+
+class FavoriteLimitReached(RuntimeError):
+    pass
+
+
+class FavoriteAlreadyExists(RuntimeError):
+    pass
+
+
+def _favorite_from_row(row: dict[str, Any]) -> FavoriteMeal:
+    return FavoriteMeal(
+        id=str(row["id"]),
+        name=row.get("name") or "Unnamed Meal",
+        meal_type=row.get("meal_type") or "Meal",
+        calories=int(row.get("calories") or 0),
+        proteins_g=round(float(row.get("proteins_g") or 0), 1),
+        carbs_g=round(float(row.get("carbs_g") or 0), 1),
+        fats_g=round(float(row.get("fats_g") or 0), 1),
+        quantity_g=float(row.get("quantity_g") or 100),
+        ingredients=row.get("ingredients") or [],
+        created_at=row.get("created_at"),
+    )
+
+
+def _require_supabase() -> Any:
+    supabase = get_supabase(admin=True)
+    if not supabase:
+        raise RuntimeError("Database connection unavailable")
+    return supabase
+
+
+def list_favorite_meals(user_id: str) -> list[FavoriteMeal]:
+    rows = (
+        _require_supabase().table("favorite_meals")
+        .select(FAVORITE_COLUMNS)
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+        .data or []
+    )
+    return [_favorite_from_row(row) for row in rows]
+
+
+def _find_favorite(supabase: Any, user_id: str, meal_type: str, name: str) -> dict[str, Any] | None:
+    rows = (
+        supabase.table("favorite_meals")
+        .select(FAVORITE_COLUMNS)
+        .eq("user_id", user_id)
+        .eq("meal_type", meal_type)
+        .eq("name", name)
+        .limit(1)
+        .execute()
+        .data or []
+    )
+    return rows[0] if rows else None
+
+
+def add_favorite_from_meal(user_id: str, meal_id: str) -> FavoriteMeal:
+    """Saves a copy of one of the user's meals. Saving the same meal again returns the existing favorite."""
+    supabase = _require_supabase()
+    meal = (
+        supabase.table("meals")
+        .select("id,name,calories,proteins,carbs,fats,consumed_at")
+        .eq("id", meal_id)
+        .eq("user_id", user_id)
+        .maybe_single()
+        .execute()
+    )
+    meal = getattr(meal, "data", None)
+    if not meal:
+        raise LookupError("Meal not found")
+    try:
+        ingredient_rows = (
+            supabase.table("meal_ingredients")
+            .select("meal_type,name,quantity_g,calories_per_100g,proteins_per_100g,carbs_per_100g,fats_per_100g")
+            .eq("meal_id", meal_id)
+            .eq("user_id", user_id)
+            .order("created_at")
+            .execute()
+            .data or []
+        )
+    except Exception as err:
+        if not _missing_meal_ingredients_table(err):
+            raise
+        ingredient_rows = []
+
+    name = meal.get("name") or "Unnamed Meal"
+    meal_type = (ingredient_rows[0].get("meal_type") if ingredient_rows else None) or infer_meal_type(meal.get("consumed_at"))
+    existing = _find_favorite(supabase, user_id, meal_type, name)
+    if existing:
+        return _favorite_from_row(existing)
+
+    count = supabase.table("favorite_meals").select("id").eq("user_id", user_id).execute().data or []
+    if len(count) >= MAX_FAVORITE_MEALS:
+        raise FavoriteLimitReached(f"You can save up to {MAX_FAVORITE_MEALS} favorite meals.")
+
+    ingredients = [MealIngredient(**{key: row[key] for key in MealIngredient.model_fields}) for row in ingredient_rows]
+    if ingredients:
+        quantity, calories, proteins, carbs, fats = _summarize_ingredients(ingredients)
+    else:
+        quantity = 100.0
+        calories = int(meal.get("calories") or 0)
+        proteins, carbs, fats = (float(meal.get(key) or 0) for key in ("proteins", "carbs", "fats"))
+    record = {
+        "user_id": user_id,
+        "name": name,
+        "meal_type": meal_type,
+        "ingredients": [ingredient.model_dump() for ingredient in ingredients],
+        "calories": calories,
+        "proteins_g": proteins,
+        "carbs_g": carbs,
+        "fats_g": fats,
+        "quantity_g": quantity or 100.0,
+    }
+    rows = supabase.table("favorite_meals").insert(record).execute().data or []
+    return _favorite_from_row(rows[0] if rows else {"id": "", **record})
+
+
+def update_favorite_meal(user_id: str, favorite_id: str, payload: MealUpdateRequest) -> FavoriteMeal:
+    supabase = _require_supabase()
+    clash = _find_favorite(supabase, user_id, payload.meal_type, payload.name)
+    if clash and str(clash["id"]) != favorite_id:
+        raise FavoriteAlreadyExists("You already have a favorite with this name and meal type.")
+    quantity, calories, proteins, carbs, fats = _summarize_ingredients(payload.ingredients)
+    rows = (
+        supabase.table("favorite_meals")
+        .update({
+            "name": payload.name,
+            "meal_type": payload.meal_type,
+            "ingredients": [ingredient.model_dump() for ingredient in payload.ingredients],
+            "calories": calories,
+            "proteins_g": proteins,
+            "carbs_g": carbs,
+            "fats_g": fats,
+            "quantity_g": quantity,
+        })
+        .eq("id", favorite_id)
+        .eq("user_id", user_id)
+        .select(FAVORITE_COLUMNS)
+        .execute()
+        .data
+    )
+    if not rows:
+        raise LookupError("Favorite not found")
+    return _favorite_from_row(rows[0])
+
+
+def delete_favorite_meal(user_id: str, favorite_id: str) -> None:
+    rows = (
+        _require_supabase().table("favorite_meals")
+        .delete()
+        .eq("id", favorite_id)
+        .eq("user_id", user_id)
+        .select("id")
+        .execute()
+        .data
+    )
+    if not rows:
+        raise LookupError("Favorite not found")
