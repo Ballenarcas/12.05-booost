@@ -59,6 +59,7 @@ export interface ActiveSession {
   planId?: string
   routineId?: string
   editWorkoutId?: string
+  fatigueLevel?: number | null
   name: string
   startedAt: string
   exercises: ActiveExercise[]
@@ -73,6 +74,7 @@ export interface WorkoutLogCreate {
   duration_seconds: number
   started_at: string
   completed_at: string
+  fatigue_level?: number | null
   exercises: Array<{
     exercise_id: string
     is_cardio?: boolean
@@ -87,6 +89,7 @@ export interface WorkoutHistoryEntry {
   started_at: string
   completed_at: string | null
   duration_seconds: number
+  fatigue_level: number | null
   exercises: Array<{
     exercise_id: string
     name: string

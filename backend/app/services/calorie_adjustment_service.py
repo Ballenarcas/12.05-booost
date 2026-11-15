@@ -31,6 +31,13 @@ MIN_GOAL = 1200
 MAX_GOAL = 5000
 MAX_DAILY_DEFICIT = 500
 
+# Self-reported post-workout fatigue (1-10). Above 5 the trainer adds recovery
+# calories in proportion to the extra fatigue, capped at 200 kcal/day.
+FATIGUE_THRESHOLD = 5
+FATIGUE_KCAL_PER_POINT = 40
+MAX_FATIGUE_BUMP = 200
+FATIGUE_RECENT_DAYS = 3  # only a recent session should move tomorrow's target
+
 # Health Connect activity is a safety and context input, not a second calorie
 # target: only a quarter of the active burn can raise a goal, capped at 200 kcal.
 ACTIVITY_HIGH_STEPS = 8_000
@@ -115,6 +122,61 @@ def _activity_credit(metrics: dict[str, Any]) -> int:
     return max(0, credit)
 
 
+def _fatigue_level(metrics: dict[str, Any]) -> float:
+    value = metrics.get("fatigue_latest")
+    if value is None:
+        value = metrics.get("fatigue_avg") or 0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _fatigue_bump(metrics: dict[str, Any]) -> int:
+    """Recovery calories proportional to fatigue above the threshold, rounded to 10 kcal."""
+    level = _fatigue_level(metrics)
+    if level <= FATIGUE_THRESHOLD:
+        return 0
+    points = level - FATIGUE_THRESHOLD
+    return min(MAX_FATIGUE_BUMP, int(round(points * FATIGUE_KCAL_PER_POINT / 10.0) * 10))
+
+
+def _fatigue_proposal(metrics: dict[str, Any], bump: int) -> dict[str, Any]:
+    """High fatigue always earns recovery calories, whatever the compliance picture is."""
+    goal = int(metrics.get("goal") or 0)
+    level = _fatigue_level(metrics)
+    objective = classify_objective(metrics.get("objective"))
+    maintenance = int(metrics.get("maintenance") or 0)
+    proposed = min(MAX_GOAL, goal + bump)
+    if objective == "fat_loss" and maintenance > 0:
+        # Recovery during a cut shrinks the deficit; it never turns into a surplus.
+        proposed = min(proposed, maintenance)
+    label = f"Your latest workout fatigue was {level:.1f}/10."
+    if proposed <= goal:
+        if objective == "fat_loss" and maintenance > 0 and goal >= maintenance:
+            detail = "Your target is already at maintenance, so it stays there while you recover."
+        else:
+            detail = f"Your target is at the {MAX_GOAL} kcal ceiling, so it stays there."
+        return {"has_change": False, "proposed_goal": goal, "reason": f"{label} {detail}"}
+    extra = proposed - goal
+    if objective == "fat_loss":
+        detail = (
+            f"To keep recovery on track, the target rises by {extra} kcal "
+            "(scaled to your fatigue) while still keeping a deficit."
+        )
+    elif objective == "muscle_gain":
+        detail = (
+            f"To support recovery and keep training quality, the target rises by {extra} kcal "
+            "(scaled to your fatigue)."
+        )
+    else:
+        detail = f"To support recovery, the target rises by {extra} kcal (scaled to your fatigue)."
+    reason = f"{label} {detail}"
+    if _health(metrics).connected:
+        reason += f" {_activity_sentence(metrics)}"
+    return {"has_change": True, "proposed_goal": proposed, "reason": reason}
+
+
 def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
     """Return {has_change, proposed_goal, reason}. Deterministic, no database access."""
     goal = int(metrics.get("goal") or 0)
@@ -124,6 +186,10 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
             "proposed_goal": goal,
             "reason": "Set your daily calorie goal in Settings before the target can be tuned.",
         }
+
+    fatigue_bump = _fatigue_bump(metrics)
+    if fatigue_bump > 0:
+        return _fatigue_proposal(metrics, fatigue_bump)
 
     compliance = float(metrics.get("compliance") or 0.0)
     days_within = int(metrics.get("days_within") or 0)
@@ -299,6 +365,7 @@ def collect_metrics(session: Any, user_id: UUID, today: str | None = None) -> di
     user = users[0] if users else {}
     goal = int(user.get("calorie_goal") or 0)
     deficit_floor = 0
+    maintenance = 0
     if user.get("weight") and user.get("height") and user.get("age"):
         maintenance = calculate_calorie_goal(user["weight"], user["height"], user["age"], user.get("gender"), None)
         deficit_floor = maintenance - MAX_DAILY_DEFICIT
@@ -321,12 +388,15 @@ def collect_metrics(session: Any, user_id: UUID, today: str | None = None) -> di
 
     workouts = _rows(
         session.table("workouts")
-        .select("id,start_time,workout_sets(weight,reps,is_done)")
+        .select("id,start_time,fatigue_level,workout_sets(weight,reps,is_done)")
         .eq("user_id", str(user_id))
         .gte("start_time", volume_start.isoformat()).execute()
     )
     volume_this_week = 0.0
     volume_prev_week = 0.0
+    fatigue_levels: list[float] = []
+    latest_fatigue = 0.0
+    latest_started: datetime | None = None
     for workout in workouts:
         started = workout.get("start_time")
         if not started:
@@ -342,12 +412,27 @@ def collect_metrics(session: Any, user_id: UUID, today: str | None = None) -> di
             volume += float(set_row.get("weight") or 0) * float(set_row.get("reps") or 0)
         if started_at >= window_start:
             volume_this_week += volume
+            level = workout.get("fatigue_level")
+            if level is not None:
+                try:
+                    value = float(level)
+                except (TypeError, ValueError):
+                    value = 0.0
+                if 1 <= value <= 10:
+                    fatigue_levels.append(value)
+                    if latest_started is None or started_at > latest_started:
+                        latest_started, latest_fatigue = started_at, value
         else:
             volume_prev_week += volume
+
+    # A mark older than a few days has already served its purpose.
+    if latest_started is not None and latest_started < _utc_now() - timedelta(days=FATIGUE_RECENT_DAYS):
+        latest_fatigue = 0.0
 
     total_calories = sum(daily.values())
     return {
         "goal": goal,
+        "maintenance": maintenance,
         "deficit_floor": deficit_floor,
         "objective": user.get("objective"),
         "avg_intake": round(total_calories / EVALUATION_DAYS),
@@ -356,6 +441,9 @@ def collect_metrics(session: Any, user_id: UUID, today: str | None = None) -> di
         "compliance": round(days_within / EVALUATION_DAYS, 2),
         "volume_this_week": round(volume_this_week),
         "volume_prev_week": round(volume_prev_week),
+        "fatigue_avg": round(sum(fatigue_levels) / len(fatigue_levels), 1) if fatigue_levels else 0.0,
+        "fatigue_latest": latest_fatigue,
+        "fatigue_workouts": len(fatigue_levels),
         "health": get_activity_summary(user_id, db_session=session, today=day),
     }
 
@@ -374,6 +462,9 @@ def _response(row: dict[str, Any], metrics: dict[str, Any] | None = None) -> dic
         "avg_daily_intake": int((metrics or {}).get("avg_intake") or 0),
         "compliance_rate": float((metrics or {}).get("compliance") or 0.0),
         "weekly_volume": int((metrics or {}).get("volume_this_week") or 0),
+        "fatigue_avg": round(float((metrics or {}).get("fatigue_avg") or 0.0), 1),
+        "fatigue_latest": round(float((metrics or {}).get("fatigue_latest") or 0.0), 1),
+        "fatigue_workouts": int((metrics or {}).get("fatigue_workouts") or 0),
         "activity": _health(metrics or {}).model_dump(mode="json"),
     }
     return data
@@ -387,6 +478,31 @@ def _is_within_cooldown(created_at: Any, now: datetime) -> bool:
     except ValueError:
         return False
     return (now - created) < timedelta(days=REVIEW_COOLDOWN_DAYS)
+
+
+def _high_fatigue_after(session: Any, user_id: UUID, created_at: Any) -> bool:
+    """A demanding workout can refresh the advice even inside the weekly cooldown."""
+    if not created_at:
+        return False
+    try:
+        since = datetime.fromisoformat(str(created_at).replace("Z", "+00:00")).isoformat()
+    except ValueError:
+        since = str(created_at)
+    try:
+        rows = _rows(
+            session.table("workouts").select("fatigue_level,end_time")
+            .eq("user_id", str(user_id)).gte("end_time", since).execute()
+        )
+    except Exception:
+        return False
+    for row in rows:
+        try:
+            level = float(row.get("fatigue_level") or 0)
+        except (TypeError, ValueError):
+            continue
+        if FATIGUE_THRESHOLD < level <= 10:
+            return True
+    return False
 
 
 def _is_missing_table(error: Exception) -> bool:
@@ -442,9 +558,23 @@ def get_adjustment(
 
     if latest:
         row = latest[0]
+        has_new_fatigue = _high_fatigue_after(session, user_id, row.get("created_at"))
         if row.get("status") == "pending":
-            return _response(row, collect_metrics(session, user_id, today))
-        if _is_within_cooldown(row.get("created_at"), _utc_now()):
+            metrics = collect_metrics(session, user_id, today)
+            if has_new_fatigue:
+                proposal = propose_adjustment(metrics)
+                if proposal["has_change"] and proposal["proposed_goal"] != int(row.get("proposed_goal") or 0):
+                    refreshed = _rows(
+                        session.table(ADJUSTMENTS_TABLE).update({
+                            "previous_goal": metrics["goal"],
+                            "proposed_goal": proposal["proposed_goal"],
+                            "reason": proposal["reason"],
+                        }).eq("id", str(row["id"])).eq("status", "pending").select("*").execute()
+                    )
+                    if refreshed:
+                        return _response(refreshed[0], metrics)
+            return _response(row, metrics)
+        if _is_within_cooldown(row.get("created_at"), _utc_now()) and not has_new_fatigue:
             return _response(row)
 
     metrics = collect_metrics(session, user_id, today)

@@ -27,6 +27,9 @@ class CalorieAdjustmentResponse(BaseModel):
     avg_daily_intake: int
     compliance_rate: float
     weekly_volume: int
+    fatigue_avg: float = 0
+    fatigue_latest: float = 0
+    fatigue_workouts: int = 0
     activity: HealthActivitySummary = Field(default_factory=HealthActivitySummary)
 
 
