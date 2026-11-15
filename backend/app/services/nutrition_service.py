@@ -693,17 +693,17 @@ def list_favorite_meals(user_id: str) -> list[FavoriteMeal]:
 
 
 def _find_favorite(supabase: Any, user_id: str, meal_type: str, name: str) -> dict[str, Any] | None:
+    """Same meal type and name, ignoring case (matches the unique index on lower(name))."""
     rows = (
         supabase.table("favorite_meals")
         .select(FAVORITE_COLUMNS)
         .eq("user_id", user_id)
         .eq("meal_type", meal_type)
-        .eq("name", name)
-        .limit(1)
         .execute()
         .data or []
     )
-    return rows[0] if rows else None
+    wanted = name.strip().lower()
+    return next((row for row in rows if str(row.get("name", "")).strip().lower() == wanted), None)
 
 
 def add_favorite_from_meal(user_id: str, meal_id: str) -> FavoriteMeal:

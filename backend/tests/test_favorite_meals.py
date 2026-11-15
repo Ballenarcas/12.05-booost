@@ -118,6 +118,23 @@ def test_saving_the_same_meal_twice_keeps_one_favorite(db):
     assert len(db.tables["favorite_meals"]) == 1
 
 
+def test_names_match_ignoring_case(db):
+    first = nutrition_service.add_favorite_from_meal(USER, log_meal())
+    lower_case = nutrition_service.create_user_meal(MealCreateRequest(
+        user_id=USER, name="oats + MILK", meal_type="Breakfast", ingredients=[OATS, MILK],
+    ))
+    assert nutrition_service.add_favorite_from_meal(USER, lower_case.id).id == first.id
+    assert len(db.tables["favorite_meals"]) == 1
+
+    other = nutrition_service.add_favorite_from_meal(USER, nutrition_service.create_user_meal(MealCreateRequest(
+        user_id=USER, name="Toast", meal_type="Breakfast", ingredients=[OATS],
+    )).id)
+    with pytest.raises(nutrition_service.FavoriteAlreadyExists):
+        nutrition_service.update_favorite_meal(
+            USER, other.id, MealUpdateRequest(name="OATS + milk", meal_type="Breakfast", ingredients=[OATS]),
+        )
+
+
 def test_another_users_meal_cannot_be_saved(db):
     meal_id = log_meal(OTHER_USER)
     with pytest.raises(LookupError):

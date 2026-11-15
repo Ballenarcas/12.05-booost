@@ -14,8 +14,9 @@ CREATE TABLE IF NOT EXISTS public.favorite_meals (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (user_id, meal_type, name)
 );
+-- favorite_meals_case_insensitive_name.sql replaces that UNIQUE with one on lower(name).
 
--- The unique constraint's index starts with user_id, so it also serves per-user lookups.
+-- The unique index starts with user_id, so it also serves per-user lookups.
 
 ALTER TABLE public.favorite_meals ENABLE ROW LEVEL SECURITY;
 -- No policies: only the backend (service role) reads and writes this table.

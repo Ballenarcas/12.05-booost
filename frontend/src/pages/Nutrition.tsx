@@ -17,7 +17,8 @@ import type { FavoriteMeal, FoodSearchItem, MealIngredient, MealLogItem } from '
 import FavoriteMealsModal from '../components/nutrition/FavoriteMealsModal';
 import '../styles/log-meals.css';
 
-const favoriteKey = (mealType: string, name: string) => `${mealType}|${name}`;
+// Names match ignoring case, like the server's unique rule.
+const favoriteKey = (mealType: string, name: string) => `${mealType}|${name.trim().toLowerCase()}`;
 
 const DEFAULT_FOOD_DENSITY = {
   calories_per_100g: 130,
