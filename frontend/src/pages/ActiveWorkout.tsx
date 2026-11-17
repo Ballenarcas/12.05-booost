@@ -403,6 +403,7 @@ function ActiveWorkout() {
   const [adjustmentUndo, setAdjustmentUndo] = useState<AdjustmentUndo | null>(null)
   const [showWarmup, setShowWarmup] = useState(false)
   const [warmup, setWarmup] = useState<WarmupState>({ status: 'idle' })
+  const [selectedWarmupSteps, setSelectedWarmupSteps] = useState<number[]>([])
 
   const [isSelectModalOpen, setIsSelectModalOpen] = useState(() => {
     if (sessionStorage.getItem('set_plate_reopen_exercise_modal') === 'true') {
@@ -948,6 +949,7 @@ function ActiveWorkout() {
       return
     }
     setWarmup({ status: 'loading' })
+    setSelectedWarmupSteps([])
     try {
       const recommendation = await requestWarmupRecommendation(
         user.id,
@@ -964,6 +966,57 @@ function ActiveWorkout() {
         message: error instanceof Error ? error.message : 'Unable to build your warm-up. Please try again.',
       })
     }
+  }
+
+  function addSelectedWarmupSteps() {
+    if (!session || warmup.status !== 'ready') return
+
+    const steps = warmup.recommendation.steps.filter((_, index) => selectedWarmupSteps.includes(index))
+    if (!steps.length) return
+    const exerciseSteps = steps.filter((step) => step.exercise_id && step.sets.length > 0)
+    const activitySteps = steps.filter((step) => step.sets.length === 0)
+
+    const exercises = [...session.exercises]
+    let setKinds = { ...session.setKinds }
+    let nextRpeValues = { ...rpeValues }
+    for (const step of exerciseSteps) {
+      const exerciseIndex = exercises.findIndex((exercise) => exercise.exercise_id === step.exercise_id)
+      if (exerciseIndex === -1) continue
+
+      const exercise = exercises[exerciseIndex]
+      const nextIncompleteIndex = exercise.sets.findIndex((set) => !set.is_completed)
+      const insertIndex = nextIncompleteIndex === -1 ? exercise.sets.length : nextIncompleteIndex
+      const firstSetNumber = insertIndex + 1
+      const warmupSets = step.sets.map((set) => ({
+        weight_kg: set.weight_kg ?? 0,
+        reps: set.reps,
+        is_completed: false,
+      }))
+
+      for (let index = 0; index < warmupSets.length; index += 1) {
+        setKinds = insertSetIntoKeyedMap(setKinds, exerciseIndex, firstSetNumber)
+        nextRpeValues = insertSetIntoKeyedMap(nextRpeValues, exerciseIndex, firstSetNumber)
+      }
+      for (let index = 0; index < warmupSets.length; index += 1) {
+        setKinds[`${exerciseIndex}:${firstSetNumber + index}`] = 'warmup'
+      }
+
+      exercises[exerciseIndex] = {
+        ...exercise,
+        sets: [...exercise.sets.slice(0, insertIndex), ...warmupSets, ...exercise.sets.slice(insertIndex)]
+          .map((set, index) => ({ ...set, set_number: index + 1 })),
+      }
+    }
+
+    setSession({
+      ...session,
+      exercises,
+      setKinds,
+      warmupSteps: [...(session.warmupSteps ?? []), ...activitySteps],
+    })
+    setRpeValues(nextRpeValues)
+    setSelectedWarmupSteps([])
+    setShowWarmup(false)
   }
 
   function openWarmup() {
@@ -1081,6 +1134,21 @@ function ActiveWorkout() {
           <span>{volumeLabel}</span>
         </div>
       </header>
+
+      {session.warmupSteps?.length ? (
+        <section className="card active-warmup-card" aria-label="Added warm-up activities">
+          <h2>Warm-up activities</h2>
+          <ul>
+            {session.warmupSteps.map((step, index) => <li className="warmup-step" key={`${step.title}-${index}`}>
+              <div className="warmup-step-heading">
+                <strong>{step.title}</strong>
+                {step.duration_seconds ? <span>{formatWarmupDuration(step.duration_seconds)}</span> : null}
+              </div>
+              <p>{step.detail}</p>
+            </li>)}
+          </ul>
+        </section>
+      ) : null}
 
       <div className="active-exercise-list">
         {session.exercises.map((exercise, exerciseIndex) => {
@@ -1391,7 +1459,16 @@ function ActiveWorkout() {
               <ul>
                 {warmup.recommendation.steps.map((step, index) => <li className="warmup-step" key={`${step.title}-${index}`}>
                   <div className="warmup-step-heading">
-                    <strong>{step.title}</strong>
+                    <label className="warmup-step-select">
+                      <input
+                        type="checkbox"
+                        checked={selectedWarmupSteps.includes(index)}
+                        onChange={(event) => setSelectedWarmupSteps((current) => event.target.checked
+                          ? [...current, index]
+                          : current.filter((selectedIndex) => selectedIndex !== index))}
+                      />
+                      <strong>{step.title}</strong>
+                    </label>
                     {step.duration_seconds ? <span>{formatWarmupDuration(step.duration_seconds)}</span> : null}
                   </div>
                   <p>{step.detail}</p>
@@ -1402,6 +1479,15 @@ function ActiveWorkout() {
                   </div>}
                 </li>)}
               </ul>
+              <button
+                className="warmup-cta"
+                type="button"
+                onClick={addSelectedWarmupSteps}
+                disabled={!selectedWarmupSteps.length}
+              >
+                <Plus size={16} aria-hidden="true" />
+                Add selected recommendations
+              </button>
             </div>}
             {warmup.status === 'error' && <div className="warmup-feedback">
               <p className="ai-adjust-error" role="alert">{warmup.message}</p>

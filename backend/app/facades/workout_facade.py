@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
+from app.core.ai_quota import use_ai_call
 from app.core.local_day import LocalDay
 from app.db.supabase_client import get_supabase
 from app.schemas.exercise import Exercise
@@ -50,6 +51,7 @@ class WorkoutFacade:
                 status_code=403,
                 detail="Warm-up recommendations are a Premium feature. Upgrade to Premium to unlock them.",
             )
+        use_ai_call(user_id)
         return build_warmup_recommendation(payload)
 
     def save_log(self, user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResponse:

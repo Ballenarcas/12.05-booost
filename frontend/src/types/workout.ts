@@ -64,6 +64,7 @@ export interface ActiveSession {
   exercises: ActiveExercise[]
   setKinds: Record<string, SetKind>
   rpeValues?: Record<string, number>
+  warmupSteps?: WarmupStep[]
 }
 
 export interface WorkoutLogCreate {
