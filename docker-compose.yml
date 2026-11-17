@@ -44,6 +44,10 @@ services:
       AI_VISION_API_KEY: ${AI_VISION_API_KEY:-}
       AI_VISION_MODEL: ${AI_VISION_MODEL:-}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+      # Password reset emails through Resend. Without RESEND_API_KEY no reset email is sent.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      APP_URL: ${APP_URL:-}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
     expose:
       - "8000"
