@@ -161,3 +161,34 @@ export interface LiveWorkoutAdjustmentRequest {
 export interface LiveWorkoutAdjustmentResponse {
   suggestions: LiveWorkoutAdjustmentSuggestion[]
 };
+
+export interface WarmupSet {
+  weight_kg: number | null
+  reps: number
+}
+
+export interface WarmupStep {
+  title: string
+  detail: string
+  duration_seconds?: number | null
+  exercise_id?: string | null
+  sets: WarmupSet[]
+}
+
+export interface WarmupRecommendation {
+  summary: string
+  total_duration_seconds: number
+  steps: WarmupStep[]
+}
+
+export interface WarmupRecommendationRequest {
+  name: string
+  user_goal?: string | null
+  exercises: Array<{
+    exercise_id: string
+    name: string
+    is_cardio?: boolean
+    working_weight_kg?: number | null
+    target_reps?: number | null
+  }>
+}

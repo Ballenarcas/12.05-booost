@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -11,11 +12,17 @@ from app.schemas.workout import (
     LiveWorkoutAdjustmentSuggestion,
     RoutineCreate,
     RoutineSummary,
+    WarmupRecommendationRequest,
+    WarmupRecommendationResponse,
 )
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
 from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
 from app.services import workout_service, workout_statistics_service
+from app.services.premium_service import has_premium_flag
+from app.services.warmup_service import build_warmup_recommendation
 from app.services.workout_adjustment_service import plan_daily_workout, suggest_live_adjustment
+
+logger = logging.getLogger(__name__)
 
 
 class WorkoutFacade:
@@ -27,6 +34,23 @@ class WorkoutFacade:
 
     async def suggest_adjustment(self, payload: LiveWorkoutAdjustmentRequest) -> list[LiveWorkoutAdjustmentSuggestion]:
         return await suggest_live_adjustment(payload.model_dump(mode="json"))
+
+    def recommend_warmup(
+        self,
+        user_id: UUID,
+        payload: WarmupRecommendationRequest,
+    ) -> WarmupRecommendationResponse:
+        try:
+            is_premium = has_premium_flag(str(user_id))
+        except Exception as error:
+            logger.exception("Could not check the premium flag")
+            raise HTTPException(status_code=503, detail="Could not check your Premium status. Please try again.") from error
+        if not is_premium:
+            raise HTTPException(
+                status_code=403,
+                detail="Warm-up recommendations are a Premium feature. Upgrade to Premium to unlock them.",
+            )
+        return build_warmup_recommendation(payload)
 
     def save_log(self, user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResponse:
         return workout_service.save_workout_log(user_id, payload)

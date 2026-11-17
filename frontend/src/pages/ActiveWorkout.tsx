@@ -1,7 +1,7 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, Minus, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Crown, Dumbbell, Flame, Minus, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { fetchExerciseById, fetchExercises, getCurrentUser, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry } from '../services/api'
+import { fetchExerciseById, fetchExercises, getCurrentUser, isPremiumActive, PremiumRequiredError, requestWarmupRecommendation, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { Exercise } from '../types'
 import type {
@@ -11,6 +11,8 @@ import type {
   LiveWorkoutAdjustmentRequest,
   LiveWorkoutAdjustmentSuggestion,
   SetKind,
+  WarmupRecommendation,
+  WarmupRecommendationRequest,
   WorkoutLogCreate,
   WorkoutSet,
 } from '../types/workout'
@@ -47,6 +49,12 @@ type AiAdjustmentState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ready'; suggestions: LiveWorkoutAdjustmentSuggestion[]; applied: number[] }
+  | { status: 'error'; message: string }
+type WarmupState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; recommendation: WarmupRecommendation }
+  | { status: 'premium' }
   | { status: 'error'; message: string }
 type AdjustmentUndo = {
   session: ActiveSession
@@ -94,6 +102,11 @@ function formatClock(seconds: number): string {
 
 function formatRest(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`
+}
+
+function formatWarmupDuration(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60))
+  return `${minutes} min`
 }
 
 function formatPace(seconds: number, km: number | null | undefined): string {
@@ -313,6 +326,31 @@ function getSession(state: unknown): ActiveSession | null {
   return { ...parsed, setKinds: parsed.setKinds ?? {} } as ActiveSession
 }
 
+function buildWarmupRequest(session: ActiveSession, userGoal?: string | null): WarmupRecommendationRequest {
+  return {
+    name: session.name.trim() || 'Workout',
+    user_goal: userGoal ?? null,
+    exercises: session.exercises.map((exercise) => {
+      const positiveWeights = exercise.sets
+        .map((set) => safeNumber(set.weight_kg))
+        .filter((weight) => weight > 0)
+      const nextSet = exercise.sets.find((set) => !set.is_completed && safeNumber(set.weight_kg) > 0)
+      const workingWeight = nextSet
+        ? safeNumber(nextSet.weight_kg)
+        : positiveWeights.length
+          ? Math.max(...positiveWeights)
+          : nullableNumber(exercise.previous_weight_kg)
+      return {
+        exercise_id: exercise.exercise_id,
+        name: exercise.name,
+        is_cardio: Boolean(exercise.is_cardio),
+        working_weight_kg: workingWeight,
+        target_reps: nullableNumber(exercise.target_reps),
+      }
+    }),
+  }
+}
+
 function useScreenAwake() {
   useEffect(() => {
     let lock: WakeLockSentinel | null = null
@@ -363,6 +401,8 @@ function ActiveWorkout() {
   const [pendingSetRemoval, setPendingSetRemoval] = useState<PendingSetRemoval | null>(null)
   const [aiAdjustment, setAiAdjustment] = useState<AiAdjustmentState>({ status: 'idle' })
   const [adjustmentUndo, setAdjustmentUndo] = useState<AdjustmentUndo | null>(null)
+  const [showWarmup, setShowWarmup] = useState(false)
+  const [warmup, setWarmup] = useState<WarmupState>({ status: 'idle' })
 
   const [isSelectModalOpen, setIsSelectModalOpen] = useState(() => {
     if (sessionStorage.getItem('set_plate_reopen_exercise_modal') === 'true') {
@@ -415,6 +455,7 @@ function ActiveWorkout() {
   }, [])
 
   const aiAdjustmentDialogRef = useDialogBehavior(showAiAdjustment, () => setShowAiAdjustment(false))
+  const warmupDialogRef = useDialogBehavior(showWarmup, () => setShowWarmup(false))
   const closeFinish = () => {
     setShowFinish(false)
     setConfirmDiscard(false)
@@ -898,6 +939,43 @@ function ActiveWorkout() {
     if (aiAdjustment.status !== 'ready' || isStale) requestAiAdjustment()
   }
 
+  async function requestWarmup() {
+    const currentSession = session
+    const user = getCurrentUser()
+    if (!currentSession || warmup.status === 'loading') return
+    if (!user?.id) {
+      setWarmup({ status: 'error', message: 'Sign in to get a warm-up.' })
+      return
+    }
+    setWarmup({ status: 'loading' })
+    try {
+      const recommendation = await requestWarmupRecommendation(
+        user.id,
+        buildWarmupRequest(currentSession, user.objective ?? null),
+      )
+      setWarmup({ status: 'ready', recommendation })
+    } catch (error) {
+      if (error instanceof PremiumRequiredError) {
+        setWarmup({ status: 'premium' })
+        return
+      }
+      setWarmup({
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unable to build your warm-up. Please try again.',
+      })
+    }
+  }
+
+  function openWarmup() {
+    if (!session || session.editWorkoutId) return
+    setShowWarmup(true)
+    if (!isPremiumActive()) {
+      setWarmup({ status: 'premium' })
+      return
+    }
+    requestWarmup()
+  }
+
   function rememberAdjustmentUndo(snapshot: AdjustmentUndo) {
     if (undoAdjustmentTimer.current !== null) window.clearTimeout(undoAdjustmentTimer.current)
     setAdjustmentUndo(snapshot)
@@ -969,17 +1047,30 @@ function ActiveWorkout() {
           {!isEditingWorkout && <span className="header-clock" aria-label="Elapsed time"><ElapsedTime startedAt={session.startedAt} format={formatClock} /></span>}
         </div>
         {!isEditingWorkout && (
-          <button
-            className="ai-adjust-trigger"
-            type="button"
-            onClick={openAiAdjustment}
-            disabled={isSaving}
-            aria-label="Ask AI for adjustments"
-            title="Ask AI for adjustments"
-          >
-            <Sparkles size={16} aria-hidden="true" />
-            AI
-          </button>
+          <div className="header-actions">
+            <button
+              className="ai-adjust-trigger warmup-trigger"
+              type="button"
+              onClick={openWarmup}
+              disabled={isSaving}
+              aria-label="Recommend a warm-up"
+              title="Recommend a warm-up"
+            >
+              <Flame size={16} aria-hidden="true" />
+              <span>Warm-up</span>
+            </button>
+            <button
+              className="ai-adjust-trigger"
+              type="button"
+              onClick={openAiAdjustment}
+              disabled={isSaving}
+              aria-label="Ask AI for adjustments"
+              title="Ask AI for adjustments"
+            >
+              <Sparkles size={16} aria-hidden="true" />
+              AI
+            </button>
+          </div>
         )}
         <button className="finish-button" type="button" onClick={() => setShowFinish(true)}>{isEditingWorkout ? 'Save' : 'Finish'}</button>
         <div className="session-progress" aria-label="Workout progress">
@@ -1264,6 +1355,60 @@ function ActiveWorkout() {
             </div>}
             <div className="modal-actions">
               <button className="secondary-action" type="button" onClick={() => setShowAiAdjustment(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showWarmup && (
+        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowWarmup(false) }}>
+          <div className="confirmation-modal ai-adjust-modal warmup-modal" role="dialog" aria-modal="true" aria-labelledby="warmup-title" tabIndex={-1} ref={warmupDialogRef}>
+            <button className="modal-close" type="button" onClick={() => setShowWarmup(false)} aria-label="Close"><X size={20} /></button>
+            <p className="eyebrow">Warm-up</p>
+            <h2 id="warmup-title">Warm-up plan</h2>
+            {warmup.status === 'loading'
+              && <p className="ai-adjust-loading" role="status">Building a warm-up from your working weights...</p>}
+            {warmup.status === 'premium' && <div className="warmup-feedback">
+              <p className="warmup-copy">
+                <strong>Warm-up recommendations are a Premium feature.</strong> Upgrade to get a tailored
+                warm-up with ramp-up sets built from the weights you are about to lift.
+              </p>
+              <button
+                className="warmup-cta"
+                type="button"
+                onClick={() => navigate('/premium', { state: { from: location.pathname } })}
+              >
+                <Crown size={16} aria-hidden="true" />
+                Upgrade to Premium
+              </button>
+            </div>}
+            {warmup.status === 'ready' && <div className="warmup-plan">
+              <p className="warmup-summary">{warmup.recommendation.summary}</p>
+              <p className="warmup-total">
+                <Clock3 size={14} aria-hidden="true" />
+                About {formatWarmupDuration(warmup.recommendation.total_duration_seconds)}
+              </p>
+              <ul>
+                {warmup.recommendation.steps.map((step, index) => <li className="warmup-step" key={`${step.title}-${index}`}>
+                  <div className="warmup-step-heading">
+                    <strong>{step.title}</strong>
+                    {step.duration_seconds ? <span>{formatWarmupDuration(step.duration_seconds)}</span> : null}
+                  </div>
+                  <p>{step.detail}</p>
+                  {step.sets.length > 0 && <div className="warmup-sets">
+                    {step.sets.map((set, setIndex) => <span key={setIndex}>
+                      {set.weight_kg ? `${set.weight_kg} kg` : 'Bodyweight'} × {set.reps}
+                    </span>)}
+                  </div>}
+                </li>)}
+              </ul>
+            </div>}
+            {warmup.status === 'error' && <div className="warmup-feedback">
+              <p className="ai-adjust-error" role="alert">{warmup.message}</p>
+              <button className="secondary-action" type="button" onClick={requestWarmup}>Try again</button>
+            </div>}
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" onClick={() => setShowWarmup(false)}>Close</button>
             </div>
           </div>
         </div>
