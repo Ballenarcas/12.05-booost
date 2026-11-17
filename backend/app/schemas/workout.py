@@ -108,4 +108,4 @@ class LiveWorkoutAdjustmentSuggestion(BaseModel):
 
 
 class LiveWorkoutAdjustmentResponse(BaseModel):
-    suggestions: list[LiveWorkoutAdjustmentSuggestion];
+    suggestions: list[LiveWorkoutAdjustmentSuggestion]
