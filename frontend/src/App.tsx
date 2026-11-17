@@ -6,7 +6,7 @@ import { getCurrentUser } from './services/api'
 const Home = lazy(() => import('./pages/Home'))
 const ActiveWorkout = lazy(() => import('./pages/ActiveWorkout'))
 const CreateRoutine = lazy(() => import('./pages/CreateRoutine'))
-const CustomExercise = lazy(() => import('./pages/CustomExercise')) 
+const CustomExercise = lazy(() => import('./pages/CustomExercise'))
 const ExercisePicker = lazy(() => import('./pages/ExercisePicker'))
 const HydrationHistory = lazy(() => import('./pages/HydrationHistory'))
 const Login = lazy(() => import('./pages/Login'))
@@ -15,9 +15,10 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const LogMeals = lazy(() => import('./pages/LogMeals'))
 const Nutrition = lazy(() => import('./pages/Nutrition'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
+const OvertrainingAlerts = lazy(() => import('./pages/OvertrainingAlerts'))
 const Premium = lazy(() => import('./pages/Premium'))
 const Settings = lazy(() => import('./pages/Settings'))
-const Faq = lazy(() => import('./pages/Faq')) 
+const Faq = lazy(() => import('./pages/Faq'))
 const Welcome = lazy(() => import('./pages/Welcome'))
 const Workouts = lazy(() => import('./pages/Workouts'))
 const WorkoutStatistics = lazy(() => import('./pages/WorkoutStatistics'))
@@ -44,8 +45,9 @@ function App() {
             <Route path="/workouts/create" element={<CreateRoutine />} />
             <Route path="/workouts/active" element={<ActiveWorkout />} />
             <Route path="/workouts/active/exercises" element={<ExercisePicker />} />
-            <Route path="/exercises/custom" element={<CustomExercise />} /> {/* <-- Création d'exercice */}
-            <Route path="/exercises/custom/:id" element={<CustomExercise />} /> {/* <-- Édition d'exercice */}
+            <Route path="/exercises/custom" element={<CustomExercise />} />
+            <Route path="/exercises/custom/:id" element={<CustomExercise />} />
+            <Route path="/overtraining-alerts" element={<OvertrainingAlerts />} />
             <Route path="/nutrition" element={<Nutrition />} />
             <Route path="/hydration/history" element={<HydrationHistory />} />
             <Route path="/premium" element={<Premium />} />
@@ -59,4 +61,4 @@ function App() {
   )
 }
 
-export default App;
+export default App

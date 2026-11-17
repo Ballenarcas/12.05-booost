@@ -408,7 +408,7 @@ export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistor
 export async function updateWorkoutHistoryEntry(
   userId: string,
   workoutId: string,
-  payload: Pick<WorkoutLogCreate, 'name' | 'exercises'>,
+  payload: Pick<WorkoutLogCreate, 'name' | 'exercises' | 'fatigue_level'>,
 ): Promise<{ id: string; status: string }> {
   const query = new URLSearchParams({ user_id: userId })
   const response = await apiFetch(`${API_URL}/api/v1/workouts/history/${encodeURIComponent(workoutId)}?${query}`, {
@@ -1099,6 +1099,9 @@ export interface CalorieAdjustmentData {
   avg_daily_intake: number
   compliance_rate: number
   weekly_volume: number
+  fatigue_avg: number
+  fatigue_latest: number
+  fatigue_workouts: number
   activity: HealthActivitySummary
 }
 
@@ -1416,4 +1419,86 @@ export async function deleteCustomExercise(userId: string, exerciseId: string): 
     throw new Error(body?.detail || "We couldn't delete this exercise.")
   }
   exerciseListCache.clear()
+}
+
+export interface FatigueFeedbackPayload {
+  fatigue_level: number
+  soreness_level: number
+  sore_muscles: string[]
+  notes?: string
+}
+
+export interface OvertrainingAlertStatus {
+  has_alert: boolean
+  risk_level: 'none' | 'moderate' | 'high'
+  load_increase_pct: number
+  sessions_last_7_days: number
+  high_rpe_sets_count: number
+  repeated_fatigue_reports: number
+  strained_muscles: string[]
+  headline: string
+  critical_alert_title: string | null
+  critical_alert_body: string | null
+  critical_recommendation: string | null
+  fatigue_feedback_title: string | null
+  fatigue_feedback_body: string | null
+  fatigue_action: string | null
+  ai_modification_title: string | null
+  ai_modification_body: string | null
+  volume_reduction_pct: number
+  mods_applied: boolean
+  dismissed: boolean
+}
+
+export async function fetchOvertrainingAlerts(userId: string): Promise<OvertrainingAlertStatus> {
+  const response = await apiFetch(
+    `${API_URL}/api/v1/workouts/overtraining-alerts?user_id=${encodeURIComponent(userId)}`,
+    { cache: 'no-store', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
+  )
+  if (!response.ok) {
+    throw new Error("We couldn't check your recovery status right now.")
+  }
+  return response.json() as Promise<OvertrainingAlertStatus>
+}
+
+export async function submitFatigueFeedback(
+  userId: string,
+  payload: FatigueFeedbackPayload,
+): Promise<void> {
+  const response = await apiFetch(
+    `${API_URL}/api/v1/workouts/fatigue-feedback?user_id=${encodeURIComponent(userId)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+    },
+  )
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail || "We couldn't save your fatigue feedback.")
+  }
+}
+
+export async function applyOvertrainingMods(userId: string): Promise<OvertrainingAlertStatus> {
+  const response = await apiFetch(
+    `${API_URL}/api/v1/workouts/overtraining-alerts/apply?user_id=${encodeURIComponent(userId)}`,
+    { method: 'POST', signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) },
+  )
+  if (!response.ok) {
+    throw new Error("We couldn't apply the recovery modifications.")
+  }
+  clearDashboardCache()
+  return response.json() as Promise<OvertrainingAlertStatus>
+}
+
+export async function dismissOvertrainingAlert(userId: string): Promise<OvertrainingAlertStatus> {
+  const response = await apiFetch(
+    `${API_URL}/api/v1/workouts/overtraining-alerts/dismiss?user_id=${encodeURIComponent(userId)}`,
+    { method: 'POST', signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) },
+  )
+  if (!response.ok) {
+    throw new Error("We couldn't dismiss the alert.")
+  }
+  return response.json() as Promise<OvertrainingAlertStatus>
 }
