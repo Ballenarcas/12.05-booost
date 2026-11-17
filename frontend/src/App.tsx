@@ -8,7 +8,10 @@ const ActiveWorkout = lazy(() => import('./pages/ActiveWorkout'))
 const CreateRoutine = lazy(() => import('./pages/CreateRoutine'))
 const CustomExercise = lazy(() => import('./pages/CustomExercise'))
 const ExercisePicker = lazy(() => import('./pages/ExercisePicker'))
+const HydrationHistory = lazy(() => import('./pages/HydrationHistory'))
 const Login = lazy(() => import('./pages/Login'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const LogMeals = lazy(() => import('./pages/LogMeals'))
 const Nutrition = lazy(() => import('./pages/Nutrition'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
@@ -31,6 +34,8 @@ function App() {
         <Routes>
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/log-meals" element={<LogMeals />} />
           <Route element={<ProtectedLayout />}>
@@ -44,6 +49,7 @@ function App() {
             <Route path="/exercises/custom/:id" element={<CustomExercise />} />
             <Route path="/overtraining-alerts" element={<OvertrainingAlerts />} />
             <Route path="/nutrition" element={<Nutrition />} />
+            <Route path="/hydration/history" element={<HydrationHistory />} />
             <Route path="/premium" element={<Premium />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/faq" element={<Faq />} />
