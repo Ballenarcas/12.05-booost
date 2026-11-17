@@ -5,6 +5,11 @@ from fastapi import HTTPException
 from app.core.local_day import LocalDay
 from app.db.supabase_client import get_supabase
 from app.schemas.exercise import Exercise
+from app.schemas.overtraining import (
+    FatigueFeedbackCreate,
+    FatigueFeedbackEntry,
+    OvertrainingStatusResponse,
+)
 from app.schemas.workout import (
     CustomExerciseCreate,
     LiveWorkoutAdjustmentRequest,
@@ -14,7 +19,7 @@ from app.schemas.workout import (
 )
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
 from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
-from app.services import workout_service, workout_statistics_service
+from app.services import overtraining_service, workout_service, workout_statistics_service
 from app.services.workout_adjustment_service import plan_daily_workout, suggest_live_adjustment
 
 
@@ -88,5 +93,17 @@ class WorkoutFacade:
     def delete_custom_exercise(self, user_id: UUID, exercise_id: str) -> None:
         workout_service.delete_custom_exercise(user_id, exercise_id)
 
+    def get_overtraining_status(self, user_id: UUID) -> OvertrainingStatusResponse:
+        return overtraining_service.evaluate_overtraining(user_id)
 
-workout_facade = WorkoutFacade();
+    def submit_fatigue_feedback(self, user_id: UUID, payload: FatigueFeedbackCreate) -> FatigueFeedbackEntry:
+        return overtraining_service.record_fatigue_feedback(user_id, payload)
+
+    def apply_overtraining_mods(self, user_id: UUID) -> OvertrainingStatusResponse:
+        return overtraining_service.apply_overtraining_mods(user_id)
+
+    def dismiss_overtraining_alert(self, user_id: UUID) -> OvertrainingStatusResponse:
+        return overtraining_service.dismiss_overtraining_alert(user_id)
+
+
+workout_facade = WorkoutFacade()
