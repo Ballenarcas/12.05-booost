@@ -62,7 +62,7 @@ export default function HydrationCard() {
     const value = Math.round(Number(amount.replace(',', '.')))
     const limit = UNIT_LIMITS[unit]
     if (!Number.isFinite(value) || value < 1 || value > limit) {
-      const unitLabel = unit === 'ml' ? 'ml' : limit === 1 ? 'glass' : 'glasses'
+      const unitLabel = unit === 'ml' ? 'ml' : 'glasses'
       setNotice(`Enter an amount between 1 and ${limit} ${unitLabel}.`)
       return
     }
