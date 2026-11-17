@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, ArrowLeft, Calendar, Camera, ChefHat, Heart, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Calendar, Camera, ChefHat, GlassWater, Heart, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   addFavoriteMeal,
@@ -17,6 +17,7 @@ import {
 import type { FavoriteMeal, FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
 import FavoriteMealsModal from '../components/nutrition/FavoriteMealsModal';
 import MealRecommendationsModal from '../components/nutrition/MealRecommendationsModal';
+import HydrationCard from '../components/home/HydrationCard';
 import '../styles/log-meals.css';
 
 // Names match ignoring case, like the server's unique rule.
@@ -504,6 +505,16 @@ export default function Nutrition() {
           {favoriteNotice}
         </div>
       )}
+
+      <section style={{ marginBottom: '20px' }} aria-labelledby="nutrition-hydration">
+        <h2
+          id="nutrition-hydration"
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#8e8e93', fontSize: '12.5px', marginBottom: '12px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}
+        >
+          <GlassWater size={16} aria-hidden="true" /> Hydration today
+        </h2>
+        <HydrationCard />
+      </section>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {isLoading ? (
