@@ -1340,3 +1340,64 @@ export async function deleteCustomExercise(userId: string, exerciseId: string): 
   }
   exerciseListCache.clear()
 }
+export interface MealRecommendation {
+  id: string
+  name: string
+  meal_type: string
+  calories: number
+  proteins_g: number
+  carbs_g: number
+  fats_g: number
+  quantity_g: number
+  ingredients: MealIngredient[]
+  reason: string | null
+  source: 'ai' | 'rules'
+  status: 'pending' | 'added' | 'dismissed'
+}
+
+export interface MealRecommendations {
+  remaining_calories: number
+  remaining_proteins_g: number
+  remaining_carbs_g: number
+  remaining_fats_g: number
+  goal_reached: boolean
+  refreshes_left: number
+  items: MealRecommendation[]
+}
+
+/** Thrown when the server says the feature needs Premium, so the page can show the paywall. */
+export class PremiumRequiredError extends Error {}
+
+async function recommendationRequest<T>(path: string, method: 'GET' | 'POST', fallback: string): Promise<T> {
+  // The local day lets the server keep suggestions to today only.
+  const response = await apiFetch(`${API_URL}/api/v1/nutrition/recommendations${path}?${localDayQuery()}`, {
+    method,
+    // Picking with the model can take a few seconds on the first open of the day.
+    signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS * 2),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    const message = typeof body?.detail === 'string' ? body.detail : fallback
+    throw response.status === 403 ? new PremiumRequiredError(message) : new Error(message)
+  }
+  return response.json() as Promise<T>
+}
+
+export function fetchMealRecommendations(): Promise<MealRecommendations> {
+  return recommendationRequest('', 'GET', "We couldn't load meal suggestions. Please try again.")
+}
+
+export function refreshMealRecommendations(): Promise<MealRecommendations> {
+  return recommendationRequest('/refresh', 'POST', "We couldn't get new suggestions. Please try again.")
+}
+
+export async function addMealRecommendation(id: string): Promise<MealLogItem> {
+  const meal = await recommendationRequest<MealLogItem>(`/${encodeURIComponent(id)}/add`, 'POST', "We couldn't add this meal. Please try again.")
+  clearDashboardCache()
+  clearNutritionCache()
+  return meal
+}
+
+export async function dismissMealRecommendation(id: string): Promise<void> {
+  await recommendationRequest(`/${encodeURIComponent(id)}/dismiss`, 'POST', "We couldn't hide this suggestion. Please try again.")
+}

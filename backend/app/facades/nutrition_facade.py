@@ -6,9 +6,11 @@ from app.schemas.nutrition import (
     FoodSearchItem,
     MealCreateRequest,
     MealItem,
+    MealRecommendationsResponse,
     MealUpdateRequest,
 )
-from app.services import nutrition_service
+from app.core.local_day import LocalDay
+from app.services import meal_recommendation_service, nutrition_service
 
 
 def _resolve_window(today_start: datetime | None, today_end: datetime | None) -> tuple[datetime, datetime]:
@@ -50,6 +52,18 @@ class NutritionFacade:
 
     def delete_favorite(self, user_id: str, favorite_id: str) -> None:
         nutrition_service.delete_favorite_meal(user_id, favorite_id)
+
+    def get_recommendations(self, user_id: str, day: LocalDay) -> MealRecommendationsResponse:
+        return meal_recommendation_service.get_recommendations(user_id, day)
+
+    def refresh_recommendations(self, user_id: str, day: LocalDay) -> MealRecommendationsResponse:
+        return meal_recommendation_service.refresh_recommendations(user_id, day)
+
+    def add_recommendation(self, user_id: str, recommendation_id: str, day: LocalDay) -> MealItem:
+        return meal_recommendation_service.add_recommendation(user_id, recommendation_id, day)
+
+    def dismiss_recommendation(self, user_id: str, recommendation_id: str, day: LocalDay) -> None:
+        meal_recommendation_service.dismiss_recommendation(user_id, recommendation_id, day)
 
 
 nutrition_facade = NutritionFacade()

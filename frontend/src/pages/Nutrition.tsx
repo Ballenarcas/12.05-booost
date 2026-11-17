@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, ArrowLeft, Calendar, Camera, Heart, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Calendar, Camera, ChefHat, Heart, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   addFavoriteMeal,
@@ -9,12 +9,14 @@ import {
   fetchFavoriteMeals,
   fetchTodayNutrition,
   getCurrentUser,
+  isPremiumActive,
   searchFoodItems,
   updateFavoriteMeal,
   updateMealLog,
 } from '../services/api';
 import type { FavoriteMeal, FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
 import FavoriteMealsModal from '../components/nutrition/FavoriteMealsModal';
+import MealRecommendationsModal from '../components/nutrition/MealRecommendationsModal';
 import '../styles/log-meals.css';
 
 // Names match ignoring case, like the server's unique rule.
@@ -75,6 +77,7 @@ export default function Nutrition() {
   const [isLoadingFavorites, setIsLoadingFavorites] = useState(true);
   const [favoritesError, setFavoritesError] = useState<string | null>(null);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   // Set while the edit dialog is editing a favorite instead of a logged meal.
   const [editingFavoriteId, setEditingFavoriteId] = useState<string | null>(null);
   const [heartBusyId, setHeartBusyId] = useState<string | null>(null);
@@ -474,14 +477,27 @@ export default function Nutrition() {
         </button>
       </div>
 
-      <button
-        type="button"
-        onClick={() => { setFavoriteNotice(null); setIsFavoritesOpen(true); }}
-        style={{ width: '100%', minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: '1px solid #333', borderRadius: '14px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '14px', fontWeight: 700, marginBottom: '20px' }}
-      >
-        <Heart size={18} aria-hidden="true" />
-        Favorites{favorites.length > 0 && <span style={{ color: '#8e8e93', fontWeight: 600 }}>· {favorites.length}</span>}
-      </button>
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+        <button
+          type="button"
+          onClick={() => { setFavoriteNotice(null); setIsFavoritesOpen(true); }}
+          style={{ flex: 1, minWidth: 0, minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: '1px solid #333', borderRadius: '14px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
+        >
+          <Heart size={18} aria-hidden="true" />
+          Favorites{favorites.length > 0 && <span style={{ color: '#8e8e93', fontWeight: 600 }}>· {favorites.length}</span>}
+        </button>
+        <button
+          type="button"
+          // Non-Premium users see the paywall; the server checks Premium again on every request.
+          onClick={() => (isPremiumActive() ? setIsSuggestionsOpen(true) : navigate('/premium'))}
+          aria-label={isPremiumActive() ? 'Suggested meals' : 'Suggested meals, available with Pro'}
+          style={{ flex: 1, minWidth: 0, minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', border: '1px solid #333', borderRadius: '14px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
+        >
+          <ChefHat size={18} aria-hidden="true" style={{ flexShrink: 0 }} />
+          <span>Suggestions</span>
+          {!isPremiumActive() && <span style={{ padding: '3px 7px', borderRadius: '6px', color: '#161616', backgroundColor: '#b99a45', fontSize: '10px', fontWeight: 800 }}>PRO</span>}
+        </button>
+      </div>
 
       {favoriteNotice && (
         <div role="alert" style={{ backgroundColor: 'rgba(255, 77, 77, 0.1)', border: '1px solid rgba(255, 77, 77, 0.2)', color: '#ff4d4d', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center', fontSize: '13.5px', fontWeight: 500 }}>
@@ -691,6 +707,15 @@ export default function Nutrition() {
           onLog={logFavorite}
           onEdit={editFavorite}
           onDelete={removeFavorite}
+        />
+      )}
+
+      {isSuggestionsOpen && (
+        <MealRecommendationsModal
+          onClose={() => setIsSuggestionsOpen(false)}
+          // Suggestions are logged to today, so show today with the new meal.
+          onAdded={() => { setDateError(null); setSelectedDate(new Date()); }}
+          onPremiumRequired={() => navigate('/premium')}
         />
       )}
 

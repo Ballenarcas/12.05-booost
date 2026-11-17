@@ -91,3 +91,28 @@ class DailyNutritionResponse(BaseModel):
     proteins_g: float
     fats_g: float
     meals: list[MealItem]
+
+
+class MealRecommendation(BaseModel):
+    id: str
+    name: str
+    meal_type: str
+    calories: int
+    proteins_g: float = 0.0
+    carbs_g: float = 0.0
+    fats_g: float = 0.0
+    quantity_g: float = 100.0
+    ingredients: list[MealIngredient] = Field(default_factory=list)
+    reason: str | None = None
+    source: str = "rules"
+    status: str = "pending"
+
+
+class MealRecommendationsResponse(BaseModel):
+    remaining_calories: int
+    remaining_proteins_g: float
+    remaining_carbs_g: float
+    remaining_fats_g: float
+    goal_reached: bool = False
+    refreshes_left: int = 0
+    items: list[MealRecommendation] = Field(default_factory=list)
