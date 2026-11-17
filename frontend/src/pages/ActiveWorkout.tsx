@@ -969,7 +969,7 @@ function ActiveWorkout() {
   }
 
   function addSelectedWarmupSteps() {
-    if (!session || warmup.status !== 'ready') return
+    if (!session || session.warmupAdded || warmup.status !== 'ready') return
 
     const steps = warmup.recommendation.steps.filter((_, index) => selectedWarmupSteps.includes(index))
     if (!steps.length) return
@@ -1013,6 +1013,7 @@ function ActiveWorkout() {
       exercises,
       setKinds,
       warmupSteps: [...(session.warmupSteps ?? []), ...activitySteps],
+      warmupAdded: true,
     })
     setRpeValues(nextRpeValues)
     setSelectedWarmupSteps([])
@@ -1020,7 +1021,7 @@ function ActiveWorkout() {
   }
 
   function openWarmup() {
-    if (!session || session.editWorkoutId) return
+    if (!session || session.editWorkoutId || session.warmupAdded) return
     setShowWarmup(true)
     if (!isPremiumActive()) {
       setWarmup({ status: 'premium' })
@@ -1105,9 +1106,9 @@ function ActiveWorkout() {
               className="ai-adjust-trigger warmup-trigger"
               type="button"
               onClick={openWarmup}
-              disabled={isSaving}
-              aria-label="Recommend a warm-up"
-              title="Recommend a warm-up"
+              disabled={isSaving || session.warmupAdded}
+              aria-label={session.warmupAdded ? 'Warm-up already added' : 'Recommend a warm-up'}
+              title={session.warmupAdded ? 'Warm-up already added' : 'Recommend a warm-up'}
             >
               <Flame size={16} aria-hidden="true" />
               <span>Warm-up</span>

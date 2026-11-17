@@ -65,6 +65,8 @@ export interface ActiveSession {
   setKinds: Record<string, SetKind>
   rpeValues?: Record<string, number>
   warmupSteps?: WarmupStep[]
+  /** Set once a warm-up was added, so the same workout can't get a second one. */
+  warmupAdded?: boolean
 }
 
 export interface WorkoutLogCreate {

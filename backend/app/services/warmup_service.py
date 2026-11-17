@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 WARMUP_TIMEOUT_SECONDS = 20
 RAMP_SET_SECONDS = 50
 MAX_TOTAL_RAMP_REPS = 18
-MAX_WARMUP_LOAD_RATIO = 0.8
+MAX_WARMUP_LOAD_RATIO = 0.6  # ramp sets stay light: about 40-60% of the working weight
+PLATE_STEP_KG = 2.5
 STRENGTH_WARMUP_PURPOSE = (
     "The goal is to prime the central nervous system and prepare your muscles safely "
     "without causing premature fatigue before the main working sets."
@@ -113,8 +114,8 @@ WARMUP_INSTRUCTION = (
     "exercise IDs provided. Choose 60-300 seconds of general warm-up. Return one cardio "
     "build-up of 30-180 seconds for each cardio exercise and one ramp plan for each strength "
     "exercise. Each strength plan must have 1-3 sets, at most 10 reps per set and at most 18 "
-    "total reps. Warm-up weights must be in kilograms, increase gradually, and not exceed "
-    "80% of the exercise's working weight. If no working weight is known, use null (bodyweight) "
+    "total reps. Warm-up weights must be in kilograms, start around 40-50% of the exercise's "
+    "working weight, increase gradually, and never exceed 60% of it. If no working weight is known, use null (bodyweight) "
     "instead of inventing a load. Keep every set controlled and well short of failure. "
     "Do not give medical advice, diagnose conditions, or recommend training through pain. "
     "Return only JSON matching this schema: "
@@ -185,8 +186,10 @@ def _validate_warmup_plan(
                 if working_weight is None or working_weight <= 0:
                     if weight > 0:
                         raise ValueError("The AI cannot invent a working weight")
-                elif weight > working_weight * MAX_WARMUP_LOAD_RATIO:
-                    raise ValueError("Warm-up weights must not exceed 80% of working weight")
+                else:
+                    # A set above the cap is lowered to it (rounded down to a plate step) instead of failing the plan.
+                    cap = int(working_weight * MAX_WARMUP_LOAD_RATIO / PLATE_STEP_KG) * PLATE_STEP_KG
+                    weight = min(weight, cap)
                 previous_weight = weight
             warmup_sets.append(WarmupSet(weight_kg=weight, reps=warmup_set.reps))
 
