@@ -8,6 +8,7 @@ const ActiveWorkout = lazy(() => import('./pages/ActiveWorkout'))
 const CreateRoutine = lazy(() => import('./pages/CreateRoutine'))
 const CustomExercise = lazy(() => import('./pages/CustomExercise')) 
 const ExercisePicker = lazy(() => import('./pages/ExercisePicker'))
+const HydrationHistory = lazy(() => import('./pages/HydrationHistory'))
 const Login = lazy(() => import('./pages/Login'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
@@ -46,6 +47,7 @@ function App() {
             <Route path="/exercises/custom" element={<CustomExercise />} /> {/* <-- Création d'exercice */}
             <Route path="/exercises/custom/:id" element={<CustomExercise />} /> {/* <-- Édition d'exercice */}
             <Route path="/nutrition" element={<Nutrition />} />
+            <Route path="/hydration/history" element={<HydrationHistory />} />
             <Route path="/premium" element={<Premium />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/faq" element={<Faq />} />
