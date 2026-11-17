@@ -1246,6 +1246,104 @@ export async function deleteMealLog(userId: string, mealId: string): Promise<voi
   }
 }
 
+export interface HydrationEntry {
+  id: string
+  amount_ml: number
+  unit: 'ml' | 'glass'
+  created_at: string | null
+}
+
+export interface HydrationToday {
+  total_ml: number
+  goal_ml: number
+  default_goal_ml: number
+  progress_percentage: number
+  remaining_ml: number
+  entries: HydrationEntry[]
+}
+
+export async function fetchHydrationToday(): Promise<HydrationToday> {
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/today?${localDayQuery()}`, {
+    signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    throw new Error("We couldn't load your hydration. Please try again.")
+  }
+  return response.json()
+}
+
+export interface HydrationHistoryDay {
+  date: string
+  total_ml: number
+  goal_ml: number
+  progress_percentage: number
+  met_goal: boolean
+}
+
+export interface HydrationHistoryWeek {
+  week_start: string
+  week_end: string
+  goal_ml: number
+  default_goal_ml: number
+  total_ml: number
+  daily_average_ml: number
+  days_met_goal: number
+  entries_count: number
+  days: HydrationHistoryDay[]
+}
+
+export async function fetchHydrationHistory(weekStart?: string): Promise<HydrationHistoryWeek> {
+  const params = new URLSearchParams(localDayQuery())
+  if (weekStart) params.set('week_start', weekStart)
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/history?${params.toString()}`, {
+    signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    throw new Error("We couldn't load your hydration history. Please try again.")
+  }
+  return response.json()
+}
+
+export async function addHydrationEntry(payload: { amount: number; unit: 'ml' | 'glass' }): Promise<HydrationToday> {
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/entries?${localDayQuery()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't save this drink. Please try again.")
+  }
+  return response.json()
+}
+
+export async function removeHydrationEntry(entryId: string): Promise<HydrationToday> {
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/entries/${encodeURIComponent(entryId)}?${localDayQuery()}`, {
+    method: 'DELETE',
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't remove this drink. Please try again.")
+  }
+  return response.json()
+}
+
+export async function updateHydrationGoal(goalMl: number | null): Promise<HydrationToday> {
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/goal?${localDayQuery()}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ goal_ml: goalMl }),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update your hydration goal. Please try again.")
+  }
+  return response.json()
+}
+
 export async function createCustomExercise(userId: string, payload: import('../types').CustomExercisePayload): Promise<import('../types').Exercise> {
   const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/custom?user_id=${encodeURIComponent(userId)}`, {
     method: 'POST',
