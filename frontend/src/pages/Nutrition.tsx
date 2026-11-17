@@ -6,6 +6,7 @@ import DailyIntake from '../components/nutrition/DailyIntake';
 import MealDatePicker from '../components/nutrition/MealDatePicker';
 import { sameDay } from '../utils/monthGrid';
 import type { FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
+import HydrationCard from '../components/home/HydrationCard';
 import '../styles/log-meals.css';
 
 const DEFAULT_FOOD_DENSITY = {
@@ -375,6 +376,11 @@ export default function Nutrition() {
           { label: 'Fat', current: meals.reduce((total, meal) => total + (meal.fats_g ?? 0), 0), target: targets?.target_fats_g ?? 0 },
         ]}
       />
+
+      <h2 className="meals-subtitle meal-list-title" id="nutrition-hydration">Hydration today</h2>
+      <section className="meal-hydration" aria-labelledby="nutrition-hydration">
+        <HydrationCard />
+      </section>
 
       <h2 className="meals-subtitle meal-list-title">{sameDay(selectedDate, today) ? "Today's meals" : 'Meals this day'}</h2>
 

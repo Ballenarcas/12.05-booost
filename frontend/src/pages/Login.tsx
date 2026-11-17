@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import { loginUser } from '../services/api'
 import { describeError } from '../utils/errors.js'
@@ -13,7 +13,10 @@ function Login() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [notice, setNotice] = useState('')
+  const location = useLocation()
+  // Set when the user arrives from a successful password reset.
+  const [notice, setNotice] = useState((location.state as { notice?: string } | null)?.notice ?? '')
+  const [email, setEmail] = useState('')
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -67,7 +70,8 @@ function Login() {
               autoComplete="email"
               required
               maxLength={255}
-              onChange={() => setNotice('')}
+              value={email}
+              onChange={(event) => { setEmail(event.target.value); setNotice('') }}
             />
           </div>
 
@@ -94,6 +98,7 @@ function Login() {
                 {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
               </button>
             </div>
+            <Link className="login-forgot-link" to="/forgot-password" state={{ email }}>Forgot password?</Link>
           </div>
 
           <div className="onboarding-actions login-actions">

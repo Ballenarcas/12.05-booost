@@ -3,6 +3,7 @@ import { usePageNavigate } from '../utils/usePageNavigate'
 import AiTipCard from '../components/home/AiTipCard'
 import WeekActivity from '../components/home/WeekActivity'
 import DailyIntake from '../components/nutrition/DailyIntake'
+import HydrationCard from '../components/home/HydrationCard'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
@@ -53,6 +54,7 @@ function Home() {
   const nutrition = summary?.nutrition
   const plan = summary?.plan
   const completedWorkoutToday = summary?.completed_workout_today
+  const activity = summary?.activity
   const macros = [
     { label: 'Protein', current: nutrition?.current_protein ?? 0, target: nutrition?.target_protein ?? 0 },
     { label: 'Carbs', current: nutrition?.current_carbs ?? 0, target: nutrition?.target_carbs ?? 0 },
@@ -97,6 +99,46 @@ function Home() {
       <section className="section" aria-labelledby="trainer-insight">
         <h2 className="section-title" id="trainer-insight">Recommended for you</h2>
         <AiTipCard onApplied={() => fetchDashboardSummary({ forceRefresh: true }).then(setSummary).catch(() => undefined)} />
+      </section>
+
+      <section className="section" aria-labelledby="daily-steps">
+        <h2 className="section-title" id="daily-steps">Steps</h2>
+        {activity?.connected ? (
+          <div className="card activity-card">
+            <div className="activity-stats">
+              <div className="activity-stat">
+                <span>Steps today</span>
+                <strong>{activity.steps_today.toLocaleString()}</strong>
+              </div>
+              <div className="activity-stat">
+                <span>Active kcal</span>
+                <strong>{activity.active_calories_today}</strong>
+              </div>
+            </div>
+            <p className="activity-note">
+              Health Connect · 7-day average {activity.steps_avg_7d.toLocaleString()} steps and{' '}
+              {activity.active_calories_avg_7d} active kcal. Included in your AI trainer guidance.
+            </p>
+            {activity.source === 'preview' && (
+              <p className="activity-note">Browser preview activity. The Android app reads Health Connect directly.</p>
+            )}
+          </div>
+        ) : (
+          <div className="card activity-card activity-empty">
+            <div>
+              <h3>Bring your steps into the plan</h3>
+              <p>Connect Health Connect so the AI trainer can read steps and active calories.</p>
+            </div>
+            <button className="secondary-action" type="button" onClick={() => navigate('/profile')}>
+              Connect
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section className="section" aria-labelledby="hydration-summary">
+        <h2 className="section-title" id="hydration-summary">Hydration</h2>
+        <HydrationCard />
       </section>
 
       <section className="section" aria-labelledby="programmed-training">

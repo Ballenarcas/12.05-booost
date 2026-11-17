@@ -7,8 +7,12 @@ const pages = {
   Home: () => import('./pages/Home'),
   ActiveWorkout: () => import('./pages/ActiveWorkout'),
   CreateRoutine: () => import('./pages/CreateRoutine'),
+  CustomExercise: () => import('./pages/CustomExercise'),
   ExercisePicker: () => import('./pages/ExercisePicker'),
+  HydrationHistory: () => import('./pages/HydrationHistory'),
   Login: () => import('./pages/Login'),
+  ForgotPassword: () => import('./pages/ForgotPassword'),
+  ResetPassword: () => import('./pages/ResetPassword'),
   LogMeals: () => import('./pages/LogMeals'),
   Nutrition: () => import('./pages/Nutrition'),
   Onboarding: () => import('./pages/Onboarding'),
@@ -38,8 +42,12 @@ if (typeof window !== 'undefined') {
 const Home = lazy(pages.Home)
 const ActiveWorkout = lazy(pages.ActiveWorkout)
 const CreateRoutine = lazy(pages.CreateRoutine)
+const CustomExercise = lazy(pages.CustomExercise)
 const ExercisePicker = lazy(pages.ExercisePicker)
+const HydrationHistory = lazy(pages.HydrationHistory)
 const Login = lazy(pages.Login)
+const ForgotPassword = lazy(pages.ForgotPassword)
+const ResetPassword = lazy(pages.ResetPassword)
 const LogMeals = lazy(pages.LogMeals)
 const Nutrition = lazy(pages.Nutrition)
 const Onboarding = lazy(pages.Onboarding)
@@ -61,6 +69,8 @@ function App() {
         <Routes>
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/log-meals" element={<LogMeals />} />
           <Route element={<ProtectedLayout />}>
@@ -70,7 +80,10 @@ function App() {
             <Route path="/workouts/create" element={<CreateRoutine />} />
             <Route path="/workouts/active" element={<ActiveWorkout />} />
             <Route path="/workouts/active/exercises" element={<ExercisePicker />} />
+            <Route path="/exercises/custom" element={<CustomExercise />} /> {/* <-- Création d'exercice */}
+            <Route path="/exercises/custom/:id" element={<CustomExercise />} /> {/* <-- Édition d'exercice */}
             <Route path="/nutrition" element={<Nutrition />} />
+            <Route path="/hydration/history" element={<HydrationHistory />} />
             <Route path="/premium" element={<Premium />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Navigate to="/profile" replace />} />

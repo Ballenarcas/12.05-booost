@@ -29,6 +29,12 @@ import type {
 import type { WorkoutLogCreate } from '../types/workout'
 import { DEFAULT_STATISTICS_RANGE } from '../utils/workoutStatistics'
 import type { PremiumPlan, UserProfile } from '../types'
+import type {
+  HealthActivityDay,
+  HealthActivitySummary,
+  HealthConnectSource,
+  HealthConnectStatus,
+} from '../types/health'
 
 export interface PlanExercise {
   exercise_id: string
@@ -75,6 +81,7 @@ export interface DashboardSummary {
   } | null
   plan: WorkoutPlanSummary | null
   completed_workout_today: CompletedWorkoutToday | null
+  activity: HealthActivitySummary
 }
 
 const SESSION_KEY = 'set_plate_session'
@@ -544,6 +551,33 @@ export async function fetchWorkoutStatistics(
   return data
 }
 
+async function postPasswordReset(path: string, body: object, fallback: string): Promise<string> {
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}/api/v1/users/password-reset/${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(LOGIN_TIMEOUT_MS),
+    })
+  } catch (error) {
+    throw new Error('This is taking longer than expected. Check your connection and try again.', { cause: error })
+  }
+  if (response.status === 429) throw new Error('Too many attempts. Wait a minute and try again.')
+  const data = await response.json().catch(() => ({})) as { message?: string; detail?: unknown }
+  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : fallback)
+  return data.message ?? ''
+}
+
+/** Always resolves with the same message, whether or not the email has an account. */
+export function requestPasswordReset(email: string): Promise<string> {
+  return postPasswordReset('request', { email: email.trim() }, "We couldn't send the reset link. Please try again.")
+}
+
+export function confirmPasswordReset(token: string, newPassword: string): Promise<string> {
+  return postPasswordReset('confirm', { token, new_password: newPassword }, "We couldn't update your password. Please try again.")
+}
+
 export async function loginUser(email: string, password: string): Promise<import('../types').UserProfile> {
   let response: Response
   try {
@@ -595,6 +629,79 @@ export async function getHealth(): Promise<{ status: string }> {
   const response = await apiFetch(`${API_URL}/api/v1/health`)
   if (!response.ok) throw new Error("We couldn't reach SET&PLATE. Check your connection and try again.")
   return response.json() as Promise<{ status: string }>
+}
+
+export async function fetchHealthConnectStatus(): Promise<HealthConnectStatus> {
+  const response = await apiFetch(`${API_URL}/api/v1/health-connect/status`, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(
+      typeof body?.detail === 'string'
+        ? body.detail
+        : "We couldn't load your Health Connect status. Please try again.",
+    )
+  }
+  return response.json() as Promise<HealthConnectStatus>
+}
+
+export async function connectHealthConnect(
+  source: HealthConnectSource,
+  days: HealthActivityDay[],
+): Promise<HealthConnectStatus> {
+  const response = await apiFetch(`${API_URL}/api/v1/health-connect/connect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, days }),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(
+      typeof body?.detail === 'string'
+        ? body.detail
+        : "We couldn't connect Health Connect. Please try again.",
+    )
+  }
+  return response.json() as Promise<HealthConnectStatus>
+}
+
+export async function syncHealthConnectActivity(
+  source: HealthConnectSource,
+  days: HealthActivityDay[],
+): Promise<HealthConnectStatus> {
+  const response = await apiFetch(`${API_URL}/api/v1/health-connect/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, days }),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(
+      typeof body?.detail === 'string'
+        ? body.detail
+        : "We couldn't sync your activity. Please try again.",
+    )
+  }
+  return response.json() as Promise<HealthConnectStatus>
+}
+
+export async function disconnectHealthConnect(): Promise<HealthConnectStatus> {
+  const response = await apiFetch(`${API_URL}/api/v1/health-connect/disconnect`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(
+      typeof body?.detail === 'string'
+        ? body.detail
+        : "We couldn't disconnect Health Connect. Please try again.",
+    )
+  }
+  return response.json() as Promise<HealthConnectStatus>
 }
 
 export async function generateTrainerInsight(
@@ -693,6 +800,8 @@ const EXERCISE_LIST_TTL_MS = 30_000
 
 export async function fetchExercises(params: FetchExercisesParams = {}) {
   const query = new URLSearchParams()
+  const user = getCurrentUser()
+  if (user?.id) query.set('user_id', user.id)
   if (params.q) query.set('q', params.q)
   if (params.category) query.set('category', params.category)
   if (params.muscle_group) query.set('muscle_group', params.muscle_group)
@@ -709,6 +818,7 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
   if (inflight) return inflight
 
   const request = apiFetch(`${API_URL}/api/v1/workouts/exercises${queryString ? `?${queryString}` : ''}`, {
+    cache: 'no-store',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
@@ -740,7 +850,11 @@ export async function fetchExerciseMuscleGroups(): Promise<string[]> {
 }
 
 export async function fetchExerciseById(exerciseId: string) {
-  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/${exerciseId}`)
+  const user = getCurrentUser()
+  const query = user?.id ? `?user_id=${encodeURIComponent(user.id)}` : ''
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/${encodeURIComponent(exerciseId)}${query}`, {
+    cache: 'no-store',
+  })
   if (!response.ok) throw new Error("We couldn't load that exercise. Please try again.")
   return response.json()
 }
@@ -981,7 +1095,6 @@ export interface TodayNutritionData {
   meals: MealLogItem[]
 }
 
-// Fonction modifiée pour accepter une date optionnelle
 export function localDayWindow(dateString?: string): { today_start: string; today_end: string } {
   const start = new Date()
   if (dateString) {
@@ -1026,7 +1139,6 @@ export function getCachedTodayNutrition(userId: string, dateString?: string): To
   }
 }
 
-// Fonction modifiée pour transférer les bonnes dates au backend
 export async function fetchTodayNutrition(userId: string, dateString?: string): Promise<TodayNutritionData> {
   const window = localDayWindow(dateString)
   const requestKey = `${userId}:${window.today_start}`
@@ -1070,6 +1182,7 @@ export interface CalorieAdjustmentData {
   avg_daily_intake: number
   compliance_rate: number
   weekly_volume: number
+  activity: HealthActivitySummary
 }
 
 export async function fetchCalorieAdjustment(userId: string): Promise<CalorieAdjustmentData> {
@@ -1255,4 +1368,141 @@ export async function deleteMealLog(userId: string, mealId: string): Promise<voi
   } catch {
     // The server-side deletion remains authoritative when browser storage is unavailable.
   }
-};
+}
+
+export interface HydrationEntry {
+  id: string
+  amount_ml: number
+  unit: 'ml' | 'glass'
+  created_at: string | null
+}
+
+export interface HydrationToday {
+  total_ml: number
+  goal_ml: number
+  default_goal_ml: number
+  progress_percentage: number
+  remaining_ml: number
+  entries: HydrationEntry[]
+}
+
+export async function fetchHydrationToday(): Promise<HydrationToday> {
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/today?${localDayQuery()}`, {
+    signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    throw new Error("We couldn't load your hydration. Please try again.")
+  }
+  return response.json()
+}
+
+export interface HydrationHistoryDay {
+  date: string
+  total_ml: number
+  goal_ml: number
+  progress_percentage: number
+  met_goal: boolean
+}
+
+export interface HydrationHistoryWeek {
+  week_start: string
+  week_end: string
+  goal_ml: number
+  default_goal_ml: number
+  total_ml: number
+  daily_average_ml: number
+  days_met_goal: number
+  entries_count: number
+  days: HydrationHistoryDay[]
+}
+
+export async function fetchHydrationHistory(weekStart?: string): Promise<HydrationHistoryWeek> {
+  const params = new URLSearchParams(localDayQuery())
+  if (weekStart) params.set('week_start', weekStart)
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/history?${params.toString()}`, {
+    signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    throw new Error("We couldn't load your hydration history. Please try again.")
+  }
+  return response.json()
+}
+
+export async function addHydrationEntry(payload: { amount: number; unit: 'ml' | 'glass' }): Promise<HydrationToday> {
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/entries?${localDayQuery()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't save this drink. Please try again.")
+  }
+  return response.json()
+}
+
+export async function removeHydrationEntry(entryId: string): Promise<HydrationToday> {
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/entries/${encodeURIComponent(entryId)}?${localDayQuery()}`, {
+    method: 'DELETE',
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't remove this drink. Please try again.")
+  }
+  return response.json()
+}
+
+export async function updateHydrationGoal(goalMl: number | null): Promise<HydrationToday> {
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/goal?${localDayQuery()}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ goal_ml: goalMl }),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update your hydration goal. Please try again.")
+  }
+  return response.json()
+}
+
+export async function createCustomExercise(userId: string, payload: import('../types').CustomExercisePayload): Promise<import('../types').Exercise> {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/custom?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail || "We couldn't create this exercise.")
+  }
+  exerciseListCache.clear()
+  return response.json()
+}
+
+export async function updateCustomExercise(userId: string, exerciseId: string, payload: import('../types').CustomExercisePayload): Promise<import('../types').Exercise> {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/custom/${encodeURIComponent(exerciseId)}?user_id=${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail || "We couldn't update this exercise.")
+  }
+  exerciseListCache.clear()
+  return response.json()
+}
+
+export async function deleteCustomExercise(userId: string, exerciseId: string): Promise<void> {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/custom/${encodeURIComponent(exerciseId)}?user_id=${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail || "We couldn't delete this exercise.")
+  }
+  exerciseListCache.clear()
+}

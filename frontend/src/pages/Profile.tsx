@@ -6,6 +6,7 @@ import { describeError } from '../utils/errors.js'
 import { useDialogBehavior } from '../utils/useDialogBehavior'
 import { applyTheme, getTheme } from '../utils/theme'
 import LiquidToggle from '../components/ui/LiquidToggle'
+import HealthConnectCard from '../components/profile/HealthConnectCard'
 
 type Notice = { kind: 'success' | 'error'; text: string }
 
@@ -207,6 +208,8 @@ function Profile() {
           </button>
         )}
       </form>
+
+      <HealthConnectCard userId={user?.id} />
 
       <section className="section" aria-labelledby="subscription-title">
         <h2 className="section-title" id="subscription-title">Subscription</h2>
