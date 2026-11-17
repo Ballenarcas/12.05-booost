@@ -31,6 +31,10 @@ const ADJUSTMENT_ACTION_LABELS: Record<LiveWorkoutAdjustmentAction, string> = {
   drop_set: 'Turn the next set into a drop set',
   stop_exercise: 'Skip the remaining sets',
 }
+const FATIGUE_LABELS = [
+  'Fresh', 'Easy', 'Light', 'Moderate', 'Solid',
+  'Tired', 'Very tired', 'Drained', 'Exhausted', 'Maxed out',
+]
 
 function describeAdjustment(suggestion: LiveWorkoutAdjustmentSuggestion): string {
   const base = ADJUSTMENT_ACTION_LABELS[suggestion.action]
@@ -351,6 +355,7 @@ function ActiveWorkout() {
   const routeSession = getSession(location.state)
   const [session, setSession] = useState<ActiveSession | null>(() => routeSession ?? readSavedSession())
   const [workoutName, setWorkoutName] = useState(() => session?.name ?? '')
+  const [fatigueLevel, setFatigueLevel] = useState<number | null>(() => session?.fatigueLevel ?? null)
   const [showFinish, setShowFinish] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [showAiAdjustment, setShowAiAdjustment] = useState(false)
@@ -787,12 +792,21 @@ function ActiveWorkout() {
     setRestRemaining((current) => exerciseIndex in current ? { ...current, [exerciseIndex]: seconds } : current)
   }
 
+  function selectFatigue(level: number) {
+    setFatigueLevel(level)
+    setSession((current) => current ? { ...current, fatigueLevel: level } : current)
+  }
+
   async function finishWorkout() {
     const user = getCurrentUser()
     const currentSession = session
     if (!currentSession) return
     if (!user?.id) {
       setSaveError('Sign in again to save this workout.')
+      return
+    }
+    if (fatigueLevel === null) {
+      setSaveError('Choose how fatigued you feel to save this workout.')
       return
     }
     setIsSaving(true)
@@ -804,6 +818,7 @@ function ActiveWorkout() {
       duration_seconds: elapsedSeconds(currentSession.startedAt),
       started_at: currentSession.startedAt,
       completed_at: new Date().toISOString(),
+      fatigue_level: fatigueLevel,
       exercises: currentSession.exercises.map(({ exercise_id, sets, is_cardio }, exerciseIndex) => ({
         exercise_id,
         is_cardio,
@@ -818,6 +833,7 @@ function ActiveWorkout() {
         await updateWorkoutHistoryEntry(user.id, currentSession.editWorkoutId, {
           name: payload.name,
           exercises: payload.exercises,
+          fatigue_level: payload.fatigue_level,
         })
       } else {
         await saveWorkoutLog(user.id, payload)
@@ -1290,11 +1306,42 @@ function ActiveWorkout() {
                 disabled={isSaving}
               />
             </div>
+            <fieldset className="fatigue-field" aria-describedby="fatigue-hint">
+              <legend>How fatigued do you feel after this workout?</legend>
+              <div className="fatigue-scale">
+                {FATIGUE_LABELS.map((label, index) => {
+                  const level = index + 1
+                  return (
+                    <button
+                      key={level}
+                      type="button"
+                      className="fatigue-scale-button"
+                      aria-pressed={fatigueLevel === level}
+                      aria-label={`${level} of 10, ${label}`}
+                      onClick={() => selectFatigue(level)}
+                      disabled={isSaving}
+                    >
+                      {level}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="fatigue-hint" id="fatigue-hint">
+                {fatigueLevel === null
+                  ? 'Choose 1 (fresh) to 10 (exhausted). This tunes tomorrow’s calories and training.'
+                  : `${fatigueLevel}/10 · ${FATIGUE_LABELS[fatigueLevel - 1]}. Used for tomorrow’s calories and training.`}
+              </p>
+              {fatigueLevel !== null && fatigueLevel > 5 && (
+                <p className="fatigue-hint fatigue-hint-high">
+                  High fatigue: tomorrow’s calorie target gets a recovery bump and training volume will be reduced.
+                </p>
+              )}
+            </fieldset>
             {saveError && <p className="form-error">{saveError}</p>}
             <div className="modal-actions">
               <button className="secondary-action" type="button" onClick={closeFinish} disabled={isSaving}>Keep training</button>
               <button className="danger-action" type="button" onClick={discardWorkout} disabled={isSaving}>{confirmDiscard ? 'Tap again to discard' : session?.editWorkoutId ? 'Discard edits' : 'Discard workout'}</button>
-              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || (!isEditingWorkout && completedSets === 0 && completedCardio === 0)}>{isSaving ? 'SAVING...' : session?.editWorkoutId ? 'SAVE CHANGES' : 'SAVE WORKOUT'}</button>
+              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || fatigueLevel === null || (!isEditingWorkout && completedSets === 0 && completedCardio === 0)}>{isSaving ? 'SAVING...' : session?.editWorkoutId ? 'SAVE CHANGES' : 'SAVE WORKOUT'}</button>
             </div>
           </div>
         </div>

@@ -169,6 +169,7 @@ function Workouts() {
         editWorkoutId: workout.id,
         name: workout.name,
         startedAt: new Date().toISOString(),
+        fatigueLevel: workout.fatigue_level,
         exercises,
       },
     })
@@ -288,6 +289,7 @@ function Workouts() {
                   <span><Clock3 size={14} aria-hidden="true" />{formatWorkoutDuration(workout.duration_seconds)}</span>
                   <span>{workout.exercises.length} exercises</span>
                   <span>{workout.exercises.reduce((total, exercise) => total + exercise.sets.filter((set) => set.is_completed).length, 0)} sets completed</span>
+                  {workout.fatigue_level != null && <span>Fatigue {workout.fatigue_level}/10</span>}
                 </div>
                 {workout.exercises.length > 0 && (
                   <ul className="routine-preview">

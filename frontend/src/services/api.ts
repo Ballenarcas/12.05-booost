@@ -373,7 +373,7 @@ export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistor
 export async function updateWorkoutHistoryEntry(
   userId: string,
   workoutId: string,
-  payload: Pick<WorkoutLogCreate, 'name' | 'exercises'>,
+  payload: Pick<WorkoutLogCreate, 'name' | 'exercises' | 'fatigue_level'>,
 ): Promise<{ id: string; status: string }> {
   const query = new URLSearchParams({ user_id: userId })
   const response = await apiFetch(`${API_URL}/api/v1/workouts/history/${encodeURIComponent(workoutId)}?${query}`, {
@@ -1064,6 +1064,9 @@ export interface CalorieAdjustmentData {
   avg_daily_intake: number
   compliance_rate: number
   weekly_volume: number
+  fatigue_avg: number
+  fatigue_latest: number
+  fatigue_workouts: number
   activity: HealthActivitySummary
 }
 
