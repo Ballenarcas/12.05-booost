@@ -22,6 +22,8 @@ import type {
   LiveWorkoutAdjustmentResponse,
   Routine,
   RoutineCreatePayload,
+  WarmupRecommendation,
+  WarmupRecommendationRequest,
   WorkoutHistoryEntry,
   WorkoutStatistics,
   WorkoutStatisticsRange,
@@ -357,6 +359,39 @@ export async function requestWorkoutAdjustment(
   }
   return response.json() as Promise<LiveWorkoutAdjustmentResponse>
 }
+
+export class PremiumRequiredError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PremiumRequiredError'
+  }
+}
+
+export async function requestWarmupRecommendation(
+  userId: string,
+  payload: WarmupRecommendationRequest,
+): Promise<WarmupRecommendation> {
+  const query = new URLSearchParams({ user_id: userId })
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/warmup?${query}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    const detail = body && typeof body === 'object' && 'detail' in body && typeof body.detail === 'string'
+      ? body.detail
+      : null
+    if (response.status === 403) {
+      throw new PremiumRequiredError(detail ?? 'Warm-up recommendations are a Premium feature.')
+    }
+    throw new Error(detail ?? 'Unable to build your warm-up. Please try again.')
+  }
+  return response.json() as Promise<WarmupRecommendation>
+}
+
 
 export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]> {
   const query = new URLSearchParams({ user_id: userId, limit: '30' })
