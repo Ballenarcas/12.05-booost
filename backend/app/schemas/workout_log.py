@@ -31,6 +31,8 @@ class WorkoutLogCreate(BaseModel):
     duration_seconds: int = Field(ge=0)
     started_at: datetime
     completed_at: datetime
+    # 1 = fresh, 10 = exhausted. The AI trainer uses it for next-day calories and training.
+    fatigue_level: int | None = Field(default=None, ge=1, le=10)
     exercises: list[ExerciseLogItem] = Field(min_length=1, max_length=50)
 
     @model_validator(mode="after")
@@ -45,6 +47,7 @@ class WorkoutLogCreate(BaseModel):
 
 class WorkoutLogUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    fatigue_level: int | None = Field(default=None, ge=1, le=10)
     exercises: list[ExerciseLogItem] = Field(default_factory=list, max_length=50)
 
 
@@ -74,6 +77,7 @@ class WorkoutHistoryEntry(BaseModel):
     started_at: datetime
     completed_at: datetime | None = None
     duration_seconds: int
+    fatigue_level: int | None = None
     exercises: list[WorkoutHistoryExercise]
 
 

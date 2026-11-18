@@ -13,6 +13,8 @@ from app.schemas.workout import (
     LiveWorkoutAdjustmentRequest,
     LiveWorkoutAdjustmentResponse,
     LiveWorkoutAdjustmentSuggestion,
+    WarmupRecommendationRequest,
+    WarmupRecommendationResponse,
 )
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
 from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
@@ -52,6 +54,17 @@ async def suggest_live_adjustment(
     return LiveWorkoutAdjustmentResponse(suggestions=[
         LiveWorkoutAdjustmentSuggestion.model_validate(suggestion) for suggestion in suggestions
     ])
+
+
+@router.post("/warmup", response_model=WarmupRecommendationResponse)
+def recommend_warmup(
+    payload: WarmupRecommendationRequest,
+    response: Response,
+    user_id: UUID = Depends(current_user),
+) -> WarmupRecommendationResponse:
+    """Recommend a warm-up for the workout in progress. Premium only."""
+    response.headers["Cache-Control"] = "no-store"
+    return workout_facade.recommend_warmup(user_id, payload)
 
 
 @router.post("/logs", response_model=WorkoutLogResponse)

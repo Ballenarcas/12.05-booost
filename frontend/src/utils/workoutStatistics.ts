@@ -18,6 +18,7 @@ export const DEFAULT_STATISTICS_RANGE: WorkoutStatisticsRange = '1M'
 // fr-FR here would render "1 234" and break the expectations in the tests.
 const volumeFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
 const countFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+const fatigueAverageFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
 
 /** Format workout numbers with periods for grouping and commas for decimals. */
 export function formatVolumeKg(value: number): string {
@@ -53,6 +54,24 @@ export function formatChartDate(value: string, granularity: 'day' | 'week'): str
   if (!date) return value
   const formatted = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
   return granularity === 'week' ? `Week of ${formatted}` : formatted
+}
+
+/** Format a fatigue average such as "6.3". */
+export function formatFatigueAverage(value: number | null): string {
+  if (value === null || !Number.isFinite(value) || value <= 0) return '—'
+  return fatigueAverageFormatter.format(value)
+}
+
+/** Format a workout-day bucket without applying a UTC shift. */
+export function formatFatigueDay(value: string): string {
+  const date = parseCalendarDate(value)
+  if (!date) return value
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date)
 }
 
 export function formatStatisticsDateRange(start: string, end: string): string {
