@@ -5,6 +5,7 @@ import { getCurrentUser } from './services/api'
 
 const Home = lazy(() => import('./pages/Home'))
 const ActiveWorkout = lazy(() => import('./pages/ActiveWorkout'))
+const AiRestSuggestions = lazy(() => import('./pages/AiRestSuggestions'))
 const CreateRoutine = lazy(() => import('./pages/CreateRoutine'))
 const CustomExercise = lazy(() => import('./pages/CustomExercise'))
 const ExercisePicker = lazy(() => import('./pages/ExercisePicker'))
@@ -48,6 +49,7 @@ function App() {
             <Route path="/exercises/custom" element={<CustomExercise />} />
             <Route path="/exercises/custom/:id" element={<CustomExercise />} />
             <Route path="/overtraining-alerts" element={<OvertrainingAlerts />} />
+            <Route path="/ai-rest-suggestions" element={<AiRestSuggestions />} />
             <Route path="/nutrition" element={<Nutrition />} />
             <Route path="/hydration/history" element={<HydrationHistory />} />
             <Route path="/premium" element={<Premium />} />

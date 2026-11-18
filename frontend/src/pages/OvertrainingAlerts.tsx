@@ -1,6 +1,11 @@
 import { Dumbbell, Plus, Repeat2 } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  inferMuscleGroupFromExerciseName,
+  loadExerciseMuscleMap,
+  type MuscleGroupBucket,
+} from './AiRestSuggestions'
 import { fetchWorkoutHistory, getCurrentUser } from '../services/api'
 import type { WorkoutHistoryEntry } from '../types/workout'
 
@@ -10,6 +15,8 @@ export interface OvertrainingAlertStatus {
   load_increase_pct: number
   sessions_last_7_days: number
   total_sets_last_7_days: number
+  top_muscle_group: string
+  top_muscle_group_sets: number
   high_rpe_sets_count: number
   repeated_fatigue_reports: number
   strained_muscles: string[]
@@ -52,10 +59,11 @@ interface StoredOvertrainingState {
 const MUSCLE_OPTIONS: string[] = [
   'Chest',
   'Shoulders',
+  'Triceps',
   'Back',
+  'Biceps',
   'Quads',
   'Hamstrings',
-  'Arms',
   'Glutes',
   'Core',
 ]
@@ -126,10 +134,18 @@ function BodyHeatmapGraphic(props: { strainedMuscles: string[] }) {
   const lower = props.strainedMuscles.map((m) => m.toLowerCase())
   const upperActive =
     lower.length === 0 ||
-    lower.some((m) => m.includes('chest') || m.includes('shoulder') || m.includes('arm') || m.includes('back'))
+    lower.some(
+      (m) =>
+        m.includes('chest') ||
+        m.includes('shoulder') ||
+        m.includes('tricep') ||
+        m.includes('bicep') ||
+        m.includes('arm') ||
+        m.includes('back'),
+    )
   const lowerActive =
     lower.length === 0 ||
-    lower.some((m) => m.includes('quad') || m.includes('hamstring') || m.includes('glute') || m.includes('leg'))
+    lower.some((m) => m.includes('quad') || m.includes('hamstring') || m.includes('glute') || m.includes('calf'))
 
   return (
     <svg
@@ -196,6 +212,20 @@ function OvertrainingAlerts() {
       let highRpeSets = 0
       let totalCompletedSets = 0
       let featuredLift = 'compound lifts'
+      const setsByMuscle: Record<MuscleGroupBucket, number> = {
+        Chest: 0,
+        Shoulders: 0,
+        Triceps: 0,
+        Back: 0,
+        Biceps: 0,
+        Quads: 0,
+        Hamstrings: 0,
+        Glutes: 0,
+        Calves: 0,
+        Core: 0,
+      }
+
+      const muscleMap = await loadExerciseMuscleMap()
 
       if (userId) {
         try {
@@ -209,6 +239,7 @@ function OvertrainingAlerts() {
           for (const w of recent) {
             for (const ex of w.exercises) {
               if (ex.name && featuredLift === 'compound lifts') featuredLift = ex.name
+              const muscle = inferMuscleGroupFromExerciseName(ex.name || '', ex.exercise_id, muscleMap)
               for (const s of ex.sets) {
                 const weight = Number(s.weight_kg || 0)
                 const reps = Number(s.reps || 0)
@@ -216,6 +247,7 @@ function OvertrainingAlerts() {
                 if (!isDone) continue
 
                 totalCompletedSets += 1
+                setsByMuscle[muscle] += 1
                 if (typeof s.rpe === 'number' && s.rpe >= 8.5) {
                   highRpeSets += 1
                 }
@@ -227,6 +259,13 @@ function OvertrainingAlerts() {
         }
       }
 
+      const sortedMuscles = (Object.entries(setsByMuscle) as Array<[MuscleGroupBucket, number]>).sort(
+        (a, b) => b[1] - a[1],
+      )
+      const topMuscleGroup: MuscleGroupBucket = sortedMuscles[0]?.[0] ?? 'Chest'
+      const topMuscleGroupSets: number = sortedMuscles[0]?.[1] ?? 0
+      const overloadedMuscles = sortedMuscles.filter(([, count]) => count >= 18).map(([m]) => m)
+
       const highFatigueLogs = entries.filter(
         (item) =>
           item.effectiveFatigue >= 7 ||
@@ -235,17 +274,25 @@ function OvertrainingAlerts() {
       )
       const repeatedFatigueCount = highFatigueLogs.length
 
-      const strainedMuscles: string[] = []
+      const strainedMuscles: string[] = [...overloadedMuscles]
       for (const log of highFatigueLogs) {
         for (const m of log.muscles) {
           if (!strainedMuscles.includes(m)) strainedMuscles.push(m)
         }
       }
 
+      // Vrais seuils anatomiques par muscle individuel :
+      // 1) Surcharge d'un muscle spécifique : >= 2 séances ET >= 18 séries sur le MÊME muscle (ex: Chest >= 18)
+      // 2) Fréquence excessive : >= 6 séances sur 7 jours
+      // 3) Volume hebdomadaire global excessif : >= 4 séances ET >= 75 séries au total
+      // 4) Saturation nerveuse (CNS) : >= 3 séances ET >= 20 séries à RPE >= 8.5
+      // 5) Récupération insuffisante : >= 2 check-ins de haute fatigue, OU (1 check-in + >= 4 séances)
+      const localizedMuscleOverload = sessions7d >= 2 && topMuscleGroupSets >= 18
       const highFrequency = sessions7d >= 6
       const highCumulativeVolume = sessions7d >= 4 && totalCompletedSets >= 75
       const highCnsStrain = sessions7d >= 3 && highRpeSets >= 20
-      const excessiveTrainingLoad = highFrequency || highCumulativeVolume || highCnsStrain
+      const excessiveTrainingLoad =
+        localizedMuscleOverload || highFrequency || highCumulativeVolume || highCnsStrain
 
       const insufficientRecovery =
         repeatedFatigueCount >= 2 || (repeatedFatigueCount >= 1 && sessions7d >= 4)
@@ -261,10 +308,12 @@ function OvertrainingAlerts() {
           load_increase_pct: 0,
           sessions_last_7_days: sessions7d,
           total_sets_last_7_days: totalCompletedSets,
+          top_muscle_group: topMuscleGroup,
+          top_muscle_group_sets: topMuscleGroupSets,
           high_rpe_sets_count: highRpeSets,
           repeated_fatigue_reports: repeatedFatigueCount,
           strained_muscles: strainedMuscles,
-          headline: 'Your acute-to-chronic training load and recovery markers are within optimal range.',
+          headline: 'Your acute-to-chronic training load and individual muscle recovery are within optimal range.',
           critical_alert_title: null,
           critical_alert_body: null,
           critical_recommendation: null,
@@ -279,15 +328,18 @@ function OvertrainingAlerts() {
         }
       }
 
-      const displayLoadPct =
-        totalCompletedSets > 60
+      const displayLoadPct = localizedMuscleOverload
+        ? Math.min(85, Math.max(25, Math.round(((topMuscleGroupSets - 14) / 14) * 100)))
+        : totalCompletedSets > 60
           ? Math.min(85, Math.max(20, Math.round(((totalCompletedSets - 60) / 60) * 100)))
           : 35
-      const musclesLabel =
-        strainedMuscles.length > 0 ? strainedMuscles.slice(0, 2).join('/').toLowerCase() : 'chest/shoulders'
 
-      const criticalBody =
-        excessiveTrainingLoad
+      const musclesLabel =
+        strainedMuscles.length > 0 ? strainedMuscles.slice(0, 2).join('/').toLowerCase() : topMuscleGroup.toLowerCase()
+
+      const criticalBody = localizedMuscleOverload
+        ? `Your 7-day volume on ${topMuscleGroup} is ${displayLoadPct}% above recommended recovery limits (${topMuscleGroupSets} sets specifically on ${topMuscleGroup} across ${sessions7d} sessions; max threshold per muscle is 18 sets).`
+        : excessiveTrainingLoad
           ? `Your 7-day training load is ${displayLoadPct}% above recommended recovery thresholds (${sessions7d} sessions, ${totalCompletedSets} working sets${highRpeSets > 0 ? `, ${highRpeSets} sets at RPE ≥ 8.5` : ''}). Heart Rate Variability (HRV) and CNS readiness are suppressed.`
           : `You have logged ${repeatedFatigueCount} high-fatigue & soreness recovery check-ins. Systemic CNS readiness and muscle recovery are significantly suppressed.`
 
@@ -297,20 +349,23 @@ function OvertrainingAlerts() {
         load_increase_pct: displayLoadPct,
         sessions_last_7_days: sessions7d,
         total_sets_last_7_days: totalCompletedSets,
+        top_muscle_group: topMuscleGroup,
+        top_muscle_group_sets: topMuscleGroupSets,
         high_rpe_sets_count: highRpeSets,
         repeated_fatigue_reports: repeatedFatigueCount,
-        strained_muscles: strainedMuscles.length > 0 ? strainedMuscles : ['Chest', 'Shoulders'],
+        strained_muscles: strainedMuscles.length > 0 ? strainedMuscles : [topMuscleGroup],
         headline:
-          "Based on your fatigue tracking, heart rate variability, and recent high-intensity workouts, we've detected signs of potential overtraining. Please review the recommendations below.",
+          "Based on your per-muscle volume, fatigue tracking, and recent high-intensity workouts, we've detected signs of potential overtraining. Please review the recommendations below.",
         critical_alert_title: 'CRITICAL ALERT: Overtraining Risk High',
         critical_alert_body: criticalBody,
-        critical_recommendation:
-          "Take a dedicated rest day or swap today's high-intensity session for active recovery.",
+        critical_recommendation: localizedMuscleOverload
+          ? `Stop training ${topMuscleGroup} for 48–72h. Take a rest day or rotate to a fresh muscle group (Back / Legs).`
+          : "Take a dedicated rest day or swap today's high-intensity session for active recovery.",
         fatigue_feedback_title: 'Soreness & Fatigue Feedback Detected',
         fatigue_feedback_body:
           repeatedFatigueCount > 0
             ? `High soreness reported in ${musclesLabel} across ${repeatedFatigueCount} recovery check-in${repeatedFatigueCount > 1 ? 's' : ''}. Muscle recovery requires rest.`
-            : `High cumulative fatigue accumulated across ${sessions7d} sessions (${totalCompletedSets} sets on ${featuredLift}). Muscle tissue recovery requires rest.`,
+            : `Excessive localized strain accumulated on ${topMuscleGroup} (${topMuscleGroupSets} sets, led by ${featuredLift}). Muscle tissue recovery requires rest.`,
         fatigue_action: `Force-adjust today's ${featuredLift} sets to RPE 6 or replace with lighter mobility movements.`,
         ai_modification_title: 'AI Modification Suggestion Active',
         ai_modification_body:
@@ -389,7 +444,7 @@ function OvertrainingAlerts() {
       )
     } else {
       setBannerMessage(
-        `Check-in saved (${nextStatus.repeated_fatigue_reports}/2 high-fatigue logs). A single fatigued session is normal — an alert triggers only when fatigue repeats or combines with ≥ 4 sessions/week.`,
+        `Check-in saved (${nextStatus.repeated_fatigue_reports}/2 high-fatigue logs). A single fatigued session is normal — an alert triggers only when fatigue repeats or an individual muscle exceeds 18 sets.`,
       )
     }
   }
@@ -530,7 +585,7 @@ function OvertrainingAlerts() {
         <p
           style={{
             margin: '0 auto',
-            maxWidth: '350px',
+            maxWidth: '360px',
             fontSize: '13.5px',
             lineHeight: 1.45,
             color: '#a1a1aa',
@@ -538,7 +593,7 @@ function OvertrainingAlerts() {
         >
           {showAlertCards
             ? status?.headline
-            : 'The AI evaluates cumulative 7-day workload (≥4 sessions & ≥75 sets or ≥20 sets at RPE ≥8.5) and repeated post-workout fatigue check-ins.'}
+            : 'The AI evaluates individual muscle volume (≥18 sets on the same muscle in 7d), total weekly volume (≥75 sets), and repeated fatigue check-ins.'}
         </p>
       </div>
 
@@ -573,9 +628,11 @@ function OvertrainingAlerts() {
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: '10.5px', color: '#8e8e93' }}>7d Sets</div>
+          <div style={{ fontSize: '10.5px', color: '#8e8e93' }}>
+            {status?.top_muscle_group ? `${status.top_muscle_group} Sets` : 'Top Muscle'}
+          </div>
           <div style={{ fontSize: '15px', fontWeight: 800, color: '#fff', marginTop: '2px' }}>
-            {status?.total_sets_last_7_days ?? 0}/75
+            {status?.top_muscle_group_sets ?? 0}/18
           </div>
         </div>
         <div
@@ -836,9 +893,9 @@ function OvertrainingAlerts() {
           </div>
           <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>Recovery &amp; Workload Optimal</h2>
           <p style={{ margin: 0, fontSize: '13.5px', color: '#a1a1aa', lineHeight: 1.5 }}>
-            Your cumulative 7-day load ({status?.sessions_last_7_days ?? 0} workouts,{' '}
-            {status?.total_sets_last_7_days ?? 0} working sets, {status?.high_rpe_sets_count ?? 0} sets at RPE ≥ 8.5)
-            is within healthy recovery limits.
+            Your 7-day workload ({status?.sessions_last_7_days ?? 0} workouts,{' '}
+            {status?.total_sets_last_7_days ?? 0} total sets, max {status?.top_muscle_group_sets ?? 0}/18 sets on{' '}
+            {status?.top_muscle_group ?? 'any single muscle'}) is well balanced.
           </p>
           <button
             type="button"
