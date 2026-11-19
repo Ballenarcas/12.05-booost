@@ -1,0 +1,191 @@
+{
+  "version": 1,
+  "notes": "Coaching detail shown on the exercise guide. Staple exercises use their movement (see exercise_staples.json); every other catalog exercise uses its category. Keep the text true for every exercise that shares the key.",
+  "movements": {
+    "squat": {
+      "setup": ["Stand with your feet about shoulder-width apart, toes turned out slightly.", "Brace before you move: take a breath into your belly and tighten your core as if about to be pushed.", "On a machine, set the seat or pad so your hips and knees can bend fully without your lower back lifting off the pad."],
+      "cues": ["Sit down and back between your hips, keeping your chest up.", "Push your knees out so they stay in line with your toes.", "Keep your whole foot on the floor or platform: heel, big toe and little toe.", "Go as deep as you can while your lower back stays neutral, then drive up through your mid-foot."],
+      "breathing": "Breathe in and brace at the top, hold it on the way down, breathe out as you pass the hardest part on the way up.",
+      "mistakes": ["Knees caving inwards as you stand up.", "Heels lifting off the floor.", "Lower back rounding at the bottom (\"butt wink\") because you went deeper than your mobility allows.", "Bouncing out of the bottom instead of controlling it."],
+      "tip": "Film a set from the side: your hips and shoulders should rise at the same speed."
+    },
+    "hinge": {
+      "setup": ["Stand with feet hip-width apart, the weight close to your legs.", "Set your back flat: shoulders down, chest proud, neck in line with your spine.", "Unlock your knees slightly; this is a hip movement, not a squat."],
+      "cues": ["Push your hips back as if closing a car door with your backside.", "Keep the weight sliding close to your legs the whole way.", "Lower until you feel a strong stretch in your hamstrings or your back starts to round, whichever comes first.", "Stand up by squeezing your glutes and driving your hips forward; don't lean back at the top."],
+      "breathing": "Breathe in and brace before each rep, breathe out once you are standing tall.",
+      "mistakes": ["Rounding the lower back to reach lower.", "Letting the weight drift away from your body.", "Turning it into a squat by bending the knees too much.", "Over-arching backwards at the top."],
+      "tip": "Think \"hips back, then hips through\" rather than \"down and up\"."
+    },
+    "lunge": {
+      "setup": ["Stand tall with your feet hip-width apart; hold the weight steady at your sides or on your back.", "For split squats, set your stance long enough that both knees can bend to about 90 degrees."],
+      "cues": ["Step or lower straight down, not forwards: the back knee travels towards the floor.", "Keep most of your weight on the front foot, through the whole foot.", "Front knee tracks in line with your toes.", "Keep your torso upright and your hips square to the front.", "Push through the front heel to return."],
+      "breathing": "Breathe in as you lower, breathe out as you push back up.",
+      "mistakes": ["Front knee collapsing inwards.", "Feet on a tightrope line, which makes you wobble; keep them hip-width.", "Slamming the back knee into the floor.", "Pushing off mostly with the back leg."],
+      "tip": "Finish all reps on your weaker leg first, then match that number on the other side."
+    },
+    "horizontal_push": {
+      "setup": ["Lie or sit with your feet flat on the floor and your back against the bench or pad.", "Squeeze your shoulder blades together and down, as if putting them in your back pockets.", "Grip slightly wider than shoulder-width, wrists stacked straight over your elbows."],
+      "cues": ["Lower under control to your mid-chest.", "Keep your elbows at about 45 degrees from your body, not flared out to the sides.", "Keep your shoulder blades pinned the whole set.", "Press up and slightly back until your arms are straight, without letting your shoulders roll forward."],
+      "breathing": "Breathe in as you lower, breathe out as you press.",
+      "mistakes": ["Bouncing the weight off your chest.", "Elbows flared out at 90 degrees, which stresses the shoulders.", "Lifting your hips off the bench.", "Bent-back wrists."],
+      "tip": "Use a spotter or the safety pins whenever you go close to failure on a free weight."
+    },
+    "vertical_push": {
+      "setup": ["Sit tall with your back against the pad, feet flat on the floor.", "Start with the weight at shoulder height, forearms vertical, grip just outside your shoulders."],
+      "cues": ["Brace your core and squeeze your glutes so your lower back doesn't arch.", "Press straight up, moving your head slightly back so the path is straight.", "Finish with arms fully straight and the weight over the middle of your head.", "Lower slowly back to shoulder height."],
+      "breathing": "Breathe in at the bottom, breathe out as you press overhead.",
+      "mistakes": ["Leaning back and turning it into an incline press.", "Stopping halfway down.", "Elbows drifting far behind the weight."],
+      "tip": "If your lower back arches, the weight is too heavy: drop it and own the full range."
+    },
+    "horizontal_pull": {
+      "setup": ["Set a flat back: on bent-over rows, hinge at the hips until your torso is near 45 degrees or lower.", "On a cable or machine, sit tall with a slight bend in the knees and chest up.", "Let your arms hang straight to start, with your shoulders slightly forward to feel the stretch."],
+      "cues": ["Start the pull by drawing your shoulder blades back.", "Drive your elbows back towards your hips, close to your body.", "Pause and squeeze your upper back when the weight reaches your torso.", "Lower slowly until your arms are straight again."],
+      "breathing": "Breathe out as you pull, breathe in as you return.",
+      "mistakes": ["Using momentum and swinging the torso up and down.", "Shrugging the shoulders up to your ears.", "Pulling with your hands and biceps instead of your elbows.", "Rounding the lower back on free-weight rows."],
+      "tip": "Imagine your hands are hooks; the elbows do the work."
+    },
+    "vertical_pull": {
+      "setup": ["Grip the bar or handles slightly wider than shoulder-width (palms facing you for chin-ups).", "On a pulldown, set the knee pad so your thighs are locked under it.", "Start from straight arms with your chest up."],
+      "cues": ["Pull your shoulders down away from your ears before your elbows bend.", "Drive your elbows down towards your back pockets.", "Bring the bar to your upper chest, or your chin over the bar.", "Lower all the way to straight arms under control."],
+      "breathing": "Breathe out as you pull, breathe in as you lower.",
+      "mistakes": ["Half reps that never reach straight arms.", "Leaning far back and turning it into a row.", "Kicking or swinging on pull-ups.", "Pulling the bar behind your neck."],
+      "tip": "If you can't do a full pull-up yet, use a band or slow 5-second lowering reps."
+    },
+    "chest_fly": {
+      "setup": ["Lie or sit with your back flat against the bench or pad.", "Start with the weights together above your chest, elbows slightly bent and locked at that angle."],
+      "cues": ["Open your arms in a wide arc, as if hugging a big tree.", "Lower only until you feel a stretch across your chest, keeping the shoulders back.", "Bring the weights back together by squeezing your chest, not by bending your elbows."],
+      "breathing": "Breathe in as you open, breathe out as you bring the weights together.",
+      "mistakes": ["Going too deep and stretching the front of the shoulder.", "Bending and straightening the elbows, turning it into a press.", "Using weights too heavy to control the stretch."],
+      "tip": "This is a stretch-and-squeeze exercise: go lighter than you think and slow the lowering."
+    },
+    "lateral_raise": {
+      "setup": ["Stand or sit tall with the weights at your sides, palms facing in.", "Lean forward very slightly and keep a soft bend in your elbows."],
+      "cues": ["Raise your arms out to the sides, leading with your elbows.", "Stop at shoulder height, with your hands no higher than your elbows.", "Keep your shoulders down; don't shrug.", "Lower slowly over about 2 seconds."],
+      "breathing": "Breathe out as you raise, breathe in as you lower.",
+      "mistakes": ["Swinging the body to get the weight up.", "Shrugging so the traps do the work.", "Raising far above shoulder height."],
+      "tip": "Light weights and strict reps work best here; aim for a burn in the sides of your shoulders."
+    },
+    "rear_delt": {
+      "setup": ["Hinge forward with a flat back, or sit chest-down on an incline bench.", "Let your arms hang with a slight bend in the elbows."],
+      "cues": ["Move your arms out and back in a wide arc, leading with the back of your hands or elbows.", "Keep your shoulder blades from squeezing all the way together, so the rear shoulders do the work.", "Pause briefly at the top, then lower under control."],
+      "breathing": "Breathe out as you raise, breathe in as you lower.",
+      "mistakes": ["Using too much weight and jerking it up.", "Standing up as you lift.", "Turning it into a row by bending the elbows."],
+      "tip": "Think \"push the weights out to the walls\" instead of up."
+    },
+    "biceps": {
+      "setup": ["Stand or sit tall with your elbows at your sides, arms straight.", "Grip firmly with your wrists straight."],
+      "cues": ["Curl the weight up by bending only at the elbow.", "Keep your elbows still: they should not swing forward or back.", "Squeeze at the top, then lower slowly until your arms are fully straight."],
+      "breathing": "Breathe out as you curl, breathe in as you lower.",
+      "mistakes": ["Swinging the torso to throw the weight up.", "Stopping short of straight arms at the bottom.", "Letting the elbows drift forward at the top."],
+      "tip": "Take 2 to 3 seconds to lower every rep; that half builds the most muscle."
+    },
+    "triceps": {
+      "setup": ["Fix your upper arms in place: at your sides for pushdowns and dips, pointing up for overhead and lying extensions.", "Grip firmly with your wrists straight."],
+      "cues": ["Move only at the elbow: the upper arm stays still.", "Straighten your arms fully and squeeze the back of your arm.", "Return slowly until you feel a stretch in your triceps."],
+      "breathing": "Breathe out as you straighten your arms, breathe in as you bend them.",
+      "mistakes": ["Elbows flaring out to the sides.", "Leaning your body into the weight on pushdowns.", "Short reps that never fully straighten the arm."],
+      "tip": "On dips, keep your torso upright and lower only as far as your shoulders are comfortable."
+    },
+    "leg_curl": {
+      "setup": ["Line your knees up with the machine's pivot point.", "Set the pad just above your heels, on your lower calf."],
+      "cues": ["Curl your heels towards your glutes as far as you can.", "Keep your hips pressed down into the pad or seat.", "Pause at the top, then lower slowly to almost straight legs."],
+      "breathing": "Breathe out as you curl, breathe in as you lower.",
+      "mistakes": ["Hips lifting off the pad.", "Letting the weight drop on the way down.", "Partial reps."],
+      "tip": "Point your toes up towards your shins to get a stronger hamstring contraction."
+    },
+    "leg_extension": {
+      "setup": ["Line your knees up with the machine's pivot point.", "Set the pad on the front of your lower shins, just above your ankles.", "Hold the handles to keep your hips down."],
+      "cues": ["Straighten your legs fully and squeeze your thighs at the top.", "Lower slowly until your knees are bent around 90 degrees.", "Keep your back against the seat."],
+      "breathing": "Breathe out as you straighten, breathe in as you lower.",
+      "mistakes": ["Kicking the weight up with momentum.", "Lifting your hips off the seat.", "Dropping the weight quickly."],
+      "tip": "A 1-second pause at the top makes a light weight feel very hard."
+    },
+    "hip_thrust": {
+      "setup": ["Lie on your back (or with your upper back on a bench) with your knees bent and feet flat, hip-width apart.", "Place your feet so your shins are vertical at the top of the movement.", "Rest the weight across your hips, if you use one."],
+      "cues": ["Tuck your chin and keep your ribs down.", "Drive through your heels and lift your hips until your body forms a straight line from shoulders to knees.", "Squeeze your glutes hard at the top for a second.", "Lower under control without fully resting."],
+      "breathing": "Breathe out as you lift, breathe in as you lower.",
+      "mistakes": ["Arching the lower back at the top instead of squeezing the glutes.", "Feet too far away, which shifts the work to the hamstrings.", "Pushing through the toes."],
+      "tip": "If you feel it in your lower back, tuck your pelvis slightly and keep your ribs down."
+    },
+    "calves": {
+      "setup": ["Place the balls of your feet on the edge of the platform, heels free.", "Stand or sit tall with your knees almost straight (bent for seated raises)."],
+      "cues": ["Lower your heels slowly as far as they can go for a full stretch.", "Pause for a second at the bottom.", "Rise as high as you can onto your toes and squeeze at the top."],
+      "breathing": "Breathe out as you rise, breathe in as you lower.",
+      "mistakes": ["Short, bouncy reps.", "Bending the knees to push the weight up.", "Rolling onto the outside of the feet."],
+      "tip": "Calves respond well to slow reps and a full stretch at the bottom."
+    },
+    "core": {
+      "setup": ["Start in a stable position: flat back, ribs pulled down, neck neutral.", "Tighten your core before the first rep."],
+      "cues": ["Move slowly and keep the tension in your abs, not your hip flexors or neck.", "Keep your lower back from arching off the floor or sagging in planks.", "Stop the set when you can no longer keep your back in position."],
+      "breathing": "Breathe out as you crunch, raise or roll out; keep breathing steadily during planks.",
+      "mistakes": ["Pulling on your neck in crunches.", "Swinging the legs on hanging raises.", "Hips sagging or piking in planks and roll-outs."],
+      "tip": "Quality beats quantity: 10 slow, controlled reps beat 30 fast ones."
+    },
+    "shrug": {
+      "setup": ["Stand tall holding the weights at your sides or in front of your thighs.", "Keep your arms straight and relaxed; they only hold the weight."],
+      "cues": ["Lift your shoulders straight up towards your ears.", "Hold the top for a second.", "Lower slowly to a full stretch."],
+      "breathing": "Breathe out as you lift, breathe in as you lower.",
+      "mistakes": ["Rolling the shoulders in circles.", "Bending the elbows to help.", "Pushing your head forward."],
+      "tip": "Use straps if your grip gives out before your traps do."
+    }
+  },
+  "categories": {
+    "Chest": {
+      "setup": ["Keep your shoulder blades squeezed back and down against the bench or pad."],
+      "cues": ["Lower the weight under control and feel a stretch across your chest.", "Keep your wrists straight and your elbows tucked at about 45 degrees on presses."],
+      "breathing": "Breathe in as you lower, breathe out as you push.",
+      "mistakes": ["Bouncing the weight.", "Shoulders rolling forward at the top."],
+      "tip": "Keep your shoulder blades squeezed together and your core engaged for maximum stability."
+    },
+    "Back": {
+      "setup": ["Set a flat back and pull your shoulders down away from your ears."],
+      "cues": ["Lead every pull with your elbows, not your hands.", "Squeeze your shoulder blades at the end of each rep, then lower slowly."],
+      "breathing": "Breathe out as you pull, breathe in as you return.",
+      "mistakes": ["Swinging with momentum.", "Shrugging as you pull."],
+      "tip": "Lead with your elbows and squeeze your shoulder blades at the end of each rep."
+    },
+    "Legs": {
+      "setup": ["Keep your whole foot planted and your core braced before each rep."],
+      "cues": ["Keep your knees in line with your toes.", "Use the full range you can control without your lower back rounding."],
+      "breathing": "Breathe in on the way down, breathe out as you push.",
+      "mistakes": ["Knees caving inwards.", "Heels lifting off the floor."],
+      "tip": "Keep your knees in line with your toes and push through your whole foot."
+    },
+    "Shoulders": {
+      "setup": ["Sit or stand tall, ribs down and core braced."],
+      "cues": ["Keep your shoulders down away from your ears.", "Raise and lower under control; no swinging."],
+      "breathing": "Breathe out as you lift or press, breathe in as you lower.",
+      "mistakes": ["Arching the lower back.", "Using weight too heavy for a strict rep."],
+      "tip": "Brace your core and avoid arching your lower back as you press."
+    },
+    "Arms": {
+      "setup": ["Fix your upper arms in place before the first rep."],
+      "cues": ["Move only at the elbow (or wrist for forearm work).", "Use the full range: straight arms to a full squeeze."],
+      "breathing": "Breathe out as you lift, breathe in as you lower.",
+      "mistakes": ["Swinging the body.", "Elbows drifting forward or out."],
+      "tip": "Keep your elbows still; only the joint you are training should move."
+    },
+    "Abs": {
+      "setup": ["Start with your ribs pulled down and your lower back neutral."],
+      "cues": ["Move slowly and keep the tension in your abs.", "Keep your neck relaxed and in line with your spine."],
+      "breathing": "Breathe out as you contract, breathe in as you return.",
+      "mistakes": ["Pulling on the neck.", "Using momentum."],
+      "tip": "Breathe out as you contract and move slowly; speed takes the work off your abs."
+    },
+    "Calves": {
+      "setup": ["Place the balls of your feet on a stable edge with your heels free if possible."],
+      "cues": ["Lower to a full stretch, pause, then rise as high as you can."],
+      "breathing": "Breathe out as you rise, breathe in as you lower.",
+      "mistakes": ["Bouncing.", "Partial reps."],
+      "tip": "Pause for a second at the top and lower all the way for a full stretch."
+    },
+    "Cardio": {
+      "setup": ["Spend the first 3 to 5 minutes at an easy pace to warm up."],
+      "cues": ["Keep a pace you could hold a short conversation at, unless you are doing intervals.", "Stay tall and relaxed through your shoulders."],
+      "breathing": "Breathe steadily and rhythmically; slow down if you can't catch your breath.",
+      "mistakes": ["Starting too fast.", "Skipping the cool-down."],
+      "tip": "Start easy for the first minutes and build up your pace gradually."
+    }
+  },
+  "safety": "Stop if you feel sharp or joint pain, and check with a professional before training through an injury."
+}

@@ -1,6 +1,15 @@
 from pydantic import BaseModel, Field
 
 
+class ExerciseGuide(BaseModel):
+    setup: list[str] = Field(default_factory=list)
+    cues: list[str] = Field(default_factory=list)
+    breathing: str = ""
+    mistakes: list[str] = Field(default_factory=list)
+    tip: str = ""
+    safety: str = ""
+
+
 class Exercise(BaseModel):
     id: str
     name: str
@@ -14,6 +23,7 @@ class Exercise(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     images: list[str] = Field(default_factory=list)
     is_custom: bool = False
+    guide: ExerciseGuide | None = None  # only filled on the single-exercise endpoint
 
 
 class ExerciseListResponse(BaseModel):
