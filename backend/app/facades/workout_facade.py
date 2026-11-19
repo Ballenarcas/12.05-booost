@@ -24,6 +24,7 @@ from app.schemas.workout import (
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
 from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
 from app.services import overtraining_service, workout_service, workout_statistics_service
+from app.services.exercise_guide_service import guide_for
 from app.services.premium_service import has_premium_flag
 from app.services.warmup_service import build_warmup_recommendation
 from app.services.workout_adjustment_service import plan_daily_workout, suggest_live_adjustment
@@ -108,7 +109,8 @@ class WorkoutFacade:
         return workout_service.get_exercise_muscle_groups()
 
     def get_exercise_by_id(self, exercise_id: str, user_id: UUID | None = None):
-        return workout_service.get_exercise_by_id(exercise_id, user_id=user_id)
+        exercise = workout_service.get_exercise_by_id(exercise_id, user_id=user_id)
+        return exercise.model_copy(update={"guide": guide_for(exercise)}) if exercise else None
 
     def create_custom_exercise(self, user_id: UUID, payload: CustomExerciseCreate) -> Exercise:
         return workout_service.create_custom_exercise(user_id, payload)
