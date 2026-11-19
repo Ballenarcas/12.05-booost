@@ -1,10 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, ArrowLeft, Calendar, Camera, GlassWater, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Calendar, Camera, ChefHat, GlassWater, Heart, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { deleteMealLog, fetchTodayNutrition, getCurrentUser, isPremiumActive, searchFoodItems, updateMealLog } from '../services/api';
-import type { FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
+import {
+  addFavoriteMeal,
+  addMealLog,
+  deleteFavoriteMeal,
+  deleteMealLog,
+  fetchFavoriteMeals,
+  fetchTodayNutrition,
+  getCurrentUser,
+  isPremiumActive,
+  searchFoodItems,
+  updateFavoriteMeal,
+  updateMealLog,
+} from '../services/api';
+import type { FavoriteMeal, FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
+import FavoriteMealsModal from '../components/nutrition/FavoriteMealsModal';
+import MealRecommendationsModal from '../components/nutrition/MealRecommendationsModal';
 import HydrationCard from '../components/home/HydrationCard';
 import '../styles/log-meals.css';
+
+// Names match ignoring case, like the server's unique rule.
+const favoriteKey = (mealType: string, name: string) => `${mealType}|${name.trim().toLowerCase()}`;
 
 const DEFAULT_FOOD_DENSITY = {
   calories_per_100g: 130,
@@ -57,6 +74,93 @@ export default function Nutrition() {
   const [highQuantityWarning, setHighQuantityWarning] = useState<HighQuantityWarning | null>(null);
   const ingredientQuantityStartRef = useRef<Record<number, number>>({});
   const newQuantityStartRef = useRef<number>(FALLBACK_QUANTITY_G);
+
+  const [favorites, setFavorites] = useState<FavoriteMeal[]>([]);
+  const [isLoadingFavorites, setIsLoadingFavorites] = useState(true);
+  const [favoritesError, setFavoritesError] = useState<string | null>(null);
+  const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
+  // Set while the edit dialog is editing a favorite instead of a logged meal.
+  const [editingFavoriteId, setEditingFavoriteId] = useState<string | null>(null);
+  const [heartBusyId, setHeartBusyId] = useState<string | null>(null);
+  const [favoriteNotice, setFavoriteNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchFavoriteMeals()
+      .then(setFavorites)
+      .catch((error: unknown) => setFavoritesError(error instanceof Error ? error.message : "We couldn't load your favorite meals."))
+      .finally(() => setIsLoadingFavorites(false));
+  }, []);
+
+  const favoritesByKey = new Map(favorites.map((favorite) => [favoriteKey(favorite.meal_type, favorite.name), favorite]));
+
+  const toggleFavorite = async (meal: MealLogItem) => {
+    const existing = favoritesByKey.get(favoriteKey(meal.meal_type, meal.meal_name));
+    setHeartBusyId(meal.id);
+    setFavoriteNotice(null);
+    try {
+      if (existing) {
+        await deleteFavoriteMeal(existing.id);
+        setFavorites((current) => current.filter((favorite) => favorite.id !== existing.id));
+      } else {
+        const saved = await addFavoriteMeal(meal.id);
+        setFavorites((current) => [saved, ...current.filter((favorite) => favorite.id !== saved.id)]);
+      }
+    } catch (error) {
+      setFavoriteNotice(error instanceof Error ? error.message : "We couldn't update your favorites.");
+    } finally {
+      setHeartBusyId(null);
+    }
+  };
+
+  const logFavorite = async (favorite: FavoriteMeal, consumedAt: Date | null) => {
+    const user = getCurrentUser();
+    if (!user?.id) throw new Error('Sign in again to log this meal.');
+    await addMealLog({
+      user_id: user.id,
+      name: favorite.name,
+      meal_type: favorite.meal_type,
+      ...(favorite.ingredients.length
+        ? { ingredients: favorite.ingredients }
+        : { calories: favorite.calories, quantity_g: favorite.quantity_g, proteins: favorite.proteins_g, carbs: favorite.carbs_g, fats: favorite.fats_g }),
+      ...(consumedAt ? { consumed_at: consumedAt.toISOString() } : {}),
+    });
+    setIsFavoritesOpen(false);
+    setDateError(null);
+    // Show the day it was logged to; a new Date also reloads the list when it's the same day.
+    setSelectedDate(consumedAt ?? new Date());
+  };
+
+  const removeFavorite = async (favorite: FavoriteMeal) => {
+    await deleteFavoriteMeal(favorite.id);
+    setFavorites((current) => current.filter((item) => item.id !== favorite.id));
+  };
+
+  const editFavorite = (favorite: FavoriteMeal) => {
+    setIsFavoritesOpen(false);
+    setEditingFavoriteId(favorite.id);
+    openEditModal({
+      id: favorite.id,
+      user_id: '',
+      meal_name: favorite.name,
+      meal_type: favorite.meal_type,
+      portion_amount: '1',
+      weight_g: String(favorite.quantity_g),
+      item_calories: favorite.calories,
+      proteins_g: favorite.proteins_g,
+      carbs_g: favorite.carbs_g,
+      fats_g: favorite.fats_g,
+      ingredients: favorite.ingredients,
+    });
+  };
+
+  const closeEditor = () => {
+    setEditingMeal(null);
+    if (editingFavoriteId) {
+      setEditingFavoriteId(null);
+      setIsFavoritesOpen(true);
+    }
+  };
 
   // SE DÉCLENCHE À CHAQUE CHANGEMENT DE DATE DANS LE CALENDRIER
   useEffect(() => {
@@ -281,12 +385,19 @@ export default function Nutrition() {
     }
     setIsSavingEdit(true);
     setEditError(null);
+    const changes = {
+      name: editIngredients.map((ingredient) => ingredient.name).join(' + '),
+      meal_type: editMealType,
+      ingredients: editIngredients,
+    };
     try {
-      const updatedMeal = await updateMealLog(user.id, editingMeal.id, {
-        name: editIngredients.map((ingredient) => ingredient.name).join(' + '),
-        meal_type: editMealType,
-        ingredients: editIngredients,
-      });
+      if (editingFavoriteId) {
+        const updated = await updateFavoriteMeal(editingFavoriteId, changes);
+        setFavorites((current) => current.map((favorite) => favorite.id === updated.id ? updated : favorite));
+        closeEditor();
+        return;
+      }
+      const updatedMeal = await updateMealLog(user.id, editingMeal.id, changes);
       setMeals((current) => current.map((meal) => meal.id === updatedMeal.id ? updatedMeal : meal));
       setEditingMeal(null);
     } catch (error) {
@@ -368,6 +479,34 @@ export default function Nutrition() {
         </button>
       </div>
 
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+        <button
+          type="button"
+          onClick={() => { setFavoriteNotice(null); setIsFavoritesOpen(true); }}
+          style={{ flex: 1, minWidth: 0, minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: '1px solid #333', borderRadius: '14px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
+        >
+          <Heart size={18} aria-hidden="true" />
+          Favorites{favorites.length > 0 && <span style={{ color: '#8e8e93', fontWeight: 600 }}>· {favorites.length}</span>}
+        </button>
+        <button
+          type="button"
+          // Non-Premium users see the paywall; the server checks Premium again on every request.
+          onClick={() => (isPremiumActive() ? setIsSuggestionsOpen(true) : navigate('/premium'))}
+          aria-label={isPremiumActive() ? 'Suggested meals' : 'Suggested meals, available with Pro'}
+          style={{ flex: 1, minWidth: 0, minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', border: '1px solid #333', borderRadius: '14px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
+        >
+          <ChefHat size={18} aria-hidden="true" style={{ flexShrink: 0 }} />
+          <span>Suggestions</span>
+          {!isPremiumActive() && <span style={{ padding: '3px 7px', borderRadius: '6px', color: '#161616', backgroundColor: '#b99a45', fontSize: '10px', fontWeight: 800 }}>PRO</span>}
+        </button>
+      </div>
+
+      {favoriteNotice && (
+        <div role="alert" style={{ backgroundColor: 'rgba(255, 77, 77, 0.1)', border: '1px solid rgba(255, 77, 77, 0.2)', color: '#ff4d4d', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center', fontSize: '13.5px', fontWeight: 500 }}>
+          {favoriteNotice}
+        </div>
+      )}
+
       <section style={{ marginBottom: '20px' }} aria-labelledby="nutrition-hydration">
         <h2
           id="nutrition-hydration"
@@ -398,6 +537,21 @@ export default function Nutrition() {
                   <span style={{ color: '#8e8e93', fontSize: '13.5px', fontWeight: 500 }}>
                     {formatTime(meal.consumed_at)}
                   </span>
+                  {(() => {
+                    const isFavorite = favoritesByKey.has(favoriteKey(meal.meal_type, meal.meal_name));
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => toggleFavorite(meal)}
+                        disabled={heartBusyId === meal.id}
+                        aria-pressed={isFavorite}
+                        aria-label={isFavorite ? `Remove ${meal.meal_name} from favorites` : `Save ${meal.meal_name} as a favorite`}
+                        style={{ background: 'none', border: 'none', color: isFavorite ? '#ff6b81' : '#8e8e93', cursor: 'pointer', padding: 0, display: 'flex', opacity: heartBusyId === meal.id ? 0.5 : 1 }}
+                      >
+                        <Heart size={18} strokeWidth={2} fill={isFavorite ? 'currentColor' : 'none'} />
+                      </button>
+                    );
+                  })()}
                   <button onClick={() => openEditModal(meal)} aria-label={`Edit ${meal.meal_name}`} style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: 0, display: 'flex' }}>
                     <Pencil size={18} strokeWidth={2} />
                   </button>
@@ -424,14 +578,16 @@ export default function Nutrition() {
       </div>
 
       {editingMeal && (
-        <div className="modal-backdrop" onClick={() => !isSavingEdit && setEditingMeal(null)}>
+        <div className="modal-backdrop" onClick={() => !isSavingEdit && closeEditor()}>
           <div className="modal-dialog" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="edit-meal-title">
             <div className="modal-header">
               <div>
-                <h2 id="edit-meal-title" className="modal-title">Edit meal</h2>
-                <p className="card-subtitle">Update ingredients and portion sizes.</p>
+                <h2 id="edit-meal-title" className="modal-title">{editingFavoriteId ? 'Edit favorite' : 'Edit meal'}</h2>
+                <p className="card-subtitle">
+                  {editingFavoriteId ? 'Changes apply next time you add it. Meals already logged stay the same.' : 'Update ingredients and portion sizes.'}
+                </p>
               </div>
-              <button type="button" className="btn-modal-close" onClick={() => setEditingMeal(null)} aria-label="Close editor" disabled={isSavingEdit}>
+              <button type="button" className="btn-modal-close" onClick={closeEditor} aria-label="Close editor" disabled={isSavingEdit}>
                 <X size={20} />
               </button>
             </div>
@@ -552,6 +708,27 @@ export default function Nutrition() {
             </form>
           </div>
         </div>
+      )}
+
+      {isFavoritesOpen && (
+        <FavoriteMealsModal
+          favorites={favorites}
+          isLoading={isLoadingFavorites}
+          loadError={favoritesError}
+          onClose={() => setIsFavoritesOpen(false)}
+          onLog={logFavorite}
+          onEdit={editFavorite}
+          onDelete={removeFavorite}
+        />
+      )}
+
+      {isSuggestionsOpen && (
+        <MealRecommendationsModal
+          onClose={() => setIsSuggestionsOpen(false)}
+          // Suggestions are logged to today, so show today with the new meal.
+          onAdded={() => { setDateError(null); setSelectedDate(new Date()); }}
+          onPremiumRequired={() => navigate('/premium')}
+        />
       )}
 
       {highQuantityWarning && (

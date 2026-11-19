@@ -5,10 +5,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 class CustomExerciseCreate(BaseModel):
     name: str = Field(min_length=2, max_length=50)
-    muscle_group: str = Field(min_length=1)
-    muscles: list[str] = Field(default_factory=list)
-    muscles_secondary: list[str] = Field(default_factory=list)
-    equipment: list[str] = Field(default_factory=list)
+    muscle_group: str = Field(min_length=1, max_length=40)
+    muscles: list[str] = Field(default_factory=list, max_length=20)
+    muscles_secondary: list[str] = Field(default_factory=list, max_length=20)
+    equipment: list[str] = Field(default_factory=list, max_length=10)
     description: str | None = Field(default=None, max_length=500)
 
     @field_validator("name", mode="before")

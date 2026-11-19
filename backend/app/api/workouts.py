@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from app.core.ai_quota import use_ai_call
-from app.core.auth import current_user
+from app.core.auth import current_user, optional_user
 from app.core.local_day import LocalDay, local_day
 from app.facades.workout_facade import workout_facade
 from app.schemas.exercise import Exercise, ExerciseListResponse
@@ -118,7 +118,8 @@ def delete_workout_history(
 @router.get("/exercises", response_model=ExerciseListResponse)
 def get_exercises(
     response: Response,
-    user_id: UUID | None = Query(None, description="Optional user ID to include custom exercises"),
+    # Custom exercises come from the signed-in user only, never from a query parameter.
+    user_id: UUID | None = Depends(optional_user),
     q: str | None = Query(None, description="Search term for exercise name or aliases"),
     category: str | None = Query(None, description="Filter by body part category"),
     muscle_group: str | None = Query(None, description="Filter by database muscle group"),
@@ -198,7 +199,7 @@ def delete_custom_exercise(
 @router.get("/exercises/{exercise_id}", response_model=Exercise)
 def get_exercise(
     exercise_id: str,
-    user_id: UUID | None = Query(None, description="Optional user ID to resolve custom exercises"),
+    user_id: UUID | None = Depends(optional_user),
 ) -> Exercise:
     """Retrieve a single exercise by ID."""
     exercise = workout_facade.get_exercise_by_id(exercise_id, user_id=user_id)
