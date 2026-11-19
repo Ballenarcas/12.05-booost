@@ -4,6 +4,7 @@ const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL ?? '')
 const REQUEST_TIMEOUT_MS = 5000
 const PURCHASE_TIMEOUT_MS = 10_000
 const WRITE_TIMEOUT_MS = 15000
+const SCAN_TIMEOUT_MS = 70000
 const LOGIN_TIMEOUT_MS = 15000
 const DASHBOARD_TIMEOUT_MS = 15000
 const LLM_TIMEOUT_MS = 20000
@@ -22,6 +23,8 @@ import type {
   LiveWorkoutAdjustmentResponse,
   Routine,
   RoutineCreatePayload,
+  WarmupRecommendation,
+  WarmupRecommendationRequest,
   WorkoutHistoryEntry,
   WorkoutStatistics,
   WorkoutStatisticsRange,
@@ -358,6 +361,39 @@ export async function requestWorkoutAdjustment(
   return response.json() as Promise<LiveWorkoutAdjustmentResponse>
 }
 
+export class PremiumRequiredError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PremiumRequiredError'
+  }
+}
+
+export async function requestWarmupRecommendation(
+  userId: string,
+  payload: WarmupRecommendationRequest,
+): Promise<WarmupRecommendation> {
+  const query = new URLSearchParams({ user_id: userId })
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/warmup?${query}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    const detail = body && typeof body === 'object' && 'detail' in body && typeof body.detail === 'string'
+      ? body.detail
+      : null
+    if (response.status === 403) {
+      throw new PremiumRequiredError(detail ?? 'Warm-up recommendations are a Premium feature.')
+    }
+    throw new Error(detail ?? 'Unable to build your warm-up. Please try again.')
+  }
+  return response.json() as Promise<WarmupRecommendation>
+}
+
+
 export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]> {
   const query = new URLSearchParams({ user_id: userId, limit: '30' })
   const response = await apiFetch(`${API_URL}/api/v1/workouts/history?${query}`, {
@@ -373,7 +409,7 @@ export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistor
 export async function updateWorkoutHistoryEntry(
   userId: string,
   workoutId: string,
-  payload: Pick<WorkoutLogCreate, 'name' | 'exercises'>,
+  payload: Pick<WorkoutLogCreate, 'name' | 'exercises' | 'fatigue_level'>,
 ): Promise<{ id: string; status: string }> {
   const query = new URLSearchParams({ user_id: userId })
   const response = await apiFetch(`${API_URL}/api/v1/workouts/history/${encodeURIComponent(workoutId)}?${query}`, {
@@ -1062,6 +1098,9 @@ export interface CalorieAdjustmentData {
   avg_daily_intake: number
   compliance_rate: number
   weekly_volume: number
+  fatigue_avg: number
+  fatigue_latest: number
+  fatigue_workouts: number
   activity: HealthActivitySummary
 }
 
@@ -1238,6 +1277,43 @@ export function updateFavoriteMeal(
 
 export async function deleteFavoriteMeal(favoriteId: string): Promise<void> {
   await favoriteRequest(`/${encodeURIComponent(favoriteId)}`, { method: 'DELETE' }, "We couldn't remove this favorite. Please try again.")
+}
+
+export interface MealScanItem {
+  name: string
+  grams: number
+  calories: number
+  protein_g: number
+  carbs_g: number
+  fat_g: number
+}
+
+export interface MealScanResult {
+  items: MealScanItem[]
+  total_calories: number
+  notes: string | null
+}
+
+export async function scanMealPhoto(image: Blob): Promise<MealScanResult> {
+  const file = image instanceof File
+    ? image
+    : new File([image], 'meal.jpg', { type: 'image/jpeg' })
+  const form = new FormData()
+  form.append('file', file)
+  const response = await apiFetch(`${API_URL}/api/v1/nutrition/scan`, {
+    method: 'POST',
+    body: form,
+    signal: AbortSignal.timeout(SCAN_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(
+      typeof body?.detail === 'string'
+        ? body.detail
+        : "We couldn't analyze that photo. Please try again.",
+    )
+  }
+  return response.json() as Promise<MealScanResult>
 }
 
 export async function addMealLog(payload: MealCreateRequest): Promise<MealLogItem> {
@@ -1463,9 +1539,6 @@ export interface MealRecommendations {
   items: MealRecommendation[]
 }
 
-/** Thrown when the server says the feature needs Premium, so the page can show the paywall. */
-export class PremiumRequiredError extends Error {}
-
 async function recommendationRequest<T>(path: string, method: 'GET' | 'POST', fallback: string): Promise<T> {
   // The local day lets the server keep suggestions to today only.
   const response = await apiFetch(`${API_URL}/api/v1/nutrition/recommendations${path}?${localDayQuery()}`, {
@@ -1498,4 +1571,86 @@ export async function addMealRecommendation(id: string): Promise<MealLogItem> {
 
 export async function dismissMealRecommendation(id: string): Promise<void> {
   await recommendationRequest(`/${encodeURIComponent(id)}/dismiss`, 'POST', "We couldn't hide this suggestion. Please try again.")
+}
+
+export interface FatigueFeedbackPayload {
+  fatigue_level: number
+  soreness_level: number
+  sore_muscles: string[]
+  notes?: string
+}
+
+export interface OvertrainingAlertStatus {
+  has_alert: boolean
+  risk_level: 'none' | 'moderate' | 'high'
+  load_increase_pct: number
+  sessions_last_7_days: number
+  high_rpe_sets_count: number
+  repeated_fatigue_reports: number
+  strained_muscles: string[]
+  headline: string
+  critical_alert_title: string | null
+  critical_alert_body: string | null
+  critical_recommendation: string | null
+  fatigue_feedback_title: string | null
+  fatigue_feedback_body: string | null
+  fatigue_action: string | null
+  ai_modification_title: string | null
+  ai_modification_body: string | null
+  volume_reduction_pct: number
+  mods_applied: boolean
+  dismissed: boolean
+}
+
+export async function fetchOvertrainingAlerts(userId: string): Promise<OvertrainingAlertStatus> {
+  const response = await apiFetch(
+    `${API_URL}/api/v1/workouts/overtraining-alerts?user_id=${encodeURIComponent(userId)}`,
+    { cache: 'no-store', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
+  )
+  if (!response.ok) {
+    throw new Error("We couldn't check your recovery status right now.")
+  }
+  return response.json() as Promise<OvertrainingAlertStatus>
+}
+
+export async function submitFatigueFeedback(
+  userId: string,
+  payload: FatigueFeedbackPayload,
+): Promise<void> {
+  const response = await apiFetch(
+    `${API_URL}/api/v1/workouts/fatigue-feedback?user_id=${encodeURIComponent(userId)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+    },
+  )
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail || "We couldn't save your fatigue feedback.")
+  }
+}
+
+export async function applyOvertrainingMods(userId: string): Promise<OvertrainingAlertStatus> {
+  const response = await apiFetch(
+    `${API_URL}/api/v1/workouts/overtraining-alerts/apply?user_id=${encodeURIComponent(userId)}`,
+    { method: 'POST', signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) },
+  )
+  if (!response.ok) {
+    throw new Error("We couldn't apply the recovery modifications.")
+  }
+  clearDashboardCache()
+  return response.json() as Promise<OvertrainingAlertStatus>
+}
+
+export async function dismissOvertrainingAlert(userId: string): Promise<OvertrainingAlertStatus> {
+  const response = await apiFetch(
+    `${API_URL}/api/v1/workouts/overtraining-alerts/dismiss?user_id=${encodeURIComponent(userId)}`,
+    { method: 'POST', signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) },
+  )
+  if (!response.ok) {
+    throw new Error("We couldn't dismiss the alert.")
+  }
+  return response.json() as Promise<OvertrainingAlertStatus>
 }

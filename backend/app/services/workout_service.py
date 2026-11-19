@@ -623,6 +623,7 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
             "name": payload.name.strip(),
             "start_time": payload.started_at.isoformat(),
             "end_time": payload.completed_at.isoformat(),
+            "fatigue_level": payload.fatigue_level,
         }
         if plan is not None:
             record["ai_adjusted"] = bool(plan.get("ai_adjusted"))
@@ -670,7 +671,7 @@ def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryRespon
     rows = (
         supabase.table("workouts")
         .select(
-            "id,routine_id,name,start_time,end_time,routines(name),"
+            "id,routine_id,name,start_time,end_time,fatigue_level,routines(name),"
             "workout_sets(exercise_id,exercise_order,set_number,reps,weight,rpe,is_done,exercises(name))"
         )
         .eq("user_id", str(user_id))
@@ -715,6 +716,7 @@ def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryRespon
             started_at=started_at,
             completed_at=completed_at,
             duration_seconds=max(0, int((completed_at - started_at).total_seconds())) if completed_at else 0,
+            fatigue_level=row.get("fatigue_level"),
             exercises=[WorkoutHistoryExercise(**exercise) for exercise in exercises.values()],
         ))
     return WorkoutHistoryResponse(items=history)
@@ -774,9 +776,12 @@ def update_workout_history_entry(
         updated_sets = True
         if set_records:
             supabase.table("workout_sets").insert(set_records).execute()
+        workout_update = {"name": payload.name.strip()}
+        if payload.fatigue_level is not None:
+            workout_update["fatigue_level"] = payload.fatigue_level
         response = (
             supabase.table("workouts")
-            .update({"name": payload.name.strip()})
+            .update(workout_update)
             .eq("id", str(workout_id))
             .eq("user_id", str(user_id))
             .select("id")

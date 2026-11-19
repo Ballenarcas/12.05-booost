@@ -147,6 +147,21 @@ def has_active_premium(user_id: str, client=None) -> bool:
     return period_end is not None and period_end > datetime.now(timezone.utc)
 
 
+def has_premium_flag(user_id: str, client=None) -> bool:
+    """True when the users table marks the account as premium."""
+    client = client or get_supabase(admin=True)
+    if client is None:
+        raise RuntimeError("Database connection unavailable")
+    rows = (
+        client.table(USERS_TABLE_NAME)
+        .select("is_premium")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    ).data or []
+    return bool(rows and rows[0].get("is_premium") is True)
+
+
 def cancel_premium_db(user_id: str) -> PremiumCancelResponse:
     """Stop the subscription at period end. Access stays until then; repeating changes nothing."""
     client = get_supabase(admin=True)

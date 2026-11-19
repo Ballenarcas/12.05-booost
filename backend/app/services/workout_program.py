@@ -109,6 +109,9 @@ def choose_template(recent_muscle_groups: set[str]) -> str:
     return "full_body"
 
 
+FATIGUE_HIGH = 6.0  # the fatigue scale question: above 5 means the user is carrying strain
+
+
 def objective_guidance(objective: str | None) -> dict[str, Any]:
     """Translate the stored free-text goal into concrete set and rep ranges."""
     text = (objective or "").lower()
@@ -135,6 +138,26 @@ def objective_guidance(objective: str | None) -> dict[str, Any]:
         "min_reps": 6, "max_reps": 12, "rest_seconds": 120,
         "summary": "progressive overload, moderate reps, controlled tempo",
     }
+
+
+def fatigue_adjusted_guidance(
+    guidance: dict[str, Any], fatigue_level: float,
+) -> dict[str, Any]:
+    """High self-reported fatigue trims one set and keeps the goal's rep scheme.
+
+    The goal still decides the rep range: strength stays heavy, hypertrophy and
+    fat loss keep their reps, and only the volume comes down. Strength sessions
+    also get a little more rest so the remaining sets stay productive.
+    """
+    adjusted = dict(guidance)
+    if fatigue_level < FATIGUE_HIGH:
+        return adjusted
+    adjusted["max_sets"] = max(2, guidance["max_sets"] - 1)
+    adjusted["min_sets"] = min(guidance["min_sets"], adjusted["max_sets"])
+    if guidance["branch"] == "strength":
+        adjusted["rest_seconds"] = guidance["rest_seconds"] + 30
+    adjusted["summary"] = f"{guidance['summary']}; high fatigue: one set fewer, quality first"
+    return adjusted
 
 
 def build_session(

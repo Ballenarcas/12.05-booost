@@ -50,6 +50,7 @@ type HighQuantityWarning =
 
 export default function Nutrition() {
   const navigate = useNavigate();
+  const scanTarget = isPremiumActive(getCurrentUser()) ? '/scan-meal' : '/premium';
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [meals, setMeals] = useState<MealLogItem[]>([]);
   const [dateError, setDateError] = useState<string | null>(null);
@@ -468,9 +469,9 @@ export default function Nutrition() {
         </button>
         <button
           type="button"
-          disabled
-          aria-label="Scan plate, available with Pro"
-          style={{ flex: 1, minWidth: 0, minHeight: '58px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', border: '1px solid #292929', borderRadius: '14px', color: '#969696', backgroundColor: '#191919', cursor: 'not-allowed', fontSize: '14px', fontWeight: 700, opacity: 0.8 }}
+          onClick={() => navigate(scanTarget)}
+          aria-label="Scan plate with AI"
+          style={{ flex: 1, minWidth: 0, minHeight: '58px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', border: '1px solid rgba(40, 205, 98, 0.35)', borderRadius: '14px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
         >
           <Camera size={18} aria-hidden="true" />
           <span>Scan plate</span>
