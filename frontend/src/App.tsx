@@ -18,6 +18,7 @@ const Nutrition = lazy(() => import('./pages/Nutrition'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
 const OvertrainingAlerts = lazy(() => import('./pages/OvertrainingAlerts'))
 const Premium = lazy(() => import('./pages/Premium'))
+const ScanMeal = lazy(() => import('./pages/ScanMeal'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Faq = lazy(() => import('./pages/Faq'))
 const Welcome = lazy(() => import('./pages/Welcome'))
@@ -51,6 +52,7 @@ function App() {
             <Route path="/exercises/custom/:id" element={<CustomExercise />} />
             <Route path="/overtraining-alerts" element={<OvertrainingAlerts />} />
             <Route path="/nutrition" element={<Nutrition />} />
+            <Route path="/scan-meal" element={<ScanMeal />} />
             <Route path="/hydration/history" element={<HydrationHistory />} />
             <Route path="/premium" element={<Premium />} />
             <Route path="/settings" element={<Settings />} />
