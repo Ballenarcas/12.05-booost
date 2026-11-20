@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from app.db.supabase_client import get_supabase
+from app.services.exercise_catalog import get_cached_exercise
 from app.schemas.workout_statistics import (
     FatigueHistoryPoint,
     MuscleGroupVolume,
@@ -282,6 +283,14 @@ def aggregate_workout_statistics(
                 continue
             seen_sets.add(dedupe_key)
 
+            muscle = _primary_muscle(set_row.get("exercises"))
+            cached = get_cached_exercise(exercise_id) if exercise_id else None
+            if (
+                (muscle and "cardio" in muscle.casefold())
+                or (cached and ("cardio" in (cached.category or "").casefold() or any("cardio" in m.casefold() for m in (cached.muscles or []))))
+            ):
+                continue
+
             reps = _to_number(set_row.get("reps"))
             weight = _to_number(set_row.get("weight", set_row.get("weight_kg")))
             if reps is None or weight is None or reps <= 0 or weight <= 0:
@@ -295,7 +304,6 @@ def aggregate_workout_statistics(
             eligible_set_count += 1
             progression[bucket] += volume
 
-            muscle = _primary_muscle(set_row.get("exercises"))
             if muscle is not None:
                 muscle_key = muscle.casefold()
                 muscle_labels.setdefault(muscle_key, muscle)

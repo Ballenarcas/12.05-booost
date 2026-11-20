@@ -13,14 +13,17 @@ def _as_utc(value: datetime) -> datetime:
 
 class SetLogItem(BaseModel):
     set_number: int = Field(ge=1, le=100)
-    weight_kg: float = Field(ge=0, le=1000)
-    reps: int = Field(ge=0, le=1000)
+    weight_kg: float = Field(default=0, ge=0, le=1000)
+    reps: int = Field(default=0, ge=0, le=1000)
     rpe: float | None = Field(default=None, ge=1, le=10)
+    duration_seconds: int | None = Field(default=None, ge=0, le=86400)
+    distance_km: float | None = Field(default=None, ge=0, le=1000)
     is_completed: bool = False
 
 
 class ExerciseLogItem(BaseModel):
     exercise_id: str = Field(min_length=1, max_length=64)
+    is_cardio: bool = False
     sets: list[SetLogItem] = Field(default_factory=list, max_length=50)
 
 
@@ -61,12 +64,15 @@ class WorkoutHistorySet(BaseModel):
     reps: int
     weight_kg: float
     rpe: float | None = None
+    duration_seconds: int | None = None
+    distance_km: float | None = None
     is_completed: bool
 
 
 class WorkoutHistoryExercise(BaseModel):
     exercise_id: UUID
     name: str
+    is_cardio: bool = False
     sets: list[WorkoutHistorySet]
 
 

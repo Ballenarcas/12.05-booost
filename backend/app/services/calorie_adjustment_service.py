@@ -15,6 +15,7 @@ from uuid import UUID
 
 from app.db.supabase_client import get_supabase
 from app.schemas.health import HealthActivitySummary
+from app.services.exercise_catalog import get_cached_exercise
 from app.services.health_service import get_activity_summary
 from app.services.user_profile_service import calculate_calorie_goal
 
@@ -388,7 +389,7 @@ def collect_metrics(session: Any, user_id: UUID, today: str | None = None) -> di
 
     workouts = _rows(
         session.table("workouts")
-        .select("id,start_time,fatigue_level,workout_sets(weight,reps,is_done)")
+        .select("id,start_time,fatigue_level,workout_sets(exercise_id,weight,reps,is_done)")
         .eq("user_id", str(user_id))
         .gte("start_time", volume_start.isoformat()).execute()
     )
@@ -408,6 +409,9 @@ def collect_metrics(session: Any, user_id: UUID, today: str | None = None) -> di
         volume = 0.0
         for set_row in workout.get("workout_sets") or []:
             if set_row.get("is_done") is False:
+                continue
+            cached = get_cached_exercise(str(set_row.get("exercise_id") or ""))
+            if cached and "cardio" in (cached.category or "").lower():
                 continue
             volume += float(set_row.get("weight") or 0) * float(set_row.get("reps") or 0)
         if started_at >= window_start:

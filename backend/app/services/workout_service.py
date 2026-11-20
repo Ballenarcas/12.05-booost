@@ -560,6 +560,89 @@ def _saved_workout_id(supabase, user_id: UUID, payload: WorkoutLogCreate) -> str
     return rows[0]["id"] if rows else None
 
 
+def _is_cardio_exercise(
+    exercise_id: str,
+    exercise_meta: dict[str, Any] | None = None,
+    *,
+    explicit: bool = False,
+) -> bool:
+    if explicit:
+        return True
+    if isinstance(exercise_meta, dict):
+        group = str(exercise_meta.get("muscle_group") or exercise_meta.get("category") or "").lower()
+        if "cardio" in group:
+            return True
+        muscles = exercise_meta.get("muscles")
+        if isinstance(muscles, list) and any("cardio" in str(m).lower() for m in muscles):
+            return True
+    cached = get_cached_exercise(str(exercise_id))
+    if cached is not None:
+        if "cardio" in (cached.category or "").lower() or "cardio" in (cached.muscle_group or "").lower():
+            return True
+        if any("cardio" in m.lower() for m in (cached.muscles or [])):
+            return True
+    return False
+
+
+def _build_workout_set_records(
+    exercises: list[Any],
+    user_id: UUID,
+    *,
+    workout_id: str | None = None,
+) -> list[dict[str, Any]]:
+    set_records: list[dict[str, Any]] = []
+    for position, exercise in enumerate(exercises):
+        try:
+            resolved_id = _resolve_exercise_id_for_user(exercise.exercise_id, user_id, allow_archived=True)
+        except ValueError as err:
+            raise HTTPException(status_code=400, detail=f"Unknown exercise '{exercise.exercise_id}'") from err
+        is_cardio = _is_cardio_exercise(
+            resolved_id,
+            explicit=bool(getattr(exercise, "is_cardio", False)),
+        ) or any(
+            getattr(s, "duration_seconds", None) is not None or getattr(s, "distance_km", None) is not None
+            for s in exercise.sets
+        )
+        for set_item in exercise.sets:
+            if is_cardio:
+                raw_dur = getattr(set_item, "duration_seconds", None)
+                raw_dist = getattr(set_item, "distance_km", None)
+                duration_sec = int(raw_dur) if raw_dur is not None else (int(set_item.reps) if set_item.reps > 0 else 0)
+                dist_km = float(raw_dist) if raw_dist is not None else (float(set_item.weight_kg) if set_item.weight_kg > 0 else None)
+                # Cardio lives in its own columns. weight/reps stay 0 so strength readers
+                # (planner, volume, tips) never read seconds as reps or km as kg.
+                record: dict[str, Any] = {
+                    "exercise_id": resolved_id,
+                    "exercise_order": position,
+                    "set_number": set_item.set_number,
+                    "weight": 0.0,
+                    "reps": 0,
+                    "rpe": None,
+                    "is_done": bool(set_item.is_completed),
+                    "duration_seconds": duration_sec if duration_sec > 0 else None,
+                    "distance_km": dist_km if (dist_km is not None and dist_km > 0) else None,
+                }
+            else:
+                record = {
+                    "exercise_id": resolved_id,
+                    "exercise_order": position,
+                    "set_number": set_item.set_number,
+                    "weight": set_item.weight_kg,
+                    "reps": set_item.reps,
+                    "rpe": set_item.rpe,
+                    "is_done": set_item.is_completed,
+                }
+            if workout_id is not None:
+                record = {"workout_id": workout_id, **record}
+            set_records.append(record)
+    return set_records
+
+
+def _insert_workout_sets(supabase: Any, set_records: list[dict[str, Any]]) -> None:
+    if set_records:
+        supabase.table("workout_sets").insert(set_records).execute()
+
+
 def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResponse:
     supabase = get_supabase(admin=True)
     if supabase is None:
@@ -569,24 +652,7 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
     if saved_id:
         return WorkoutLogResponse(id=saved_id, status="saved")
 
-    set_records = []
-    for position, exercise in enumerate(payload.exercises):
-        try:
-            resolved_id = _resolve_exercise_id_for_user(exercise.exercise_id, user_id, allow_archived=True)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Unknown exercise '{exercise.exercise_id}'")
-        set_records.extend(
-            {
-                "exercise_id": resolved_id,
-                "exercise_order": position,
-                "set_number": set_item.set_number,
-                "weight": set_item.weight_kg,
-                "reps": set_item.reps,
-                "rpe": set_item.rpe,
-                "is_done": set_item.is_completed,
-            }
-            for set_item in exercise.sets
-        )
+    set_records = _build_workout_set_records(payload.exercises, user_id)
 
     plan = None
     if payload.plan_id:
@@ -642,7 +708,7 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
         if set_records:
             for set_item in set_records:
                 set_item["workout_id"] = workout_id
-            supabase.table("workout_sets").insert(set_records).execute()
+            _insert_workout_sets(supabase, set_records)
         if plan is not None:
             supabase.table("workout_plans").delete().eq("id", str(payload.plan_id)).eq("user_id", str(user_id)).execute()
     except HTTPException:
@@ -672,7 +738,7 @@ def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryRespon
         supabase.table("workouts")
         .select(
             "id,routine_id,name,start_time,end_time,fatigue_level,routines(name),"
-            "workout_sets(exercise_id,exercise_order,set_number,reps,weight,rpe,is_done,exercises(name))"
+            "workout_sets(exercise_id,exercise_order,set_number,reps,weight,rpe,is_done,duration_seconds,distance_km,exercises(name,muscle_group))"
         )
         .eq("user_id", str(user_id))
         .not_.is_("end_time", "null")
@@ -693,18 +759,40 @@ def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryRespon
             if isinstance(exercise, list):
                 exercise = exercise[0] if exercise else {}
             ex_name = exercise.get("name") or "Exercise"
+            is_cardio = (
+                _is_cardio_exercise(exercise_id, exercise)
+                or set_row.get("duration_seconds") is not None
+                or set_row.get("distance_km") is not None
+            )
             item = exercises.setdefault(exercise_id, {
                 "exercise_id": exercise_id,
                 "name": ex_name,
+                "is_cardio": is_cardio,
                 "sets": [],
             })
-            item["sets"].append(WorkoutHistorySet(
-                set_number=set_row["set_number"],
-                reps=set_row["reps"],
-                weight_kg=float(set_row.get("weight") or 0),
-                rpe=set_row.get("rpe"),
-                is_completed=bool(set_row.get("is_done")),
-            ))
+            if is_cardio:
+                item["is_cardio"] = True
+                raw_dur = set_row.get("duration_seconds")
+                raw_dist = set_row.get("distance_km")
+                dur_val = int(raw_dur) if raw_dur is not None else int(set_row.get("reps") or 0)
+                dist_val = float(raw_dist) if raw_dist is not None else float(set_row.get("weight") or 0)
+                item["sets"].append(WorkoutHistorySet(
+                    set_number=set_row["set_number"],
+                    reps=0,
+                    weight_kg=0.0,
+                    rpe=set_row.get("rpe"),
+                    duration_seconds=dur_val if dur_val > 0 else None,
+                    distance_km=dist_val if dist_val > 0 else None,
+                    is_completed=bool(set_row.get("is_done")),
+                ))
+            else:
+                item["sets"].append(WorkoutHistorySet(
+                    set_number=set_row["set_number"],
+                    reps=set_row["reps"],
+                    weight_kg=float(set_row.get("weight") or 0),
+                    rpe=set_row.get("rpe"),
+                    is_completed=bool(set_row.get("is_done")),
+                ))
 
         routine = row.get("routines") or {}
         if isinstance(routine, list):
@@ -743,25 +831,7 @@ def update_workout_history_entry(
     if not workout_rows:
         raise HTTPException(status_code=404, detail="Workout history entry not found")
 
-    set_records = []
-    for position, exercise in enumerate(payload.exercises):
-        try:
-            resolved_id = _resolve_exercise_id_for_user(exercise.exercise_id, user_id, allow_archived=True)
-        except ValueError as err:
-            raise HTTPException(status_code=400, detail=f"Unknown exercise '{exercise.exercise_id}'") from err
-        set_records.extend(
-            {
-                "workout_id": str(workout_id),
-                "exercise_id": resolved_id,
-                "exercise_order": position,
-                "set_number": set_item.set_number,
-                "weight": set_item.weight_kg,
-                "reps": set_item.reps,
-                "rpe": set_item.rpe,
-                "is_done": set_item.is_completed,
-            }
-            for set_item in exercise.sets
-        )
+    set_records = _build_workout_set_records(payload.exercises, user_id, workout_id=str(workout_id))
 
     existing_sets = (
         supabase.table("workout_sets")
@@ -775,7 +845,7 @@ def update_workout_history_entry(
         supabase.table("workout_sets").delete().eq("workout_id", str(workout_id)).execute()
         updated_sets = True
         if set_records:
-            supabase.table("workout_sets").insert(set_records).execute()
+            _insert_workout_sets(supabase, set_records)
         workout_update = {"name": payload.name.strip()}
         if payload.fatigue_level is not None:
             workout_update["fatigue_level"] = payload.fatigue_level

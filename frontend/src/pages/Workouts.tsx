@@ -18,6 +18,34 @@ function formatWorkoutDate(value: string): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
+function isCardioExercise(exercise: WorkoutHistoryEntry['exercises'][number]): boolean {
+  return Boolean(
+    exercise.is_cardio ||
+    exercise.sets.some((set) => (set.duration_seconds ?? 0) > 0 || (set.distance_km ?? 0) > 0),
+  )
+}
+
+function formatCardioDuration(seconds: number | null | undefined): string | null {
+  if (!seconds || seconds <= 0) return null
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const mins = Math.floor(seconds / 60)
+  const rem = Math.round(seconds % 60)
+  return rem > 0 ? `${mins}m ${rem}s` : `${mins} min`
+}
+
+function formatCardioSummary(sets: WorkoutHistoryEntry['exercises'][number]['sets']): string {
+  const set = sets.find((item) => item.is_completed) ?? sets[0]
+  if (!set) return 'Cardio'
+  const parts: string[] = []
+  const duration = formatCardioDuration(set.duration_seconds)
+  if (duration) parts.push(duration)
+  if (set.distance_km != null && set.distance_km > 0) {
+    const km = Number.isInteger(set.distance_km) ? String(set.distance_km) : String(Number(set.distance_km.toFixed(2)))
+    parts.push(`${km} km`)
+  }
+  return parts.length > 0 ? parts.join(' · ') : 'Cardio'
+}
+
 function getOvertrainingModPct(): number {
   const modPct = Number(localStorage.getItem('set_plate_overtraining_mod_pct') || '0')
   return Number.isFinite(modPct) && modPct > 0 ? modPct : 0
@@ -150,14 +178,38 @@ function Workouts() {
   function repeatWorkout(workout: WorkoutHistoryEntry) {
     const modActive = getOvertrainingModPct() > 0
     const exercises: ActiveExercise[] = workout.exercises.map((exercise) => {
+      const isCardio = isCardioExercise(exercise)
       const previousSets = [...exercise.sets].sort((first, second) => first.set_number - second.set_number)
       const lastSet = previousSets[previousSets.length - 1]
+      if (isCardio) {
+        return {
+          exercise_id: exercise.exercise_id,
+          name: exercise.name,
+          is_cardio: true,
+          previous_weight_kg: null,
+          previous_reps: null,
+          target_sets: 1,
+          target_reps: null,
+          sets: [{
+            set_number: 1,
+            weight_kg: 0,
+            reps: 0,
+            // Start empty: a copied time would be saved as if this block was done again.
+            duration_seconds: null,
+            distance_km: null,
+            cardio_status: 'idle',
+            cardio_accumulated: 0,
+            is_completed: false,
+          }],
+        }
+      }
       const targetCount = applyOvertrainingVolumeReduction(previousSets.length || 1)
       const slicedSets = previousSets.slice(0, targetCount)
 
       return {
         exercise_id: exercise.exercise_id,
         name: exercise.name,
+        is_cardio: false,
         previous_weight_kg: lastSet?.weight_kg ?? null,
         previous_reps: lastSet?.reps ?? null,
         target_sets: targetCount,
@@ -185,6 +237,7 @@ function Workouts() {
 
   function editWorkout(workout: WorkoutHistoryEntry) {
     const exercises: ActiveExercise[] = workout.exercises.map((exercise) => {
+      const isCardio = isCardioExercise(exercise)
       const sets = [...exercise.sets]
         .sort((first, second) => first.set_number - second.set_number)
         .map((set, index) => ({
@@ -192,17 +245,24 @@ function Workouts() {
           weight_kg: set.weight_kg,
           reps: set.reps,
           rpe: set.rpe,
+          duration_seconds: set.duration_seconds ?? null,
+          distance_km: set.distance_km ?? null,
+          cardio_status: isCardio ? ((set.duration_seconds ?? 0) > 0 || set.is_completed ? 'finished' as const : 'manual' as const) : undefined,
+          cardio_accumulated: isCardio ? (set.duration_seconds ?? 0) : undefined,
           is_completed: set.is_completed,
         }))
 
       return {
         exercise_id: exercise.exercise_id,
         name: exercise.name,
-        previous_weight_kg: sets[sets.length - 1]?.weight_kg ?? null,
-        previous_reps: sets[sets.length - 1]?.reps ?? null,
+        is_cardio: isCardio,
+        previous_weight_kg: isCardio ? null : (sets[sets.length - 1]?.weight_kg ?? null),
+        previous_reps: isCardio ? null : (sets[sets.length - 1]?.reps ?? null),
         target_sets: sets.length || 1,
-        target_reps: sets[sets.length - 1]?.reps ?? null,
-        sets: sets.length > 0 ? sets : [{ set_number: 1, weight_kg: 0, reps: 0, is_completed: false }],
+        target_reps: isCardio ? null : (sets[sets.length - 1]?.reps ?? null),
+        sets: sets.length > 0
+          ? sets
+          : [{ set_number: 1, weight_kg: 0, reps: 0, ...(isCardio ? { cardio_status: 'manual' as const } : {}), is_completed: false }],
       }
     })
 
@@ -396,8 +456,9 @@ function Workouts() {
                   <ul className="routine-preview">
                     {workout.exercises.slice(0, 3).map((exercise) => (
                       <li key={exercise.exercise_id}>
-                        {exercise.name} — {exercise.sets.length} sets
-                        {exercise.sets.length > 0 && ` · ${exercise.sets.map((set) => `${set.weight_kg} kg × ${set.reps}`).join(' / ')}`}
+                        {isCardioExercise(exercise)
+                          ? `${exercise.name} — ${formatCardioSummary(exercise.sets)}`
+                          : `${exercise.name} — ${exercise.sets.length} sets${exercise.sets.length > 0 ? ` · ${exercise.sets.map((set) => `${set.weight_kg} kg × ${set.reps}`).join(' / ')}` : ''}`}
                       </li>
                     ))}
                     {workout.exercises.length > 3 && <li>+{workout.exercises.length - 3} more</li>}
