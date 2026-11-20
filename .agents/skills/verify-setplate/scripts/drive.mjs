@@ -145,7 +145,7 @@ try {
     await sleep(500)
     loginOutcome = await waitForValue(page, `(() => {
       try {
-        if (localStorage.getItem('set_plate_user')) return 'session';
+        if (localStorage.getItem('set_plate_user') && localStorage.getItem('set_plate_session')) return 'session';
       } catch (error) {}
       const notice = document.querySelector('.login-notice');
       if (notice && notice.textContent.trim()) return 'error:' + notice.textContent.trim();
