@@ -8,10 +8,17 @@ import '../styles/login.css'
 
 const MIN_PASSWORD_LENGTH = 12
 
+function readResetToken(): string {
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : ''
+  const hashToken = new URLSearchParams(hash).get('token')
+  if (hashToken) return hashToken
+  return new URLSearchParams(window.location.search).get('token') ?? ''
+}
+
 function ResetPassword() {
   const navigate = useNavigate()
   // Read once, then dropped from the address bar so the token isn't kept in history.
-  const [token] = useState(() => new URLSearchParams(window.location.search).get('token') ?? '')
+  const [token] = useState(readResetToken)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -19,7 +26,9 @@ function ResetPassword() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    if (window.location.search) window.history.replaceState(window.history.state, '', window.location.pathname)
+    if (window.location.search || window.location.hash) {
+      window.history.replaceState(window.history.state, '', window.location.pathname)
+    }
   }, [])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {

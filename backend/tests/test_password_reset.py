@@ -104,7 +104,7 @@ def request_reset(email: str):
 
 
 def token_from(link: str) -> str:
-    return parse_qs(urlparse(link).query)["token"][0]
+    return parse_qs(urlparse(link).fragment)["token"][0]
 
 
 def test_request_answers_the_same_for_known_and_unknown_emails(db, sent) -> None:

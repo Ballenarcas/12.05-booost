@@ -9,6 +9,7 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_AI_TIMEOUT_SECONDS = 25.0
 TIP_TIMEOUT_SECONDS = 6  # a tip that is late is worth less than the template shown instead
 TIP_SCHEMA = {
     "type": "object",
@@ -41,7 +42,12 @@ def get_ai_client() -> OpenAI:
     settings = get_settings()
     if not settings.ai_api_key:
         raise ValueError("AI is not configured. Set AI_API_KEY in your .env file.")
-    return OpenAI(api_key=settings.ai_api_key, base_url=settings.ai_base_url)
+    return OpenAI(
+        api_key=settings.ai_api_key,
+        base_url=settings.ai_base_url,
+        timeout=DEFAULT_AI_TIMEOUT_SECONDS,
+        max_retries=0,
+    )
 
 
 def generate_trainer_insight(

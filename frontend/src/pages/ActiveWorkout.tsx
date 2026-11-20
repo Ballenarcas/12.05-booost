@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Crown, Dumbbell, Flame, Info, Minus, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { fetchExerciseById, fetchExercises, getCurrentUser, isPremiumActive, PremiumRequiredError, requestWarmupRecommendation, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry } from '../services/api'
+import { fetchExerciseById, fetchExercises, getCurrentUser, isPremiumActive, PremiumRequiredError, requestWarmupRecommendation, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry, activeWorkoutStorageKey } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { Exercise } from '../types'
 import type {
@@ -26,7 +26,6 @@ import MediaCredit from '../components/workout/MediaCredit'
 const EXTREME_WEIGHT_WARNING_KG = 600
 const DEFAULT_REST_SECONDS = 90
 const REST_STEP_SECONDS = 15
-const ACTIVE_WORKOUT_KEY = 'set_plate_active_workout'
 const ADJUSTMENT_ACTION_LABELS: Record<LiveWorkoutAdjustmentAction, string> = {
   reduce_load: 'Reduce the load',
   reduce_reps: 'Reduce the reps',
@@ -417,7 +416,9 @@ function useScreenAwake() {
 
 function readSavedSession(): ActiveSession | null {
   try {
-    return getSession(JSON.parse(localStorage.getItem(ACTIVE_WORKOUT_KEY) ?? 'null'))
+    const key = activeWorkoutStorageKey()
+    if (!key) return null
+    return getSession(JSON.parse(localStorage.getItem(key) ?? 'null'))
   } catch {
     return null
   }
@@ -469,7 +470,8 @@ function ActiveWorkout() {
 
   useEffect(() => {
     sessionRef.current = session
-    if (session) localStorage.setItem(ACTIVE_WORKOUT_KEY, JSON.stringify({ ...session, rpeValues }))
+    const key = activeWorkoutStorageKey()
+    if (session && key) localStorage.setItem(key, JSON.stringify({ ...session, rpeValues }))
   }, [session, rpeValues])
 
   useEffect(() => {
@@ -929,7 +931,8 @@ function ActiveWorkout() {
       } else {
         await saveWorkoutLog(user.id, payload)
       }
-      localStorage.removeItem(ACTIVE_WORKOUT_KEY)
+      const key = activeWorkoutStorageKey()
+      if (key) localStorage.removeItem(key)
       navigate('/workouts')
     } catch (error) {
       setSaveError(describeError(error, "We couldn't save your workout. Please try again."))
@@ -1147,7 +1150,8 @@ function ActiveWorkout() {
       setConfirmDiscard(true)
       return
     }
-    localStorage.removeItem(ACTIVE_WORKOUT_KEY)
+    const key = activeWorkoutStorageKey()
+    if (key) localStorage.removeItem(key)
     navigate('/workouts')
   }
 

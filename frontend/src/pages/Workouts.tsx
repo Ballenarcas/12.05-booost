@@ -2,7 +2,7 @@ import { ArrowRight, BarChart3, CalendarDays, ChevronDown, Clock3, Dumbbell, His
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { deleteRoutine, deleteWorkoutHistoryEntry, fetchRoutines, fetchWorkoutHistory, getCurrentUser } from '../services/api'
+import { activeWorkoutStorageKey, deleteRoutine, deleteWorkoutHistoryEntry, fetchRoutines, fetchWorkoutHistory, getCurrentUser, overtrainingModPctStorageKey } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import { OvertrainingBanner } from '../components/workout/OvertrainingBanner'
 import type { ActiveExercise, Routine, WorkoutHistoryEntry } from '../types/workout'
@@ -46,13 +46,15 @@ function formatCardioSummary(sets: WorkoutHistoryEntry['exercises'][number]['set
   return parts.length > 0 ? parts.join(' · ') : 'Cardio'
 }
 
-function getOvertrainingModPct(): number {
-  const modPct = Number(localStorage.getItem('set_plate_overtraining_mod_pct') || '0')
+function getOvertrainingModPct(userId?: string): number {
+  const key = overtrainingModPctStorageKey(userId)
+  if (!key) return 0
+  const modPct = Number(localStorage.getItem(key) || '0')
   return Number.isFinite(modPct) && modPct > 0 ? modPct : 0
 }
 
-function applyOvertrainingVolumeReduction(targetSets: number): number {
-  const modPct = getOvertrainingModPct()
+function applyOvertrainingVolumeReduction(targetSets: number, userId?: string): number {
+  const modPct = getOvertrainingModPct(userId)
   if (modPct > 0 && targetSets >= 2) {
     // Réduit d'au moins 1 série (ou -15%) dès qu'il y a 2 séries ou plus
     return Math.max(1, Math.min(targetSets - 1, Math.round(targetSets * (1 - modPct / 100))))
@@ -60,8 +62,8 @@ function applyOvertrainingVolumeReduction(targetSets: number): number {
   return targetSets
 }
 
-function applyOvertrainingWeightReduction(weightKg: number): number {
-  const modPct = getOvertrainingModPct()
+function applyOvertrainingWeightReduction(weightKg: number, userId?: string): number {
+  const modPct = getOvertrainingModPct(userId)
   if (modPct > 0 && weightKg > 0) {
     // Baisse la charge (kg) de 15% (arrondi à 0.5 kg près)
     const reduced = weightKg * (1 - modPct / 100)
@@ -70,11 +72,11 @@ function applyOvertrainingWeightReduction(weightKg: number): number {
   return weightKg
 }
 
-function createActiveExercises(routine: Routine): ActiveExercise[] {
-  const modActive = getOvertrainingModPct() > 0
+function createActiveExercises(routine: Routine, userId?: string): ActiveExercise[] {
+  const modActive = getOvertrainingModPct(userId) > 0
   return routine.exercises.map((exercise) => {
     const rawSets = exercise.target_sets ?? 1
-    const adjustedSets = applyOvertrainingVolumeReduction(rawSets)
+    const adjustedSets = applyOvertrainingVolumeReduction(rawSets, userId)
     return {
       exercise_id: exercise.exercise_id,
       name: exercise.name,
@@ -125,18 +127,18 @@ function Workouts() {
   const [workoutToDelete, setWorkoutToDelete] = useState<WorkoutHistoryEntry | null>(null)
   const [isDeletingWorkout, setIsDeletingWorkout] = useState(false)
   const [workoutDeleteError, setWorkoutDeleteError] = useState<string | null>(null)
-  const [activeDeloadPct, setActiveDeloadPct] = useState<number>(() => getOvertrainingModPct())
+  const [activeDeloadPct, setActiveDeloadPct] = useState<number>(() => getOvertrainingModPct(currentUserId))
 
   useEffect(() => {
-    setActiveDeloadPct(getOvertrainingModPct())
-  }, [])
+    setActiveDeloadPct(getOvertrainingModPct(currentUserId))
+  }, [currentUserId])
 
   useEffect(() => {
     fetchRoutines()
       .then(setRoutines)
       .catch((requestError: Error) => setError(describeError(requestError, "We couldn't load your routines. Please try again.")))
       .finally(() => setIsLoading(false))
-  }, [])
+  }, [currentUserId])
 
   useEffect(() => {
     if (!currentUserId) {
@@ -163,20 +165,20 @@ function Workouts() {
   }, [currentUserId])
 
   function startWorkout(routine?: Routine) {
-    const modActive = getOvertrainingModPct() > 0
+    const modActive = getOvertrainingModPct(currentUserId) > 0
     const baseName = routine?.name ?? 'Empty workout'
     navigate('/workouts/active', {
       state: {
         routineId: routine?.id,
         name: modActive && routine ? `${baseName} (AI Deload -15%)` : baseName,
         startedAt: new Date().toISOString(),
-        exercises: routine ? createActiveExercises(routine) : [],
+        exercises: routine ? createActiveExercises(routine, currentUserId) : [],
       },
     })
   }
 
   function repeatWorkout(workout: WorkoutHistoryEntry) {
-    const modActive = getOvertrainingModPct() > 0
+    const modActive = getOvertrainingModPct(currentUserId) > 0
     const exercises: ActiveExercise[] = workout.exercises.map((exercise) => {
       const isCardio = isCardioExercise(exercise)
       const previousSets = [...exercise.sets].sort((first, second) => first.set_number - second.set_number)
@@ -203,7 +205,7 @@ function Workouts() {
           }],
         }
       }
-      const targetCount = applyOvertrainingVolumeReduction(previousSets.length || 1)
+      const targetCount = applyOvertrainingVolumeReduction(previousSets.length || 1, currentUserId)
       const slicedSets = previousSets.slice(0, targetCount)
 
       return {
@@ -217,7 +219,7 @@ function Workouts() {
         sets: slicedSets.length > 0
           ? slicedSets.map((set, index) => ({
             set_number: index + 1,
-            weight_kg: applyOvertrainingWeightReduction(set.weight_kg),
+            weight_kg: applyOvertrainingWeightReduction(set.weight_kg, currentUserId),
             reps: set.reps,
             rpe: modActive ? 6 : undefined,
             is_completed: false,
@@ -278,7 +280,8 @@ function Workouts() {
   }
 
   function requestEmptyWorkout() {
-    const saved = localStorage.getItem('set_plate_active_workout')
+    const workoutKey = activeWorkoutStorageKey(currentUserId)
+    const saved = workoutKey ? localStorage.getItem(workoutKey) : null
     if (saved) {
       try {
         const activeWorkout = JSON.parse(saved) as { name?: string; exercises?: unknown[]; startedAt?: string }
@@ -288,21 +291,23 @@ function Workouts() {
           return
         }
       } catch {
-        localStorage.removeItem('set_plate_active_workout')
+        if (workoutKey) localStorage.removeItem(workoutKey)
       }
     }
     startWorkout()
   }
 
   function discardAndStartEmptyWorkout() {
-    localStorage.removeItem('set_plate_active_workout')
+    const workoutKey = activeWorkoutStorageKey(currentUserId)
+    if (workoutKey) localStorage.removeItem(workoutKey)
     sessionStorage.removeItem('set_plate_pending_exercise')
     setShowDiscardActiveWorkout(false)
     startWorkout()
   }
 
   function clearDeloadModification() {
-    localStorage.removeItem('set_plate_overtraining_mod_pct')
+    const modKey = overtrainingModPctStorageKey(currentUserId)
+    if (modKey) localStorage.removeItem(modKey)
     if (currentUserId) {
       localStorage.setItem(
         `set_plate_overtraining_state_${currentUserId}`,

@@ -1,12 +1,15 @@
 import { ArrowUp, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { activeWorkoutStorageKey } from '../../services/api'
 
 type ActiveWorkoutSummary = { name: string; startedAt: string }
 
 function readActiveWorkout(): ActiveWorkoutSummary | null {
   try {
-    const stored = localStorage.getItem('set_plate_active_workout')
+    const key = activeWorkoutStorageKey()
+    if (!key) return null
+    const stored = localStorage.getItem(key)
     if (!stored) return null
     const session = JSON.parse(stored) as Partial<ActiveWorkoutSummary>
     if (typeof session.startedAt !== 'string') return null
@@ -47,7 +50,8 @@ export default function WorkoutInProgressBar() {
   if (!workout || pathname.startsWith('/workouts/active')) return null
 
   function discardWorkout() {
-    localStorage.removeItem('set_plate_active_workout')
+    const key = activeWorkoutStorageKey()
+    if (key) localStorage.removeItem(key)
     sessionStorage.removeItem('set_plate_pending_exercise')
     setWorkout(null)
     setIsDiscardOpen(false)

@@ -241,14 +241,7 @@ function Settings() {
   }
 
   const confirmLogout = () => {
-    try {
-      clearSession()
-      localStorage.removeItem('set_plate_active_workout')
-      sessionStorage.removeItem('set_plate_pending_exercise')
-    } catch {
-      // The redirect still signs the user out when storage is unavailable.
-    }
-    clearDashboardCache()
+    clearSession()
     setIsLogoutOpen(false)
     navigate('/login', { replace: true })
   }

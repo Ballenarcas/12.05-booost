@@ -530,7 +530,7 @@ async def test_ai_request_uses_example_model_and_unwraps_suggestion_array(monkey
             ))])
 
     class FakeClient:
-        def __init__(self, api_key, base_url):
+        def __init__(self, api_key, base_url, timeout=None, max_retries=None):
             calls["api_key"] = api_key
             calls["base_url"] = base_url
             self.chat = SimpleNamespace(completions=FakeCompletions())
