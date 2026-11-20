@@ -235,6 +235,7 @@ a.hydration-goal-edit { text-decoration: none; white-space: nowrap; }
 .set-heading { padding: 0 0.1rem 0.1rem; color: var(--text-muted); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em; text-align: center; text-transform: uppercase; }
 .set-row input { width: 100%; min-width: 0; min-height: 2.75rem; padding: 0.3rem 0.1rem; border: 1px solid #373737; border-radius: 0.65rem; color: #fff; background: #151615; font: inherit; font-size: 1rem; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; transition: background-color 160ms ease-out, border-color 160ms ease-out; }
 .set-row input:focus { border-color: var(--green); outline: none; }
+.set-bodyweight { display: grid; min-height: 2.75rem; place-items: center; color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.04em; }
 .set-row input.is-missing { border-color: #ff9b9b; }
 .set-row-hint { margin: 0.25rem 0.15rem 0; color: #ff9b9b; font-size: 0.7rem; }
 .previous-cell { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; text-align: center; text-overflow: ellipsis; white-space: nowrap; }

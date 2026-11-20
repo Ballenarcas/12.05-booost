@@ -52,6 +52,8 @@ export interface ActiveExercise {
   target_sets?: number | null
   target_reps?: number | null
   is_cardio?: boolean
+  /** No weight to enter: the catalog lists body weight as its only equipment. */
+  is_bodyweight?: boolean
   sets: WorkoutSet[]
 }
 

@@ -221,7 +221,13 @@ function CardioManualForm({
   )
 }
 
-function formatPrevious({ previous_weight_kg: weight, previous_reps: reps }: ActiveExercise): string {
+// "Weighted" and "Assisted" variants are listed as their own equipment, so they still take a weight.
+export function isBodyweightOnly(equipment?: string[] | null): boolean {
+  return !!equipment?.length && equipment.every((item) => item.trim().toLowerCase() === 'body weight')
+}
+
+function formatPrevious({ previous_weight_kg: weight, previous_reps: reps, is_bodyweight }: ActiveExercise): string {
+  if (is_bodyweight) return reps ? `${reps} reps` : '–'
   if (weight === null || weight === undefined) return '–'
   return reps ? `${weight}×${reps}` : `${weight}`
 }
@@ -488,7 +494,7 @@ function ActiveWorkout() {
 
   useEffect(() => {
     session?.exercises.forEach((exercise) => {
-      if ((exercise.images?.length && exercise.is_cardio !== undefined) || imageLookups.current.has(exercise.exercise_id)) return
+      if ((exercise.images?.length && exercise.is_cardio !== undefined && exercise.is_bodyweight !== undefined) || imageLookups.current.has(exercise.exercise_id)) return
       imageLookups.current.add(exercise.exercise_id)
       fetchExerciseById(exercise.exercise_id)
         .catch(() => fetchExercises({ q: exercise.name, limit: 100 }).then((result: { items: Exercise[] }) =>
@@ -505,6 +511,7 @@ function ActiveWorkout() {
                   ...item, 
                   images: catalogExercise.images?.length ? catalogExercise.images : item.images,
                   is_cardio: item.is_cardio !== undefined ? item.is_cardio : isCardio,
+                  is_bodyweight: isBodyweightOnly(catalogExercise.equipment),
                   sets: (item.is_cardio !== undefined ? item.is_cardio : isCardio) 
                         ? item.sets.map(s => ({...s, cardio_status: s.cardio_status || (s.duration_seconds ? 'finished' : 'idle')}))
                         : item.sets
@@ -531,7 +538,9 @@ function ActiveWorkout() {
           images: selection.images,
           previous_weight_kg: null,
           previous_reps: null,
-          is_cardio: isCardio
+          is_cardio: isCardio,
+          // Unknown until the catalog lookup runs when the selection carries no equipment.
+          is_bodyweight: selection.equipment ? isBodyweightOnly(selection.equipment) : undefined,
         }
         const initialSets = isCardio
           ? [{ ...createSet(1), cardio_status: 'idle' as const }]
@@ -861,11 +870,13 @@ function ActiveWorkout() {
       started_at: currentSession.startedAt,
       completed_at: new Date().toISOString(),
       fatigue_level: fatigueLevel,
-      exercises: currentSession.exercises.map(({ exercise_id, sets, is_cardio }, exerciseIndex) => ({
+      exercises: currentSession.exercises.map(({ exercise_id, sets, is_cardio, is_bodyweight }, exerciseIndex) => ({
         exercise_id,
         is_cardio,
         sets: sets.map((set) => ({
           ...set,
+          // The weight field is hidden for bodyweight exercises, so never save a stale value.
+          ...(is_bodyweight ? { weight_kg: 0 } : {}),
           rpe: rpeValues[`${exerciseIndex}:${set.set_number}`] ?? set.rpe ?? null,
         })),
       })),
@@ -1339,7 +1350,9 @@ function ActiveWorkout() {
                           </select>
                         </span>
                         <span className="previous-cell">{formatPrevious(exercise)}</span>
-                        <SetNumberInput label={`${exercise.name} set ${set.set_number} weight`} decimal value={set.weight_kg} onChange={(weight_kg) => updateSet(exerciseIndex, setIndex, { weight_kg })} />
+                        {exercise.is_bodyweight
+                          ? <span className="set-bodyweight" aria-label="Bodyweight, no weight to enter">BW</span>
+                          : <SetNumberInput label={`${exercise.name} set ${set.set_number} weight`} decimal value={set.weight_kg} onChange={(weight_kg) => updateSet(exerciseIndex, setIndex, { weight_kg })} />}
                         <SetNumberInput id={repsInputId(exerciseIndex, set.set_number)} label={`${exercise.name} set ${set.set_number} reps`} value={set.reps} invalid={missingReps === setKey} onChange={(reps) => {
                           updateSet(exerciseIndex, setIndex, { reps })
                           setMissingReps(null)

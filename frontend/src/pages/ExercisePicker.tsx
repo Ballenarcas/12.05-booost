@@ -62,6 +62,8 @@ function ExercisePicker() {
       id: exercise.id,
       name: exercise.name,
       images: exercise.images?.slice(0, 1) || [],
+      category: exercise.category,
+      equipment: exercise.equipment,
       replaceExerciseIndex,
     }))
     navigate('/workouts/active')

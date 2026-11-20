@@ -53,6 +53,7 @@ function ExerciseGuide() {
       id: exercise.id,
       name: exercise.name,
       category: exercise.category,
+      equipment: exercise.equipment,
       images: still ? [still] : [],
       is_custom: exercise.is_custom,
       replaceExerciseIndex,
