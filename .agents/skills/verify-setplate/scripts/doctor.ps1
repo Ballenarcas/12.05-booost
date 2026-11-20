@@ -85,14 +85,18 @@ Add-Check 'credentials' $hasCredentials 'SETPLATE_VERIFY_EMAIL and SETPLATE_VERI
 
 $loginOk = $false
 $userId = $null
+$accessToken = $null
+$isPremium = $null
 if ($hasCredentials -and $backendOk) {
     try {
         $body = @{ email = $email; password = $password } | ConvertTo-Json -Compress
         $login = Invoke-RestMethod -Uri "$BackendUrl/api/v1/users/login" -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 30
         $userId = [string]$login.id
-        $loginOk = [bool]$userId
+        $accessToken = [string]$login.access_token
+        $isPremium = [bool]$login.is_premium
+        $loginOk = [bool]$userId -and [bool]$accessToken
         $prefix = if ($userId.Length -gt 8) { $userId.Substring(0, 8) } else { $userId }
-        Add-Check 'login' $loginOk "user_id_prefix=$prefix"
+        Add-Check 'login' $loginOk "user_id_prefix=$prefix is_premium=$isPremium has_token=$([bool]$accessToken)"
     }
     catch {
         Add-Check 'login' $false "POST /api/v1/users/login failed: $($_.Exception.Message)"
@@ -106,14 +110,20 @@ $hasPlan = $null
 $completedToday = $null
 if ($loginOk) {
     try {
-        $summary = Invoke-RestMethod -Uri "$BackendUrl/api/v1/dashboard/summary?user_id=$userId" -TimeoutSec 30
+        $todayStart = Get-Date -Hour 0 -Minute 0 -Second 0 -Millisecond 0
+        $todayEnd = $todayStart.AddDays(1)
+        $todayStr = $todayStart.ToString('yyyy-MM-dd')
+        $startIso = [uri]::EscapeDataString($todayStart.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ'))
+        $endIso = [uri]::EscapeDataString($todayEnd.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ'))
+        $headers = @{ Authorization = "Bearer $accessToken" }
+        $summary = Invoke-RestMethod -Uri "$BackendUrl/api/v1/dashboard/summary?today=$todayStr&today_start=$startIso&today_end=$endIso" -Headers $headers -TimeoutSec 30
         $hasPlan = [bool]$summary.plan
         $completedToday = [bool]$summary.completed_workout_today
         $homeSafe = $hasPlan -or $completedToday
         Add-Check 'home_plan' $true "has_plan_today=$hasPlan completed_workout_today=$completedToday home_safe=$homeSafe"
     }
     catch {
-        Add-Check 'home_plan' $true "could not read the dashboard summary: $($_.Exception.Message)"
+        Add-Check 'home_plan' $false "could not read the dashboard summary: $($_.Exception.Message)"
     }
 }
 
@@ -126,9 +136,10 @@ $prefixForOutput = if ($userId -and $userId.Length -gt 8) { $userId.Substring(0,
     ok = $ok
     checks = $checks
     user_id_prefix = $prefixForOutput
+    is_premium = $isPremium
     has_plan_today = $hasPlan
     completed_workout_today = $completedToday
-    home_safe = if ($loginOk) { [bool]$hasPlan -or [bool]$completedToday } else { $null }
+    home_safe = if ($null -ne $hasPlan) { [bool]$hasPlan -or [bool]$completedToday } else { $null }
 } | ConvertTo-Json -Depth 6
 
 if (-not $ok) {

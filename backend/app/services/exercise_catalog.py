@@ -27,7 +27,8 @@ def load_cached_exercises() -> list[Exercise]:
         exercises = [Exercise(**item) for item in data]
         _cached_exercises = exercises
         _cached_mtime = mtime
-        _cached_by_key = {exercise.id: exercise for exercise in exercises}
+        # Workouts and routines store the Supabase UUID, so index by both ids.
+        _cached_by_key = {key: exercise for exercise in exercises for key in (exercise.id, supabase_uuid_for(exercise))}
         return exercises
     except Exception as err:
         logger.error(f"Error reading exercises catalog: {err}")

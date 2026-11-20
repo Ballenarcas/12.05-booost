@@ -860,6 +860,19 @@ export function LogMeals() {
                       {adjustment.weekly_volume} kg.
                     </p>
                   )}
+                  {adjustment.fatigue_workouts > 0 && (
+                    <p className="tip-reasoning">
+                      <strong>Workout fatigue:</strong>{' '}
+                      {adjustment.fatigue_latest > 0
+                        ? `${adjustment.fatigue_latest}/10 after your last workout`
+                        : `${adjustment.fatigue_avg}/10 average`}
+                      {adjustment.fatigue_workouts > 1
+                        && ` · ${adjustment.fatigue_avg}/10 average over ${adjustment.fatigue_workouts} workouts`}.
+                      {adjustment.fatigue_latest > 5
+                        ? ' Recovery calories are included and the next workout will be lighter.'
+                        : ' No recent high-fatigue session, so no recovery bump is applied.'}
+                    </p>
+                  )}
                   {adjustment.activity?.connected && (
                     <p className="tip-reasoning">
                       <strong>Health Connect:</strong>{' '}

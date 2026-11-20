@@ -5,16 +5,16 @@ description: Verify SET&PLATE, a React 19 web UI backed by FastAPI on a shared S
 
 # Verify SET&PLATE
 
-SET&PLATE is a mobile-first React 19 + Vite web app. The FastAPI backend runs from `backend/` and talks to a shared remote Supabase project and Groq.
+SET&PLATE is a mobile-first React 19 + Vite web app. The FastAPI backend runs from `backend/` and talks to a shared remote Supabase project and an OpenAI-compatible AI provider (Groq by default).
 
 ## Hard limits
 
 - The database is shared and remote. There is no local data directory to reset. The proof journey is read-only and must not write to another user's account.
-- Groq calls cost tokens and are disabled for routine work. Never open `/` with an account that has no plan for today, and never press the AI button in an active workout. The driver logs in and full-navigates to the exercise picker specifically to cancel the login redirect before Home mounts and calls `POST /api/v1/workouts/plan-today`. A one-off driver must land on a non-Home route after login for the same reason.
+- LLM calls cost tokens and are disabled for routine work. Never open `/` when `doctor.ps1` reports `home_safe: false` (no plan and no completed workout today), never press `Ask AI for adjustments` or `Recommend a warm-up` in an active workout, never open `Suggestions` on `/nutrition` on a fresh day for a Premium account, and never upload a photo on `/scan-meal`. The driver logs in and full-navigates to `/workouts/active/exercises` specifically to cancel the login redirect before Home mounts and calls `POST /api/v1/workouts/plan-today`. A one-off driver must land on a non-Home route after login for the same reason.
 - The Settings Health Connect card is a write surface on the verification account: connecting changes that account's stored status. Put the account back to how you found it (disconnect, or reconnect as recorded), and record that in `result.json`.
 - Credentials come from `.env.verify` at the repo root (gitignored) or from `SETPLATE_VERIFY_EMAIL` and `SETPLATE_VERIFY_PASSWORD`. Create the file with those two keys and an existing account. Never print, commit, or screenshot them.
 - Ports are fixed at 8000 and 5173. Vite proxies `/api` to `127.0.0.1:8000` and the default CORS origin is `http://localhost:5173`. Do not try to run a second instance on other ports. Attach to the healthy stack instead.
-- Only the `proof` journey is automated. Settings, Health Connect, the Home activity card and everything else in `features/` are not. Name the journeys you did not drive instead of implying they are verified.
+- Only the `proof` journey is automated. Dashboard, Hydration, Workout session, Meal logging/Nutrition, Settings, Health Connect, and everything else in `features/` are not. Name the journeys you did not drive instead of implying they are verified.
 
 ## Steps
 
@@ -97,7 +97,7 @@ Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object 
 ```
 
 - `EPERM` or a spawn error in `frontend.err.log` means the sandbox blocked Vite, not that the app is broken: start Vite yourself with `danger-full-access` from `frontend/` (`npm run dev -- --host 127.0.0.1 --port 5173`, as a background job) and continue in attached mode.
-- A missing listener on 8000 means the backend never started: run `..\venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000` from `backend/` as a background job (the venv already exists at the repo root). Start only the server that is missing. `dart`/`uvicorn` line endings are not the problem; read the log.
+- A missing listener on 8000 means the backend never started: run `.\venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000` from `backend/` as a background job (the virtualenv lives at `backend/venv/`). Start only the server that is missing. `dart`/`uvicorn` line endings are not the problem; read the log.
 - A non-zero log size that prints nothing with `Get-Content -Tail` still has content. Use `-Raw`.
 - Re-check the listeners and rerun `doctor.ps1` before driving anything.
 
@@ -107,7 +107,7 @@ Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object 
 powershell -ExecutionPolicy Bypass -File .agents/skills/verify-setplate/scripts/doctor.ps1
 ```
 
-Run this first whenever anything looks off. It is read-only and checks Node 22 or newer (needed for the built-in WebSocket), Chrome or Edge, backend health, the Vite page, credentials, a real login through `POST /api/v1/users/login`, and whether Home is safe to drive (`has_plan_today` or `completed_workout_today`). It exits 1 on a required failure and never prints the password. The login user id is reported only as an 8-character prefix.
+Run this first whenever anything looks off. It is read-only and checks Node 22 or newer (needed for the built-in WebSocket), Chrome or Edge, backend health, the Vite page, credentials, a real login through `POST /api/v1/users/login` (verifying `access_token` and reporting `is_premium`), and whether Home is safe to drive (`has_plan_today` or `completed_workout_today`, queried with `Authorization: Bearer` and local-day bounds). It exits 1 on a required failure and never prints the password or token. The login user id is reported only as an 8-character prefix.
 
 Running it before the servers are up is expected while bootstrapping: start the missing server, rerun, and only start driving when `ok` is `true`.
 
@@ -121,7 +121,7 @@ node .agents/skills/verify-setplate/scripts/drive.mjs --scenario proof --out .ag
 
 1. Opens `/login` at a 430x932 mobile viewport in headless Chrome.
 2. Fills `#login-email` and `#login-password` and submits `form.login-form`.
-3. Waits for `set_plate_user` in `localStorage`, then full-navigates to `/workouts/active/exercises` so the login timer never mounts Home.
+3. Waits for `set_plate_user` and `set_plate_session` in `localStorage`, then full-navigates to `/workouts/active/exercises` so the login timer never mounts Home.
 4. Waits for the real exercise catalog, types `bench` into `input[aria-label="Search exercises"]`, and waits for the debounced request.
 5. Compares the rendered `.exercise-picker-item` count and names with the `/api/v1/workouts/exercises?q=bench...` response body.
 6. Writes screenshots, `result.json`, `console.log`, and `network.json` to the evidence directory.
@@ -129,9 +129,9 @@ node .agents/skills/verify-setplate/scripts/drive.mjs --scenario proof --out .ag
 Stable handles:
 
 - Login: `#login-email`, `#login-password`, `form.login-form`.
-- Exercise picker: `input[aria-label="Search exercises"]`, `.exercise-picker-item`, `.exercise-picker-item strong`, `.pagination-count`.
+- Exercise picker: `input[aria-label="Search exercises"]`, `.exercise-picker-item`, `.exercise-picker-item strong`, `.pagination-count`, `button[aria-label^="How to do "]`.
 - Navigation: `nav[aria-label="Primary navigation"] button[aria-label="Home"|"Workouts"|"Nutrition"|"Settings"]`.
-- Active workout: `button[aria-label="Ask AI for adjustments"]` (do not click), `button.finish-button`, `#completed-workout-name`.
+- Active workout: `button[aria-label="Ask AI for adjustments"]` (do not click), `button[aria-label="Recommend a warm-up"]` (do not click), `button.finish-button`, `#completed-workout-name`, `button.fatigue-scale-button`.
 
 Only `proof` is automated today. For the other journeys, follow the matching file in `features/` and add a scenario to `drive.mjs` ([Adding a scenario](#adding-a-scenario)) or drive a single page once with a scratch script ([One-off page drive](#one-off-page-drive)). Do not weaken a journey to make it pass, and do not edit `proof` to accommodate a new one.
 
@@ -288,8 +288,6 @@ Use `/maintain-verification-skill` after routes, selectors, or data contracts ch
 
 ## Proven scope
 
-The shipped `proof` run covered `launch.ps1` in `attached` mode, `doctor.ps1`, `drive.mjs`, evidence capture, and `cleanup.ps1` against the real backend and a real login. It did not exercise `launch.ps1` in `managed` mode because ports 8000 and 5173 were already held by the running dev servers. Run the proof once on a clean checkout with the ports free to cover managed start and teardown.
-
-A Health Connect verification ran on the same stack through a one-off `.run/settings-check.mjs` copied from `drive.mjs`: it returned `ok: true` with the Settings before/after state and screenshots, and it needed `danger-full-access` for both the Vite dev server and headless Chrome. That journey is not a shipped scenario yet — add it with [Adding a scenario](#adding-a-scenario).
+The shipped `proof` run and maintenance pass covered `launch.ps1` in `attached` mode, `doctor.ps1` (with Bearer auth and local-day Home safety checks), `drive.mjs`, evidence capture, and `cleanup.ps1` against the real backend and a real login, plus live Chrome DevTools coverage across Exercise search/guide, Workout session/statistics/overtraining, Dashboard (while `completed_workout_today` was set so `plan-today` did not fire), Hydration + history, Meal logging + Nutrition hub, and Settings/FAQ/Logout. Managed mode (`launch.ps1` starting both servers from free ports) remains unexercised when a server is already running; run once with both ports free to cover managed start and teardown.
 
 The database is shared, so there is no empty local data directory to reset; the verification account is the isolation boundary.

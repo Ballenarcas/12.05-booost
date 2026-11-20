@@ -121,7 +121,7 @@ def test_repeating_a_save_returns_the_first_workout():
 def test_a_workout_cannot_link_to_someone_elses_routine():
     database = Database(rows={"routines": []})
     with patch.object(workout_service, "get_supabase", return_value=database), \
-            patch.object(workout_service, "resolve_exercise_log_id", return_value=str(uuid4())), \
+            patch.object(workout_service, "_resolve_exercise_id_for_user", return_value=str(uuid4())), \
             patch.object(workout_service, "WorkoutLogResponse", lambda **values: values):
         workout_service.save_workout_log(uuid4(), _workout(routine_id=uuid4()))
     workout = next(record for table, action, record in database.writes if table == "workouts")

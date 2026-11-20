@@ -25,6 +25,16 @@ export interface Exercise {
   images: string[]
   muscle_images: string[]
   is_custom?: boolean // <-- AJOUT
+  guide?: ExerciseGuide | null
+}
+
+export interface ExerciseGuide {
+  setup: string[]
+  cues: string[]
+  breathing: string
+  mistakes: string[]
+  tip: string
+  safety: string
 }
 
 export interface ExerciseListResponse {

@@ -1,8 +1,8 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Crown, Dumbbell, Flame, Info, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { usePageNavigate } from '../utils/usePageNavigate'
-import { fetchExerciseById, fetchExercises, getCurrentUser, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry } from '../services/api'
+import { fetchExerciseById, fetchExercises, getCurrentUser, isPremiumActive, PremiumRequiredError, requestWarmupRecommendation, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { Exercise } from '../types'
 import type {
@@ -12,6 +12,8 @@ import type {
   LiveWorkoutAdjustmentRequest,
   LiveWorkoutAdjustmentSuggestion,
   SetKind,
+  WarmupRecommendation,
+  WarmupRecommendationRequest,
   WorkoutLogCreate,
   WorkoutSet,
 } from '../types/workout'
@@ -43,6 +45,10 @@ const ADJUSTMENT_ACTION_LABELS: Record<LiveWorkoutAdjustmentAction, string> = {
   drop_set: 'Turn the next set into a drop set',
   stop_exercise: 'Skip the remaining sets',
 }
+const FATIGUE_LABELS = [
+  'Fresh', 'Easy', 'Light', 'Moderate', 'Solid',
+  'Tired', 'Very tired', 'Drained', 'Exhausted', 'Maxed out',
+]
 
 function describeAdjustment(suggestion: LiveWorkoutAdjustmentSuggestion): string {
   const base = ADJUSTMENT_ACTION_LABELS[suggestion.action]
@@ -59,6 +65,12 @@ type AiAdjustmentState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ready'; suggestions: LiveWorkoutAdjustmentSuggestion[]; applied: number[] }
+  | { status: 'error'; message: string }
+type WarmupState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; recommendation: WarmupRecommendation }
+  | { status: 'premium' }
   | { status: 'error'; message: string }
 type AdjustmentUndo = {
   session: ActiveSession
@@ -105,6 +117,11 @@ function formatClock(seconds: number): string {
 
 function formatRest(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`
+}
+
+function formatWarmupDuration(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60))
+  return `${minutes} min`
 }
 
 function formatPace(seconds: number, km: number | null | undefined): string {
@@ -328,6 +345,31 @@ function getSession(state: unknown): ActiveSession | null {
   return { ...parsed, setKinds: parsed.setKinds ?? {} } as ActiveSession
 }
 
+function buildWarmupRequest(session: ActiveSession, userGoal?: string | null): WarmupRecommendationRequest {
+  return {
+    name: session.name.trim() || 'Workout',
+    user_goal: userGoal ?? null,
+    exercises: session.exercises.map((exercise) => {
+      const positiveWeights = exercise.sets
+        .map((set) => safeNumber(set.weight_kg))
+        .filter((weight) => weight > 0)
+      const nextSet = exercise.sets.find((set) => !set.is_completed && safeNumber(set.weight_kg) > 0)
+      const workingWeight = nextSet
+        ? safeNumber(nextSet.weight_kg)
+        : positiveWeights.length
+          ? Math.max(...positiveWeights)
+          : nullableNumber(exercise.previous_weight_kg)
+      return {
+        exercise_id: exercise.exercise_id,
+        name: exercise.name,
+        is_cardio: Boolean(exercise.is_cardio),
+        working_weight_kg: workingWeight,
+        target_reps: nullableNumber(exercise.target_reps),
+      }
+    }),
+  }
+}
+
 function useScreenAwake() {
   useEffect(() => {
     let lock: WakeLockSentinel | null = null
@@ -366,6 +408,7 @@ function ActiveWorkout() {
   const routeSession = getSession(location.state)
   const [session, setSession] = useState<ActiveSession | null>(() => routeSession ?? readSavedSession())
   const [workoutName, setWorkoutName] = useState(() => session?.name ?? '')
+  const [fatigueLevel, setFatigueLevel] = useState<number | null>(() => session?.fatigueLevel ?? null)
   const [showFinish, setShowFinish] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [showAiAdjustment, setShowAiAdjustment] = useState(false)
@@ -380,6 +423,9 @@ function ActiveWorkout() {
   const [pendingSetRemoval, setPendingSetRemoval] = useState<PendingSetRemoval | null>(null)
   const [aiAdjustment, setAiAdjustment] = useState<AiAdjustmentState>({ status: 'idle' })
   const [adjustmentUndo, setAdjustmentUndo] = useState<AdjustmentUndo | null>(null)
+  const [showWarmup, setShowWarmup] = useState(false)
+  const [warmup, setWarmup] = useState<WarmupState>({ status: 'idle' })
+  const [selectedWarmupSteps, setSelectedWarmupSteps] = useState<number[]>([])
 
   const [isSelectModalOpen, setIsSelectModalOpen] = useState(() => {
     if (sessionStorage.getItem('set_plate_reopen_exercise_modal') === 'true') {
@@ -432,6 +478,7 @@ function ActiveWorkout() {
   }, [])
 
   const aiAdjustmentDialogRef = useDialogBehavior(showAiAdjustment, () => setShowAiAdjustment(false))
+  const warmupDialogRef = useDialogBehavior(showWarmup, () => setShowWarmup(false))
   const closeFinish = () => {
     setShowFinish(false)
     setConfirmDiscard(false)
@@ -819,12 +866,21 @@ function ActiveWorkout() {
     setRestRemaining((current) => exerciseIndex in current ? { ...current, [exerciseIndex]: seconds } : current)
   }
 
+  function selectFatigue(level: number) {
+    setFatigueLevel(level)
+    setSession((current) => current ? { ...current, fatigueLevel: level } : current)
+  }
+
   async function finishWorkout() {
     const user = getCurrentUser()
     const currentSession = session
     if (!currentSession) return
     if (!user?.id) {
       setSaveError('Sign in again to save this workout.')
+      return
+    }
+    if (fatigueLevel === null) {
+      setSaveError('Choose how fatigued you feel to save this workout.')
       return
     }
     setIsSaving(true)
@@ -836,6 +892,7 @@ function ActiveWorkout() {
       duration_seconds: elapsedSeconds(currentSession.startedAt),
       started_at: currentSession.startedAt,
       completed_at: new Date().toISOString(),
+      fatigue_level: fatigueLevel,
       exercises: currentSession.exercises.map(({ exercise_id, sets, is_cardio }, exerciseIndex) => ({
         exercise_id,
         is_cardio,
@@ -850,6 +907,7 @@ function ActiveWorkout() {
         await updateWorkoutHistoryEntry(user.id, currentSession.editWorkoutId, {
           name: payload.name,
           exercises: payload.exercises,
+          fatigue_level: payload.fatigue_level,
         })
       } else {
         await saveWorkoutLog(user.id, payload)
@@ -930,6 +988,96 @@ function ActiveWorkout() {
     if (aiAdjustment.status !== 'ready' || isStale) requestAiAdjustment()
   }
 
+  async function requestWarmup() {
+    const currentSession = session
+    const user = getCurrentUser()
+    if (!currentSession || warmup.status === 'loading') return
+    if (!user?.id) {
+      setWarmup({ status: 'error', message: 'Sign in to get a warm-up.' })
+      return
+    }
+    setWarmup({ status: 'loading' })
+    setSelectedWarmupSteps([])
+    try {
+      const recommendation = await requestWarmupRecommendation(
+        user.id,
+        buildWarmupRequest(currentSession, user.objective ?? null),
+      )
+      setWarmup({ status: 'ready', recommendation })
+    } catch (error) {
+      if (error instanceof PremiumRequiredError) {
+        setWarmup({ status: 'premium' })
+        return
+      }
+      setWarmup({
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unable to build your warm-up. Please try again.',
+      })
+    }
+  }
+
+  function addSelectedWarmupSteps() {
+    if (!session || session.warmupAdded || warmup.status !== 'ready') return
+
+    const steps = warmup.recommendation.steps.filter((_, index) => selectedWarmupSteps.includes(index))
+    if (!steps.length) return
+    const exerciseSteps = steps.filter((step) => step.exercise_id && step.sets.length > 0)
+    const activitySteps = steps.filter((step) => step.sets.length === 0)
+
+    const exercises = [...session.exercises]
+    let setKinds = { ...session.setKinds }
+    let nextRpeValues = { ...rpeValues }
+    for (const step of exerciseSteps) {
+      const exerciseIndex = exercises.findIndex((exercise) => exercise.exercise_id === step.exercise_id)
+      if (exerciseIndex === -1) continue
+
+      const exercise = exercises[exerciseIndex]
+      const nextIncompleteIndex = exercise.sets.findIndex((set) => !set.is_completed)
+      const insertIndex = nextIncompleteIndex === -1 ? exercise.sets.length : nextIncompleteIndex
+      const firstSetNumber = insertIndex + 1
+      const warmupSets = step.sets.map((set) => ({
+        weight_kg: set.weight_kg ?? 0,
+        reps: set.reps,
+        is_completed: false,
+      }))
+
+      for (let index = 0; index < warmupSets.length; index += 1) {
+        setKinds = insertSetIntoKeyedMap(setKinds, exerciseIndex, firstSetNumber)
+        nextRpeValues = insertSetIntoKeyedMap(nextRpeValues, exerciseIndex, firstSetNumber)
+      }
+      for (let index = 0; index < warmupSets.length; index += 1) {
+        setKinds[`${exerciseIndex}:${firstSetNumber + index}`] = 'warmup'
+      }
+
+      exercises[exerciseIndex] = {
+        ...exercise,
+        sets: [...exercise.sets.slice(0, insertIndex), ...warmupSets, ...exercise.sets.slice(insertIndex)]
+          .map((set, index) => ({ ...set, set_number: index + 1 })),
+      }
+    }
+
+    setSession({
+      ...session,
+      exercises,
+      setKinds,
+      warmupSteps: [...(session.warmupSteps ?? []), ...activitySteps],
+      warmupAdded: true,
+    })
+    setRpeValues(nextRpeValues)
+    setSelectedWarmupSteps([])
+    setShowWarmup(false)
+  }
+
+  function openWarmup() {
+    if (!session || session.editWorkoutId || session.warmupAdded) return
+    setShowWarmup(true)
+    if (!isPremiumActive()) {
+      setWarmup({ status: 'premium' })
+      return
+    }
+    requestWarmup()
+  }
+
   function rememberAdjustmentUndo(snapshot: AdjustmentUndo) {
     if (undoAdjustmentTimer.current !== null) window.clearTimeout(undoAdjustmentTimer.current)
     setAdjustmentUndo(snapshot)
@@ -1001,17 +1149,30 @@ function ActiveWorkout() {
           {!isEditingWorkout && <span className="header-clock" aria-label="Elapsed time"><ElapsedTime startedAt={session.startedAt} format={formatClock} /></span>}
         </div>
         {!isEditingWorkout && (
-          <button
-            className="ai-adjust-trigger"
-            type="button"
-            onClick={openAiAdjustment}
-            disabled={isSaving}
-            aria-label="Ask AI for adjustments"
-            title="Ask AI for adjustments"
-          >
-            <Sparkles size={16} aria-hidden="true" />
-            <span className="ai-adjust-label">AI</span>
-          </button>
+          <div className="header-actions">
+            <button
+              className="ai-adjust-trigger warmup-trigger"
+              type="button"
+              onClick={openWarmup}
+              disabled={isSaving || session.warmupAdded}
+              aria-label={session.warmupAdded ? 'Warm-up already added' : 'Recommend a warm-up'}
+              title={session.warmupAdded ? 'Warm-up already added' : 'Recommend a warm-up'}
+            >
+              <Flame size={16} aria-hidden="true" />
+              <span>Warm-up</span>
+            </button>
+            <button
+              className="ai-adjust-trigger"
+              type="button"
+              onClick={openAiAdjustment}
+              disabled={isSaving}
+              aria-label="Ask AI for adjustments"
+              title="Ask AI for adjustments"
+            >
+              <Sparkles size={16} aria-hidden="true" />
+              <span className="ai-adjust-label">AI</span>
+            </button>
+          </div>
         )}
         <button className="finish-button" type="button" onClick={() => setShowFinish(true)}>{isEditingWorkout ? 'Save' : 'Finish'}</button>
         <div className="session-progress" aria-label="Workout progress">
@@ -1022,6 +1183,21 @@ function ActiveWorkout() {
           <span>{volumeLabel}</span>
         </div>
       </header>
+
+      {session.warmupSteps?.length ? (
+        <section className="card active-warmup-card" aria-label="Added warm-up activities">
+          <h2>Warm-up activities</h2>
+          <ul>
+            {session.warmupSteps.map((step, index) => <li className="warmup-step" key={`${step.title}-${index}`}>
+              <div className="warmup-step-heading">
+                <strong>{step.title}</strong>
+                {step.duration_seconds ? <span>{formatWarmupDuration(step.duration_seconds)}</span> : null}
+              </div>
+              <p>{step.detail}</p>
+            </li>)}
+          </ul>
+        </section>
+      ) : null}
 
       <div className="active-exercise-list">
         {session.exercises.map((exercise, exerciseIndex) => {
@@ -1034,6 +1210,7 @@ function ActiveWorkout() {
               <MoreVertical size={19} aria-hidden="true" />
             </button>
             {menuOpen === exerciseIndex && <div className="exercise-menu">
+              <button type="button" onClick={() => navigate(`/exercises/${encodeURIComponent(exercise.exercise_id)}/guide`, { state: { fromWorkout: true } })}><Info size={15} aria-hidden="true" />How to do it</button>
               <button className="exercise-order-action" type="button" onClick={() => moveExercise(exerciseIndex, -1)} disabled={exerciseIndex === 0}><ArrowUp size={15} aria-hidden="true" />Move up</button>
               <button className="exercise-order-action" type="button" onClick={() => moveExercise(exerciseIndex, 1)} disabled={exerciseIndex === session.exercises.length - 1}><ArrowDown size={15} aria-hidden="true" />Move down</button>
               <button className="replace-exercise-action" type="button" onClick={() => replaceExercise(exerciseIndex)}><Repeat2 size={15} aria-hidden="true" />Replace exercise</button>
@@ -1314,6 +1491,78 @@ function ActiveWorkout() {
         </div>
       )}
 
+      {showWarmup && (
+        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowWarmup(false) }}>
+          <div className="confirmation-modal ai-adjust-modal warmup-modal" role="dialog" aria-modal="true" aria-labelledby="warmup-title" tabIndex={-1} ref={warmupDialogRef}>
+            <button className="modal-close" type="button" onClick={() => setShowWarmup(false)} aria-label="Close"><X size={20} /></button>
+            <p className="eyebrow">Warm-up</p>
+            <h2 id="warmup-title">Warm-up plan</h2>
+            {warmup.status === 'loading'
+              && <p className="ai-adjust-loading" role="status">Building a warm-up from your working weights...</p>}
+            {warmup.status === 'premium' && <div className="warmup-feedback">
+              <p className="warmup-copy">
+                <strong>Warm-up recommendations are a Premium feature.</strong> Upgrade to get a tailored
+                warm-up with ramp-up sets built from the weights you are about to lift.
+              </p>
+              <button
+                className="warmup-cta"
+                type="button"
+                onClick={() => navigate('/premium', { state: { from: location.pathname } })}
+              >
+                <Crown size={16} aria-hidden="true" />
+                Upgrade to Premium
+              </button>
+            </div>}
+            {warmup.status === 'ready' && <div className="warmup-plan">
+              <p className="warmup-summary">{warmup.recommendation.summary}</p>
+              <p className="warmup-total">
+                <Clock3 size={14} aria-hidden="true" />
+                About {formatWarmupDuration(warmup.recommendation.total_duration_seconds)}
+              </p>
+              <ul>
+                {warmup.recommendation.steps.map((step, index) => <li className="warmup-step" key={`${step.title}-${index}`}>
+                  <div className="warmup-step-heading">
+                    <label className="warmup-step-select">
+                      <input
+                        type="checkbox"
+                        checked={selectedWarmupSteps.includes(index)}
+                        onChange={(event) => setSelectedWarmupSteps((current) => event.target.checked
+                          ? [...current, index]
+                          : current.filter((selectedIndex) => selectedIndex !== index))}
+                      />
+                      <strong>{step.title}</strong>
+                    </label>
+                    {step.duration_seconds ? <span>{formatWarmupDuration(step.duration_seconds)}</span> : null}
+                  </div>
+                  <p>{step.detail}</p>
+                  {step.sets.length > 0 && <div className="warmup-sets">
+                    {step.sets.map((set, setIndex) => <span key={setIndex}>
+                      {set.weight_kg ? `${set.weight_kg} kg` : 'Bodyweight'} × {set.reps}
+                    </span>)}
+                  </div>}
+                </li>)}
+              </ul>
+              <button
+                className="warmup-cta"
+                type="button"
+                onClick={addSelectedWarmupSteps}
+                disabled={!selectedWarmupSteps.length}
+              >
+                <Plus size={16} aria-hidden="true" />
+                Add selected recommendations
+              </button>
+            </div>}
+            {warmup.status === 'error' && <div className="warmup-feedback">
+              <p className="ai-adjust-error" role="alert">{warmup.message}</p>
+              <button className="secondary-action" type="button" onClick={requestWarmup}>Try again</button>
+            </div>}
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" onClick={() => setShowWarmup(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showFinish && (
         <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeFinish() }}>
           <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="finish-title" tabIndex={-1} ref={finishDialogRef}>
@@ -1340,11 +1589,42 @@ function ActiveWorkout() {
                 disabled={isSaving}
               />
             </div>
+            <fieldset className="fatigue-field" aria-describedby="fatigue-hint">
+              <legend>How fatigued do you feel after this workout?</legend>
+              <div className="fatigue-scale">
+                {FATIGUE_LABELS.map((label, index) => {
+                  const level = index + 1
+                  return (
+                    <button
+                      key={level}
+                      type="button"
+                      className="fatigue-scale-button"
+                      aria-pressed={fatigueLevel === level}
+                      aria-label={`${level} of 10, ${label}`}
+                      onClick={() => selectFatigue(level)}
+                      disabled={isSaving}
+                    >
+                      {level}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="fatigue-hint" id="fatigue-hint">
+                {fatigueLevel === null
+                  ? 'Choose 1 (fresh) to 10 (exhausted). This tunes tomorrow’s calories and training.'
+                  : `${fatigueLevel}/10 · ${FATIGUE_LABELS[fatigueLevel - 1]}. Used for tomorrow’s calories and training.`}
+              </p>
+              {fatigueLevel !== null && fatigueLevel > 5 && (
+                <p className="fatigue-hint fatigue-hint-high">
+                  High fatigue: tomorrow’s calorie target gets a recovery bump and training volume will be reduced.
+                </p>
+              )}
+            </fieldset>
             {saveError && <p className="form-error">{saveError}</p>}
             <div className="modal-actions">
               <button className="secondary-action" type="button" onClick={closeFinish} disabled={isSaving}>Keep training</button>
               <button className="danger-action" type="button" onClick={discardWorkout} disabled={isSaving}>{confirmDiscard ? 'Tap again to discard' : session?.editWorkoutId ? 'Discard edits' : 'Discard workout'}</button>
-              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || (!isEditingWorkout && completedSets === 0 && completedCardio === 0)}>{isSaving ? 'Saving...' : session?.editWorkoutId ? 'Save changes' : 'Save workout'}</button>
+              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || fatigueLevel === null || (!isEditingWorkout && completedSets === 0 && completedCardio === 0)}>{isSaving ? 'Saving...' : session?.editWorkoutId ? 'Save changes' : 'Save workout'}</button>
             </div>
           </div>
         </div>

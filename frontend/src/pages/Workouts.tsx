@@ -1,10 +1,11 @@
-import { ArrowRight, ChevronDown, Dumbbell, Pencil, Plus, Repeat2, Trash2 } from 'lucide-react'
+import { ArrowRight, ChevronDown, Dumbbell, Pencil, Plus, Repeat2, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { deleteRoutine, deleteWorkoutHistoryEntry, fetchRoutines, fetchWorkoutHistory, getCurrentUser, readSavedCopy } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import { lastLifts, type LastLift } from '../utils/lastLifts'
+import { OvertrainingBanner } from '../components/workout/OvertrainingBanner'
 import type { ActiveExercise, Routine, WorkoutHistoryEntry } from '../types/workout'
 
 function formatWorkoutDuration(seconds: number): string {
@@ -18,22 +19,53 @@ function formatWorkoutDate(value: string): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
-// Routines store no weight, so each exercise starts from the last weight the user lifted for it.
+function getOvertrainingModPct(): number {
+  const modPct = Number(localStorage.getItem('set_plate_overtraining_mod_pct') || '0')
+  return Number.isFinite(modPct) && modPct > 0 ? modPct : 0
+}
+
+function applyOvertrainingVolumeReduction(targetSets: number): number {
+  const modPct = getOvertrainingModPct()
+  if (modPct > 0 && targetSets >= 2) {
+    // At least one set fewer (or -15%) once there are 2 sets or more.
+    return Math.max(1, Math.min(targetSets - 1, Math.round(targetSets * (1 - modPct / 100))))
+  }
+  return targetSets
+}
+
+function applyOvertrainingWeightReduction(weightKg: number): number {
+  const modPct = getOvertrainingModPct()
+  if (modPct > 0 && weightKg > 0) {
+    // Lower the load by the deload percentage, rounded to 0.5 kg.
+    const reduced = weightKg * (1 - modPct / 100)
+    return Math.max(0, Math.round(reduced * 2) / 2)
+  }
+  return weightKg
+}
+
+// Routines store no weight, so each exercise starts from the last weight the user lifted for it,
+// lowered while an overtraining deload is active.
 function createActiveExercises(routine: Routine, lifts: Map<string, LastLift>): ActiveExercise[] {
-  return routine.exercises.map((exercise) => ({
-    exercise_id: exercise.exercise_id,
-    name: exercise.name,
-    previous_weight_kg: lifts.get(exercise.exercise_id)?.weight_kg ?? null,
-    previous_reps: lifts.get(exercise.exercise_id)?.reps ?? null,
-    target_sets: exercise.target_sets,
-    target_reps: exercise.target_reps,
-    sets: Array.from({ length: exercise.target_sets ?? 1 }, (_, index) => ({
-      set_number: index + 1,
-      weight_kg: lifts.get(exercise.exercise_id)?.weight_kg ?? 0,
-      reps: exercise.reps_by_set?.[index] ?? exercise.target_reps ?? 0,
-      is_completed: false,
-    })),
-  }))
+  const modActive = getOvertrainingModPct() > 0
+  return routine.exercises.map((exercise) => {
+    const adjustedSets = applyOvertrainingVolumeReduction(exercise.target_sets ?? 1)
+    const lastWeight = lifts.get(exercise.exercise_id)?.weight_kg ?? null
+    return {
+      exercise_id: exercise.exercise_id,
+      name: exercise.name,
+      previous_weight_kg: lastWeight,
+      previous_reps: lifts.get(exercise.exercise_id)?.reps ?? null,
+      target_sets: adjustedSets,
+      target_reps: exercise.target_reps,
+      sets: Array.from({ length: adjustedSets }, (_, index) => ({
+        set_number: index + 1,
+        weight_kg: applyOvertrainingWeightReduction(lastWeight ?? 0),
+        reps: exercise.reps_by_set?.[index] ?? exercise.target_reps ?? 0,
+        rpe: modActive ? 6 : undefined,
+        is_completed: false,
+      })),
+    }
+  })
 }
 
 function summarizeSets(sets: WorkoutHistoryEntry['exercises'][number]['sets']): string {
@@ -77,6 +109,11 @@ function Workouts() {
   const [workoutToDelete, setWorkoutToDelete] = useState<WorkoutHistoryEntry | null>(null)
   const [isDeletingWorkout, setIsDeletingWorkout] = useState(false)
   const [workoutDeleteError, setWorkoutDeleteError] = useState<string | null>(null)
+  const [activeDeloadPct, setActiveDeloadPct] = useState<number>(() => getOvertrainingModPct())
+
+  useEffect(() => {
+    setActiveDeloadPct(getOvertrainingModPct())
+  }, [])
 
   useEffect(() => {
     fetchRoutines()
@@ -109,10 +146,12 @@ function Workouts() {
   }, [currentUserId])
 
   function startWorkout(routine?: Routine) {
+    const modActive = getOvertrainingModPct() > 0
+    const baseName = routine?.name ?? 'Empty workout'
     navigate('/workouts/active', {
       state: {
         routineId: routine?.id,
-        name: routine?.name ?? 'Empty workout',
+        name: modActive && routine ? `${baseName} (AI Deload -15%)` : baseName,
         startedAt: new Date().toISOString(),
         exercises: routine ? createActiveExercises(routine, lifts) : [],
       },
@@ -120,22 +159,26 @@ function Workouts() {
   }
 
   function repeatWorkout(workout: WorkoutHistoryEntry) {
+    const modActive = getOvertrainingModPct() > 0
     const exercises: ActiveExercise[] = workout.exercises.map((exercise) => {
       const previousSets = [...exercise.sets].sort((first, second) => first.set_number - second.set_number)
       const lastSet = previousSets[previousSets.length - 1]
+      const targetCount = applyOvertrainingVolumeReduction(previousSets.length || 1)
+      const slicedSets = previousSets.slice(0, targetCount)
 
       return {
         exercise_id: exercise.exercise_id,
         name: exercise.name,
         previous_weight_kg: lastSet?.weight_kg ?? null,
         previous_reps: lastSet?.reps ?? null,
-        target_sets: previousSets.length || 1,
+        target_sets: targetCount,
         target_reps: lastSet?.reps ?? null,
-        sets: previousSets.length > 0
-          ? previousSets.map((set, index) => ({
+        sets: slicedSets.length > 0
+          ? slicedSets.map((set, index) => ({
             set_number: index + 1,
-            weight_kg: set.weight_kg,
+            weight_kg: applyOvertrainingWeightReduction(set.weight_kg),
             reps: set.reps,
+            rpe: modActive ? 6 : undefined,
             is_completed: false,
           }))
           : [{ set_number: 1, weight_kg: 0, reps: 0, is_completed: false }],
@@ -144,7 +187,7 @@ function Workouts() {
 
     navigate('/workouts/active', {
       state: {
-        name: workout.name,
+        name: modActive ? `${workout.name} (AI Deload -15%)` : workout.name,
         startedAt: new Date().toISOString(),
         exercises,
       },
@@ -179,6 +222,7 @@ function Workouts() {
         editWorkoutId: workout.id,
         name: workout.name,
         startedAt: new Date().toISOString(),
+        fatigueLevel: workout.fatigue_level,
         exercises,
       },
     })
@@ -206,6 +250,17 @@ function Workouts() {
     sessionStorage.removeItem('set_plate_pending_exercise')
     setShowDiscardActiveWorkout(false)
     startWorkout()
+  }
+
+  function clearDeloadModification() {
+    localStorage.removeItem('set_plate_overtraining_mod_pct')
+    if (currentUserId) {
+      localStorage.setItem(
+        `set_plate_overtraining_state_${currentUserId}`,
+        JSON.stringify({ modsApplied: false, dismissed: false, dismissedAt: null }),
+      )
+    }
+    setActiveDeloadPct(0)
   }
 
   async function confirmDeleteRoutine() {
@@ -247,6 +302,54 @@ function Workouts() {
         </div>
         <button className="primary-button" type="button" onClick={requestEmptyWorkout}><Plus size={16} aria-hidden="true" /> Start a workout</button>
       </header>
+
+      <OvertrainingBanner workouts={workoutHistory} />
+
+      {activeDeloadPct > 0 && (
+        <div
+          role="status"
+          style={{
+            backgroundColor: 'rgba(139, 92, 246, 0.14)',
+            border: '1px solid rgba(168, 85, 247, 0.45)',
+            borderRadius: '14px',
+            padding: '12px 15px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Sparkles size={18} color="#c084fc" style={{ flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#f3e8ff' }}>
+                AI Deload Active (-{activeDeloadPct}% Volume &amp; Load, RPE 6 Cap)
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#d8b4fe', marginTop: '2px' }}>
+                Starting or repeating any workout below will automatically reduce sets and weights by {activeDeloadPct}%.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={clearDeloadModification}
+            style={{
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              color: '#e9d5ff',
+              borderRadius: '999px',
+              padding: '5px 10px',
+              fontSize: '11.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            Disable
+          </button>
+        </div>
+      )}
 
       {isLoading && <p className="visually-hidden" role="status">Loading routines...</p>}
       {error && <div className="card state-card" role="alert">{error}</div>}
@@ -310,7 +413,7 @@ function Workouts() {
                 <div className="routine-card-heading">
                   <div>
                     <h2>{workout.name}</h2>
-                    <p className="routine-meta">{formatWorkoutDate(workout.started_at)} · {formatWorkoutDuration(workout.duration_seconds)}</p>
+                    <p className="routine-meta">{formatWorkoutDate(workout.started_at)} · {formatWorkoutDuration(workout.duration_seconds)}{workout.fatigue_level != null && ` · Fatigue ${workout.fatigue_level}/10`}</p>
                   </div>
                   <div className="workout-history-actions">
                     <button

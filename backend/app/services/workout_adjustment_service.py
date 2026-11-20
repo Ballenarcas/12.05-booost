@@ -17,12 +17,14 @@ from app.services.ai_tip_history import clean_name, instant
 from app.services.ai_tips_service import accepted_training_notes
 from app.services.health_service import get_activity_summary
 from app.services.workout_program import (
+    FATIGUE_HIGH,
     MIN_EXERCISES,
     TARGET_EXERCISES,
     apply_prescription,
     build_session,
     clamp_targets,
     fallback_exercises,
+    fatigue_adjusted_guidance,
     objective_guidance,
     plan_errors,
     recent_covers_whole_body,
@@ -37,6 +39,8 @@ _SURPLUS_RATIO = 1.2
 MIN_PLAN_EXERCISES = MIN_EXERCISES  # shorter routines and past sessions are not a full day's training
 HISTORY_DAYS = 60
 MAX_HISTORY_OPTIONS = 3
+FATIGUE_WINDOW_DAYS = 7
+FATIGUE_RECENT_DAYS = 3  # only a recent session should ease tomorrow's plan
 
 
 def _is_gpt_oss(model: str) -> bool:
@@ -141,6 +145,39 @@ def _today_window() -> tuple[datetime, datetime]:
     return start, start + timedelta(days=1)
 
 
+def _recent_fatigue(db_session: Any, user_id: UUID) -> dict[str, Any]:
+    """Latest and weekly-average self-reported fatigue. A failed read never blocks planning."""
+    since = (datetime.now(timezone.utc) - timedelta(days=FATIGUE_WINDOW_DAYS)).isoformat()
+    try:
+        rows = _data(
+            db_session.table("workouts").select("fatigue_level,start_time")
+            .eq("user_id", str(user_id)).gte("start_time", since).execute()
+        )
+    except Exception:
+        logger.exception("Could not read workout fatigue")
+        return {"average": 0.0, "latest": 0.0, "workouts": 0}
+    levels: list[float] = []
+    latest = 0.0
+    latest_started: datetime | None = None
+    for row in rows:
+        level = row.get("fatigue_level")
+        if level is None:
+            continue
+        try:
+            value = float(level)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= value <= 10:
+            levels.append(value)
+            started = instant(row.get("start_time"))
+            if started is not None and (latest_started is None or started > latest_started):
+                latest_started, latest = started, value
+    if latest_started is not None and latest_started < datetime.now(timezone.utc) - timedelta(days=FATIGUE_RECENT_DAYS):
+        latest = 0.0
+    average = round(sum(levels) / len(levels), 1) if levels else 0.0
+    return {"average": average, "latest": latest, "workouts": len(levels)}
+
+
 def _exercise_name(row: dict[str, Any]) -> str:
     exercise = row.get("exercises")
     if isinstance(exercise, list):
@@ -177,7 +214,9 @@ def _fetch_exercise_catalog(db_session: Any) -> list[dict[str, Any]]:
     start = 0
     while True:
         page = _data(
+            # Shared catalog only: rows with an owner are someone's private custom exercises.
             db_session.table("exercises").select("id,name,muscle_group,muscles,equipment")
+            .is_("owner_id", "null")
             .order("id").range(start, start + page_size - 1).execute()
         )
         rows.extend(page)
@@ -500,7 +539,9 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         if not (set(routine["muscle_groups"]) & recent_muscle_groups)
     ]
     objective = user.get("objective")
-    guidance = objective_guidance(objective)
+    fatigue = _recent_fatigue(db_session, user_id)
+    fatigue_is_high = fatigue["latest"] >= FATIGUE_HIGH
+    guidance = fatigue_adjusted_guidance(objective_guidance(objective), fatigue["latest"])
     from_history = False
     if not safe_routines:
         safe_routines = _load_history_sessions(db_session, user_id, recent_muscle_groups, guidance)
@@ -633,6 +674,12 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         "health_activity": activity.model_dump(mode="json") if activity.connected else None,
         "calorie_status": calorie_status,
         "recent_muscle_groups": sorted(recent_muscle_groups),
+        "workout_fatigue": {
+            "latest": fatigue["latest"],
+            "average_last_7_days": fatigue["average"],
+            "workouts": fatigue["workouts"],
+            "status": "high" if fatigue_is_high else "normal",
+        } if fatigue["workouts"] else None,
         "program": program_context,
         "available_routines": routine_context,
         "available_exercises": exercise_context if not routine_context else [],
@@ -640,7 +687,14 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
             + " Set adjusted true if you changed a saved routine or created a new workout; otherwise use false."
             + " Health Connect steps and active calories are energy already spent outside training. When they are high,"
             + " prefer recovery or hold the current volume instead of adding load; mention the activity in the reasoning."
-            + " If recovery is the better choice today, set rest_day true, return routine_id null, workout_name \"Rest day\", an empty exercises array, and a short reasoning.",
+            + " If recovery is the better choice today, set rest_day true, return routine_id null, workout_name \"Rest day\", an empty exercises array, and a short reasoning."
+            + (
+                f" Recent self-reported fatigue is {fatigue['latest']}/10 after the latest workout"
+                f" (7-day average {fatigue['average']}/10)."
+                " Keep sets at the lower end of the range, hold or lower the load, and prefer technique and recovery"
+                " over extra volume while respecting the user's goal."
+                if fatigue_is_high else ""
+            ),
     }
     commitments = accepted_training_notes(user_id, start, db_session)
     if commitments:
@@ -726,10 +780,23 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
             planned["previous_weight_kg"] = source["previous_weight_kg"]
         plan_exercises.append(planned)
 
+    if fatigue_is_high:
+        for planned in plan_exercises:
+            planned["sets"] = max(guidance["min_sets"], min(int(planned["sets"]), guidance["max_sets"]))
+
     if from_history:
         selected_routine_id = None  # a past workout's id is not a saved routine
         reason = f"Based on your {workout_name} session from {selected_routine['last_done']}. Its muscles have recovered."
         result["reasoning"] = f"{reason} {result['reasoning']}" if result["adjusted"] else reason
+        result["adjusted"] = True
+
+    if fatigue_is_high:
+        note = (
+            f"Latest fatigue was {fatigue['latest']}/10, so volume was trimmed to "
+            f"{guidance['min_sets']}-{guidance['max_sets']} sets per exercise."
+        )
+        existing = result["reasoning"].strip()
+        result["reasoning"] = f"{existing} {note}" if existing else note
         result["adjusted"] = True
 
     try:

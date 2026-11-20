@@ -5,7 +5,7 @@ import WeekActivity from '../components/home/WeekActivity'
 import DailyIntake from '../components/nutrition/DailyIntake'
 import HydrationCard from '../components/home/HydrationCard'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
+import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, isPremiumActive, planTodaysWorkout, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
 
 // Nothing shows while loading; screen readers still hear it.
@@ -76,7 +76,10 @@ function Home() {
       <section className="section" aria-labelledby="nutrition-summary">
         <div className="section-heading">
           <h2 className="section-title" id="nutrition-summary">Nutrition</h2>
-          <button className="text-link" type="button" onClick={() => navigate('/log-meals')}>Log a meal</button>
+          <span className="section-links">
+            <button className="text-link" type="button" onClick={() => navigate(isPremiumActive(user) ? '/scan-meal' : '/premium')}>Scan plate</button>
+            <button className="text-link" type="button" onClick={() => navigate('/log-meals')}>Log a meal</button>
+          </span>
         </div>
         <DailyIntake
           consumed={nutrition ? nutrition.target_kcals - nutrition.remaining_kcals : 0}

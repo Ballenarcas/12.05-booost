@@ -1,22 +1,36 @@
 import asyncio
+import logging
 from uuid import UUID
 
 from fastapi import HTTPException
 
+from app.core.ai_quota import use_ai_call
 from app.core.local_day import LocalDay
 from app.db.supabase_client import get_supabase
 from app.schemas.exercise import Exercise
+from app.schemas.overtraining import (
+    FatigueFeedbackCreate,
+    FatigueFeedbackEntry,
+    OvertrainingStatusResponse,
+)
 from app.schemas.workout import (
     CustomExerciseCreate,
     LiveWorkoutAdjustmentRequest,
     LiveWorkoutAdjustmentSuggestion,
     RoutineCreate,
     RoutineSummary,
+    WarmupRecommendationRequest,
+    WarmupRecommendationResponse,
 )
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
 from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
-from app.services import workout_service, workout_statistics_service
+from app.services import overtraining_service, workout_service, workout_statistics_service
+from app.services.exercise_guide_service import guide_for
+from app.services.premium_service import has_premium_flag
+from app.services.warmup_service import build_warmup_recommendation
 from app.services.workout_adjustment_service import plan_daily_workout, suggest_live_adjustment
+
+logger = logging.getLogger(__name__)
 
 
 class WorkoutFacade:
@@ -30,6 +44,24 @@ class WorkoutFacade:
 
     async def suggest_adjustment(self, payload: LiveWorkoutAdjustmentRequest) -> list[LiveWorkoutAdjustmentSuggestion]:
         return await suggest_live_adjustment(payload.model_dump(mode="json"))
+
+    def recommend_warmup(
+        self,
+        user_id: UUID,
+        payload: WarmupRecommendationRequest,
+    ) -> WarmupRecommendationResponse:
+        try:
+            is_premium = has_premium_flag(str(user_id))
+        except Exception as error:
+            logger.exception("Could not check the premium flag")
+            raise HTTPException(status_code=503, detail="Could not check your Premium status. Please try again.") from error
+        if not is_premium:
+            raise HTTPException(
+                status_code=403,
+                detail="Warm-up recommendations are a Premium feature. Upgrade to Premium to unlock them.",
+            )
+        use_ai_call(user_id)
+        return build_warmup_recommendation(payload)
 
     def save_log(self, user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResponse:
         return workout_service.save_workout_log(user_id, payload)
@@ -80,7 +112,8 @@ class WorkoutFacade:
         return workout_service.get_exercise_muscle_groups()
 
     def get_exercise_by_id(self, exercise_id: str, user_id: UUID | None = None):
-        return workout_service.get_exercise_by_id(exercise_id, user_id=user_id)
+        exercise = workout_service.get_exercise_by_id(exercise_id, user_id=user_id)
+        return exercise.model_copy(update={"guide": guide_for(exercise)}) if exercise else None
 
     def create_custom_exercise(self, user_id: UUID, payload: CustomExerciseCreate) -> Exercise:
         return workout_service.create_custom_exercise(user_id, payload)
@@ -91,5 +124,17 @@ class WorkoutFacade:
     def delete_custom_exercise(self, user_id: UUID, exercise_id: str) -> None:
         workout_service.delete_custom_exercise(user_id, exercise_id)
 
+    def get_overtraining_status(self, user_id: UUID) -> OvertrainingStatusResponse:
+        return overtraining_service.evaluate_overtraining(user_id)
 
-workout_facade = WorkoutFacade();
+    def submit_fatigue_feedback(self, user_id: UUID, payload: FatigueFeedbackCreate) -> FatigueFeedbackEntry:
+        return overtraining_service.record_fatigue_feedback(user_id, payload)
+
+    def apply_overtraining_mods(self, user_id: UUID) -> OvertrainingStatusResponse:
+        return overtraining_service.apply_overtraining_mods(user_id)
+
+    def dismiss_overtraining_alert(self, user_id: UUID) -> OvertrainingStatusResponse:
+        return overtraining_service.dismiss_overtraining_alert(user_id)
+
+
+workout_facade = WorkoutFacade()

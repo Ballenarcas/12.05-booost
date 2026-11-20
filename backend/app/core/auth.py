@@ -74,3 +74,12 @@ def current_user(
         raise _unauthorized()
     return UUID(_verify_token(credentials.credentials))
 
+
+def optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> UUID | None:
+    """The signed-in user, or None without a token. A bad token is still rejected."""
+    if credentials is None:
+        return None
+    return UUID(_verify_token(credentials.credentials))
+

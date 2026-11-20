@@ -5,10 +5,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 class CustomExerciseCreate(BaseModel):
     name: str = Field(min_length=2, max_length=50)
-    muscle_group: str = Field(min_length=1)
-    muscles: list[str] = Field(default_factory=list)
-    muscles_secondary: list[str] = Field(default_factory=list)
-    equipment: list[str] = Field(default_factory=list)
+    muscle_group: str = Field(min_length=1, max_length=40)
+    muscles: list[str] = Field(default_factory=list, max_length=20)
+    muscles_secondary: list[str] = Field(default_factory=list, max_length=20)
+    equipment: list[str] = Field(default_factory=list, max_length=10)
     description: str | None = Field(default=None, max_length=500)
 
     @field_validator("name", mode="before")
@@ -108,4 +108,37 @@ class LiveWorkoutAdjustmentSuggestion(BaseModel):
 
 
 class LiveWorkoutAdjustmentResponse(BaseModel):
-    suggestions: list[LiveWorkoutAdjustmentSuggestion];
+    suggestions: list[LiveWorkoutAdjustmentSuggestion]
+
+
+class WarmupExercise(BaseModel):
+    exercise_id: str = Field(max_length=64)
+    name: str = Field(max_length=120)
+    is_cardio: bool = False
+    working_weight_kg: float | None = Field(default=None, ge=0)
+    target_reps: int | None = Field(default=None, ge=1, le=50)
+
+
+class WarmupRecommendationRequest(BaseModel):
+    name: str = Field(default="Workout", max_length=120)
+    user_goal: str | None = Field(default=None, max_length=200)
+    exercises: list[WarmupExercise] = Field(min_length=1, max_length=30)
+
+
+class WarmupSet(BaseModel):
+    weight_kg: float | None = Field(default=None, ge=0)
+    reps: int = Field(ge=1, le=50)
+
+
+class WarmupStep(BaseModel):
+    title: str
+    detail: str
+    duration_seconds: int | None = Field(default=None, ge=0)
+    exercise_id: str | None = None
+    sets: list[WarmupSet] = Field(default_factory=list)
+
+
+class WarmupRecommendationResponse(BaseModel):
+    summary: str
+    total_duration_seconds: int = Field(ge=0)
+    steps: list[WarmupStep]

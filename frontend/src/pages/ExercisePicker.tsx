@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Info, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { usePageNavigate } from '../utils/usePageNavigate'
@@ -92,13 +92,18 @@ function ExercisePicker() {
 
       <div className="exercise-picker-list">
         {exercises.map((exercise) => (
-          <button className="exercise-picker-item" type="button" key={exercise.id} onClick={() => selectExercise(exercise)}>
-            {exercise.images?.[0] ? <img src={exercise.images[0]} alt="" /> : <div className="exercise-image-placeholder" aria-hidden="true">+</div>}
-            <span>
-              <strong>{exercise.name}</strong>
-              <small>{exercise.muscles?.slice(0, 2).join(' · ') || exercise.category}</small>
-            </span>
-          </button>
+          <div className="exercise-picker-row" key={exercise.id}>
+            <button className="exercise-picker-item" type="button" onClick={() => selectExercise(exercise)}>
+              {exercise.images?.[0] ? <img src={exercise.images[0]} alt="" /> : <div className="exercise-image-placeholder" aria-hidden="true">+</div>}
+              <span>
+                <strong>{exercise.name}</strong>
+                <small>{exercise.muscles?.slice(0, 2).join(' · ') || exercise.category}</small>
+              </span>
+            </button>
+            <button className="icon-button ghost" type="button" aria-label={`How to do ${exercise.name}`} onClick={() => navigate(`/exercises/${encodeURIComponent(exercise.id)}/guide`, { state: { replaceExerciseIndex } })}>
+              <Info size={19} aria-hidden="true" />
+            </button>
+          </div>
         ))}
       </div>
       <MediaCredit />

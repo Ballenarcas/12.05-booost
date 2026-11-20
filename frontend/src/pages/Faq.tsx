@@ -5,7 +5,7 @@ import { usePageNavigate } from '../utils/usePageNavigate'
 const FAQ_ITEMS = [
   {
     question: "How does the AI Trainer work?",
-    answer: "The AI trainer analyzes your workout history, current fatigue levels (RPE), and recent performance to suggest real-time adjustments to your sets, reps, and weights to optimize hypertrophy and prevent overtraining."
+    answer: "The AI trainer analyzes your workout history, current fatigue levels (RPE), and recent performance to suggest real-time adjustments to your sets, reps, and weights to optimize hypertrophy and prevent overtraining. After each workout you also rate your fatigue from 1 to 10, and the trainer uses that rating to tune the next day's calorie target and training volume for your goal."
   },
   {
     question: "How do I log cardio exercises?",

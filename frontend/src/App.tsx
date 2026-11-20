@@ -18,6 +18,9 @@ const pages = {
   Onboarding: () => import('./pages/Onboarding'),
   Premium: () => import('./pages/Premium'),
   Profile: () => import('./pages/Profile'),
+  ExerciseGuide: () => import('./pages/ExerciseGuide'),
+  OvertrainingAlerts: () => import('./pages/OvertrainingAlerts'),
+  ScanMeal: () => import('./pages/ScanMeal'),
   Faq: () => import('./pages/Faq'),
   Welcome: () => import('./pages/Welcome'),
   Workouts: () => import('./pages/Workouts'),
@@ -53,6 +56,9 @@ const Nutrition = lazy(pages.Nutrition)
 const Onboarding = lazy(pages.Onboarding)
 const Premium = lazy(pages.Premium)
 const Profile = lazy(pages.Profile)
+const ExerciseGuide = lazy(pages.ExerciseGuide)
+const OvertrainingAlerts = lazy(pages.OvertrainingAlerts)
+const ScanMeal = lazy(pages.ScanMeal)
 const Faq = lazy(pages.Faq)
 const Welcome = lazy(pages.Welcome)
 const Workouts = lazy(pages.Workouts)
@@ -80,9 +86,12 @@ function App() {
             <Route path="/workouts/create" element={<CreateRoutine />} />
             <Route path="/workouts/active" element={<ActiveWorkout />} />
             <Route path="/workouts/active/exercises" element={<ExercisePicker />} />
-            <Route path="/exercises/custom" element={<CustomExercise />} /> {/* <-- Création d'exercice */}
-            <Route path="/exercises/custom/:id" element={<CustomExercise />} /> {/* <-- Édition d'exercice */}
+            <Route path="/exercises/:id/guide" element={<ExerciseGuide />} />
+            <Route path="/exercises/custom" element={<CustomExercise />} />
+            <Route path="/exercises/custom/:id" element={<CustomExercise />} />
+            <Route path="/overtraining-alerts" element={<OvertrainingAlerts />} />
             <Route path="/nutrition" element={<Nutrition />} />
+            <Route path="/scan-meal" element={<ScanMeal />} />
             <Route path="/hydration/history" element={<HydrationHistory />} />
             <Route path="/premium" element={<Premium />} />
             <Route path="/profile" element={<Profile />} />

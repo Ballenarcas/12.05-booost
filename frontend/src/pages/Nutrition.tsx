@@ -1,13 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, Camera, ChevronLeft, ChevronRight, Loader2, PenLine, Plus, Scale, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Camera, ChefHat, ChevronLeft, ChevronRight, Heart, Loader2, PenLine, Plus, Scale, Search, Trash2, X } from 'lucide-react';
 import { usePageNavigate } from '../utils/usePageNavigate';
-import { deleteMealLog, fetchTodayNutrition, getCurrentUser, getSavedDayNutrition, searchFoodItems, updateMealLog, type TodayNutritionData } from '../services/api';
+import {
+  addFavoriteMeal,
+  addMealLog,
+  deleteFavoriteMeal,
+  deleteMealLog,
+  fetchFavoriteMeals,
+  fetchTodayNutrition,
+  getCurrentUser,
+  getSavedDayNutrition,
+  isPremiumActive,
+  searchFoodItems,
+  updateFavoriteMeal,
+  updateMealLog,
+  type TodayNutritionData,
+} from '../services/api';
 import DailyIntake from '../components/nutrition/DailyIntake';
 import MealDatePicker from '../components/nutrition/MealDatePicker';
+import FavoriteMealsModal from '../components/nutrition/FavoriteMealsModal';
+import MealRecommendationsModal from '../components/nutrition/MealRecommendationsModal';
 import { sameDay } from '../utils/monthGrid';
-import type { FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
+import type { FavoriteMeal, FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
 import HydrationCard from '../components/home/HydrationCard';
 import '../styles/log-meals.css';
+
+// Names match ignoring case, like the server's unique rule.
+const favoriteKey = (mealType: string, name: string) => `${mealType}|${name.trim().toLowerCase()}`;
 
 const DEFAULT_FOOD_DENSITY = {
   calories_per_100g: 130,
@@ -43,6 +62,7 @@ function toInputDate(date: Date): string {
 
 export default function Nutrition() {
   const navigate = usePageNavigate();
+  const scanTarget = isPremiumActive(getCurrentUser()) ? '/scan-meal' : '/premium';
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   // Start from the copy saved earlier in this visit, so the card and list show at once.
   const [cachedToday] = useState(() => getSavedDayNutrition(getCurrentUser()?.id ?? '', toInputDate(new Date())));
@@ -71,6 +91,92 @@ export default function Nutrition() {
   const [highQuantityWarning, setHighQuantityWarning] = useState<HighQuantityWarning | null>(null);
   const ingredientQuantityStartRef = useRef<Record<number, number>>({});
   const newQuantityStartRef = useRef<number>(FALLBACK_QUANTITY_G);
+
+  const [favorites, setFavorites] = useState<FavoriteMeal[]>([]);
+  const [isLoadingFavorites, setIsLoadingFavorites] = useState(true);
+  const [favoritesError, setFavoritesError] = useState<string | null>(null);
+  const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
+  // Set while the edit dialog is editing a favorite instead of a logged meal.
+  const [editingFavoriteId, setEditingFavoriteId] = useState<string | null>(null);
+  const [heartBusyId, setHeartBusyId] = useState<string | null>(null);
+  const [favoriteNotice, setFavoriteNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchFavoriteMeals()
+      .then(setFavorites)
+      .catch((error: unknown) => setFavoritesError(error instanceof Error ? error.message : "We couldn't load your favorite meals."))
+      .finally(() => setIsLoadingFavorites(false));
+  }, []);
+
+  const favoritesByKey = new Map(favorites.map((favorite) => [favoriteKey(favorite.meal_type, favorite.name), favorite]));
+
+  const toggleFavorite = async (meal: MealLogItem) => {
+    const existing = favoritesByKey.get(favoriteKey(meal.meal_type, meal.meal_name));
+    setHeartBusyId(meal.id);
+    setFavoriteNotice(null);
+    try {
+      if (existing) {
+        await deleteFavoriteMeal(existing.id);
+        setFavorites((current) => current.filter((favorite) => favorite.id !== existing.id));
+      } else {
+        const saved = await addFavoriteMeal(meal.id);
+        setFavorites((current) => [saved, ...current.filter((favorite) => favorite.id !== saved.id)]);
+      }
+    } catch (error) {
+      setFavoriteNotice(error instanceof Error ? error.message : "We couldn't update your favorites.");
+    } finally {
+      setHeartBusyId(null);
+    }
+  };
+
+  const logFavorite = async (favorite: FavoriteMeal, consumedAt: Date | null) => {
+    const user = getCurrentUser();
+    if (!user?.id) throw new Error('Sign in again to log this meal.');
+    await addMealLog({
+      user_id: user.id,
+      name: favorite.name,
+      meal_type: favorite.meal_type,
+      ...(favorite.ingredients.length
+        ? { ingredients: favorite.ingredients }
+        : { calories: favorite.calories, quantity_g: favorite.quantity_g, proteins: favorite.proteins_g, carbs: favorite.carbs_g, fats: favorite.fats_g }),
+      ...(consumedAt ? { consumed_at: consumedAt.toISOString() } : {}),
+    });
+    setIsFavoritesOpen(false);
+    // Show the day it was logged to; a new Date also reloads the list when it's the same day.
+    setSelectedDate(consumedAt ?? new Date());
+  };
+
+  const removeFavorite = async (favorite: FavoriteMeal) => {
+    await deleteFavoriteMeal(favorite.id);
+    setFavorites((current) => current.filter((item) => item.id !== favorite.id));
+  };
+
+  const editFavorite = (favorite: FavoriteMeal) => {
+    setIsFavoritesOpen(false);
+    setEditingFavoriteId(favorite.id);
+    openEditModal({
+      id: favorite.id,
+      user_id: '',
+      meal_name: favorite.name,
+      meal_type: favorite.meal_type,
+      portion_amount: '1',
+      weight_g: String(favorite.quantity_g),
+      item_calories: favorite.calories,
+      proteins_g: favorite.proteins_g,
+      carbs_g: favorite.carbs_g,
+      fats_g: favorite.fats_g,
+      ingredients: favorite.ingredients,
+    });
+  };
+
+  const closeEditor = () => {
+    setEditingMeal(null);
+    if (editingFavoriteId) {
+      setEditingFavoriteId(null);
+      setIsFavoritesOpen(true);
+    }
+  };
 
   // SE DÉCLENCHE À CHAQUE CHANGEMENT DE DATE DANS LE CALENDRIER
   useEffect(() => {
@@ -283,12 +389,19 @@ export default function Nutrition() {
     }
     setIsSavingEdit(true);
     setEditError(null);
+    const changes = {
+      name: editIngredients.map((ingredient) => ingredient.name).join(' + '),
+      meal_type: editMealType,
+      ingredients: editIngredients,
+    };
     try {
-      const updatedMeal = await updateMealLog(user.id, editingMeal.id, {
-        name: editIngredients.map((ingredient) => ingredient.name).join(' + '),
-        meal_type: editMealType,
-        ingredients: editIngredients,
-      });
+      if (editingFavoriteId) {
+        const updated = await updateFavoriteMeal(editingFavoriteId, changes);
+        setFavorites((current) => current.map((favorite) => favorite.id === updated.id ? updated : favorite));
+        closeEditor();
+        return;
+      }
+      const updatedMeal = await updateMealLog(user.id, editingMeal.id, changes);
       setMeals((current) => current.map((meal) => meal.id === updatedMeal.id ? updatedMeal : meal));
       setEditingMeal(null);
     } catch (error) {
@@ -377,6 +490,22 @@ export default function Nutrition() {
         ]}
       />
 
+      <div className="action-row">
+        <button className="action-button" type="button" onClick={() => { setFavoriteNotice(null); setIsFavoritesOpen(true); }}>
+          <Heart size={17} aria-hidden="true" /> Favorites{favorites.length > 0 && ` · ${favorites.length}`}
+        </button>
+        <button
+          className="action-button"
+          type="button"
+          // Non-Premium users see the paywall; the server checks Premium again on every request.
+          onClick={() => (isPremiumActive() ? setIsSuggestionsOpen(true) : navigate('/premium'))}
+          aria-label={isPremiumActive() ? 'Suggested meals' : 'Suggested meals, available with Pro'}
+        >
+          <ChefHat size={17} aria-hidden="true" /> Suggestions {!isPremiumActive() && <span className="pro-badge">Pro</span>}
+        </button>
+      </div>
+      {favoriteNotice && <p className="form-error" role="alert">{favoriteNotice}</p>}
+
       <h2 className="meals-subtitle meal-list-title" id="nutrition-hydration">Hydration today</h2>
       <section className="meal-hydration" aria-labelledby="nutrition-hydration">
         <HydrationCard />
@@ -391,13 +520,25 @@ export default function Nutrition() {
           <p className="state-line">No meals recorded for this day.</p>
         ) : (
           meals.map((meal) => (
-            <button className="meal-row" type="button" key={meal.id} onClick={() => openEditModal(meal)} aria-label={`${meal.meal_type}: ${meal.meal_name}, ${meal.item_calories} kcal. Edit`}>
+            <div className="meal-row-wrap" key={meal.id}>
+              <button className="meal-row" type="button" onClick={() => openEditModal(meal)} aria-label={`${meal.meal_type}: ${meal.meal_name}, ${meal.item_calories} kcal. Edit`}>
               <span className="meal-row-text">
                 <strong>{meal.meal_type}</strong>
                 <small>{meal.meal_name}</small>
               </span>
               <span className="meal-row-kcal">{meal.item_calories}kcal</span>
             </button>
+              <button
+                className="icon-button ghost"
+                type="button"
+                onClick={() => toggleFavorite(meal)}
+                disabled={heartBusyId === meal.id}
+                aria-pressed={favoritesByKey.has(favoriteKey(meal.meal_type, meal.meal_name))}
+                aria-label={favoritesByKey.has(favoriteKey(meal.meal_type, meal.meal_name)) ? `Remove ${meal.meal_name} from favorites` : `Save ${meal.meal_name} as a favorite`}
+              >
+                <Heart size={18} aria-hidden="true" fill={favoritesByKey.has(favoriteKey(meal.meal_type, meal.meal_name)) ? 'currentColor' : 'none'} />
+              </button>
+            </div>
           ))
         )}
       </div>
@@ -408,8 +549,8 @@ export default function Nutrition() {
             <button className="action-button" type="button" onClick={() => navigate('/log-meals')}>
               <PenLine size={17} aria-hidden="true" /> Manual entry
             </button>
-            <button className="action-button" type="button" disabled aria-label="Scan your meal, available with Pro">
-              <Camera size={17} aria-hidden="true" /> Scan meal <span className="pro-badge">Pro</span>
+            <button className="action-button" type="button" onClick={() => navigate(scanTarget)}>
+              <Camera size={17} aria-hidden="true" /> Scan meal {!isPremiumActive() && <span className="pro-badge">Pro</span>}
             </button>
         </div>
         <button className="primary-button meal-add-button" type="button" aria-expanded={isAddOpen} aria-controls="meal-add-options" onClick={() => setIsAddOpen((open) => !open)}>
@@ -418,14 +559,16 @@ export default function Nutrition() {
       </div>
 
       {editingMeal && (
-        <div className="modal-backdrop" onClick={() => !isSavingEdit && setEditingMeal(null)}>
+        <div className="modal-backdrop" onClick={() => !isSavingEdit && closeEditor()}>
           <div className="modal-dialog" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="edit-meal-title">
             <div className="modal-header">
               <div>
-                <h2 id="edit-meal-title" className="modal-title">Edit meal</h2>
-                <p className="card-subtitle">Update ingredients and portion sizes.</p>
+                <h2 id="edit-meal-title" className="modal-title">{editingFavoriteId ? 'Edit favorite' : 'Edit meal'}</h2>
+                <p className="card-subtitle">
+                  {editingFavoriteId ? 'Changes apply next time you add it. Meals already logged stay the same.' : 'Update ingredients and portion sizes.'}
+                </p>
               </div>
-              <button type="button" className="btn-modal-close" onClick={() => setEditingMeal(null)} aria-label="Close editor" disabled={isSavingEdit}>
+              <button type="button" className="btn-modal-close" onClick={closeEditor} aria-label="Close editor" disabled={isSavingEdit}>
                 <X size={20} />
               </button>
             </div>
@@ -549,6 +692,27 @@ export default function Nutrition() {
             </form>
           </div>
         </div>
+      )}
+
+      {isFavoritesOpen && (
+        <FavoriteMealsModal
+          favorites={favorites}
+          isLoading={isLoadingFavorites}
+          loadError={favoritesError}
+          onClose={() => setIsFavoritesOpen(false)}
+          onLog={logFavorite}
+          onEdit={editFavorite}
+          onDelete={removeFavorite}
+        />
+      )}
+
+      {isSuggestionsOpen && (
+        <MealRecommendationsModal
+          onClose={() => setIsSuggestionsOpen(false)}
+          // Suggestions are logged to today, so show today with the new meal.
+          onAdded={() => setSelectedDate(new Date())}
+          onPremiumRequired={() => navigate('/premium')}
+        />
       )}
 
       {highQuantityWarning && (

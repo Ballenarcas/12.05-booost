@@ -1,5 +1,6 @@
-import { Dumbbell, PieChart, TrendingUp } from 'lucide-react'
+import { Dumbbell, HeartPulse, PieChart, TrendingUp } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import FatigueHistoryChart from '../components/workout/FatigueHistoryChart'
 import MuscleGroupDistributionChart from '../components/workout/MuscleGroupDistributionChart'
 import VolumeProgressionChart from '../components/workout/VolumeProgressionChart'
 import { fetchWorkoutStatistics, getCurrentUser, getSavedWorkoutStatistics } from '../services/api'
@@ -10,6 +11,8 @@ import {
   STATISTICS_RANGES,
   formatCompactDuration,
   formatCompactVolumeKg,
+  formatFatigueAverage,
+  formatFatigueDay,
   formatStatisticsDateRange,
   formatStatisticsDuration,
   formatVolumeKg,
@@ -127,6 +130,9 @@ function WorkoutStatisticsPage() {
     : null
   const volumeEmpty = data?.volume_progression.length === 0
   const distributionEmpty = data?.muscle_group_distribution.length === 0
+  const fatigueHistory = data?.fatigue_history ?? []
+  const fatigueEmpty = fatigueHistory.length === 0
+  const latestFatigue = fatigueHistory[fatigueHistory.length - 1]
 
   return (
     <div className="screen workout-stats-screen" aria-busy={isLoading}>
@@ -253,6 +259,51 @@ function WorkoutStatisticsPage() {
                 {formatVolumeKg(data.classified_volume_kg)} kg classified of {formatVolumeKg(data.total_volume_kg)} kg recorded volume.
                 {data.unclassified_volume_kg > 0 && ` ${formatVolumeKg(data.unclassified_volume_kg)} kg could not be mapped to a muscle group and is excluded from the chart.`}
               </p>
+            )}
+          </section>
+
+          <section className="card stats-panel stats-fatigue-panel" aria-labelledby="fatigue-history-title">
+            <div className="stats-panel-heading">
+              <div>
+                <h2 id="fatigue-history-title"><HeartPulse size={17} aria-hidden="true" /> Fatigue History</h2>
+                <p>Your latest fatigue rating from each workout day, saved with the workout. This history covers all time.</p>
+              </div>
+              {!fatigueEmpty && (
+                <span className="stats-panel-total">Avg {formatFatigueAverage(data.fatigue_average)}/10</span>
+              )}
+            </div>
+            {fatigueEmpty ? (
+              <div className="stats-chart-empty" role="status">
+                <HeartPulse size={24} aria-hidden="true" />
+                <p>No fatigue ratings yet.</p>
+                <span>Finish a workout and rate how tired you felt. Each rating will appear here by workout date.</span>
+              </div>
+            ) : (
+              <>
+                <FatigueHistoryChart points={fatigueHistory} />
+                <ol className="stats-fatigue-list" aria-label="Fatigue history by workout date, newest first">
+                  {[...fatigueHistory].reverse().map((point) => (
+                    <li
+                      className={`stats-fatigue-item${point.fatigue_level > 5 ? ' stats-fatigue-item-high' : ''}`}
+                      key={point.date}
+                    >
+                      <span className="stats-fatigue-dot" aria-hidden="true" />
+                      <div className="stats-fatigue-details">
+                        <span className="stats-fatigue-date">{formatFatigueDay(point.date)}</span>
+                        <span className="stats-fatigue-name">
+                          {point.name}{point.workout_count > 1 ? ` · ${point.workout_count} workouts` : ''}
+                        </span>
+                      </div>
+                      <span className="stats-fatigue-level">{point.fatigue_level}/10</span>
+                    </li>
+                  ))}
+                </ol>
+                <p className="stats-classification-note">
+                  {fatigueHistory.length} rated {fatigueHistory.length === 1 ? 'day' : 'days'} across {data.fatigue_workouts}{' '}
+                  {data.fatigue_workouts === 1 ? 'workout' : 'workouts'}. Latest {data.fatigue_latest}/10
+                  {latestFatigue && ` on ${formatFatigueDay(latestFatigue.date)}`}. Ratings above 5 are treated as high fatigue.
+                </p>
+              </>
             )}
           </section>
         </div>
