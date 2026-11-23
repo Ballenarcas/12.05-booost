@@ -1,786 +1,361 @@
-import { Dumbbell, Plus, Repeat2 } from 'lucide-react'
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { fetchWorkoutHistory, getCurrentUser, overtrainingModPctStorageKey, overtrainingStateSessionKey } from '../services/api'
-import type { WorkoutHistoryEntry } from '../types/workout'
+import { AlertCircle, CheckCircle2, ChevronLeft, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
+import {
+  applyOvertrainingMods,
+  clearOvertrainingMods,
+  deleteFatigueFeedback,
+  dismissOvertrainingAlert,
+  fetchOvertrainingAlerts,
+  getCurrentUser,
+  getSavedOvertrainingAlerts,
+  scheduleRecoveryRestDay,
+  submitFatigueFeedback,
+  type OvertrainingAlertStatus,
+} from '../services/api'
+import { describeError } from '../utils/errors.js'
+import { usePageNavigate } from '../utils/usePageNavigate'
+import '../styles/overtraining.css'
 
-export interface OvertrainingAlertStatus {
-  has_alert: boolean
-  risk_level: 'none' | 'moderate' | 'high'
-  load_increase_pct: number
-  sessions_last_7_days: number
-  total_sets_last_7_days: number
-  high_rpe_sets_count: number
-  repeated_fatigue_reports: number
-  strained_muscles: string[]
-  headline: string
-  critical_alert_title: string | null
-  critical_alert_body: string | null
-  critical_recommendation: string | null
-  fatigue_feedback_title: string | null
-  fatigue_feedback_body: string | null
-  fatigue_action: string | null
-  ai_modification_title: string | null
-  ai_modification_body: string | null
-  volume_reduction_pct: number
-  mods_applied: boolean
-  dismissed: boolean
-}
+type SleepQuality = 'restorative' | 'average' | 'poor'
+type JointStrain = 'none' | 'mild' | 'sharp'
 
-type SleepQualityId = 'restorative' | 'average' | 'poor'
-type JointStrainId = 'none' | 'mild' | 'sharp'
+const MUSCLE_OPTIONS = ['Chest', 'Shoulders', 'Back', 'Quads', 'Hamstrings', 'Glutes', 'Arms', 'Core']
 
-interface LocalCheckInEntry {
-  id: string
-  cnsFatigue: number
-  domsSoreness: number
-  effectiveFatigue: number
-  effectiveSoreness: number
-  sleepQuality: SleepQualityId
-  jointStrain: JointStrainId
-  muscles: string[]
-  notes?: string
-  createdAt: string
-}
-
-interface StoredOvertrainingState {
-  modsApplied?: boolean
-  dismissed?: boolean
-  dismissedAt?: string | null
-}
-
-const MUSCLE_OPTIONS: string[] = [
-  'Chest',
-  'Shoulders',
-  'Back',
-  'Quads',
-  'Hamstrings',
-  'Arms',
-  'Glutes',
-  'Core',
+const SLEEP_OPTIONS: Array<{ id: SleepQuality; label: string }> = [
+  { id: 'restorative', label: 'Restorative (7.5h+)' },
+  { id: 'average', label: 'Moderate (6–7h)' },
+  { id: 'poor', label: 'Fragmented (<6h)' },
 ]
 
-const SLEEP_OPTIONS: Array<{ id: SleepQualityId; label: string; penalty: number }> = [
-  { id: 'restorative', label: 'Restorative (7.5h+)', penalty: 0 },
-  { id: 'average', label: 'Moderate (6–7h)', penalty: 1 },
-  { id: 'poor', label: 'Fragmented (<6h)', penalty: 2 },
+const JOINT_OPTIONS: Array<{ id: JointStrain; label: string }> = [
+  { id: 'none', label: 'None' },
+  { id: 'mild', label: 'Mild stiffness' },
+  { id: 'sharp', label: 'Noticeable strain' },
 ]
-
-const JOINT_OPTIONS: Array<{ id: JointStrainId; label: string; penalty: number }> = [
-  { id: 'none', label: 'No joint discomfort', penalty: 0 },
-  { id: 'mild', label: 'Mild tendon stiffness', penalty: 1 },
-  { id: 'sharp', label: 'Noticeable joint strain', penalty: 2 },
-]
-
-function getStorageKey(userId?: string): string | null {
-  return userId ? `set_plate_recovery_checkins_${userId}` : null
-}
-
-function getStateStorageKey(userId?: string): string | null {
-  return userId ? `set_plate_overtraining_state_${userId}` : null
-}
-
-function readLocalCheckIns(userId?: string): LocalCheckInEntry[] {
-  try {
-    const key = getStorageKey(userId)
-    if (!key) return []
-    const raw = localStorage.getItem(key)
-    if (!raw) return []
-    const parsed: unknown = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as LocalCheckInEntry[]) : []
-  } catch {
-    return []
-  }
-}
-
-function writeLocalCheckIns(userId: string | undefined, items: LocalCheckInEntry[]): void {
-  try {
-    const key = getStorageKey(userId)
-    if (key) localStorage.setItem(key, JSON.stringify(items))
-  } catch {
-    // ignore storage errors
-  }
-}
-
-function readStoredState(userId?: string): StoredOvertrainingState {
-  try {
-    const key = getStateStorageKey(userId)
-    if (!key) return {}
-    const raw = localStorage.getItem(key)
-    if (!raw) return {}
-    return JSON.parse(raw) as StoredOvertrainingState
-  } catch {
-    return {}
-  }
-}
 
 function describeScale(value: number, kind: 'cns' | 'doms'): string {
   if (kind === 'cns') {
     if (value <= 3) return 'Fresh — normal energy & bar speed'
-    if (value <= 6) return 'Moderate — standard post-session fatigue'
-    if (value <= 8) return 'High — heavy legs, slower bar speed, elevated RPE'
-    return 'Severe — systemic CNS exhaustion & suppressed HRV'
+    if (value <= 6) return 'Moderate — typical post-training tiredness'
+    if (value <= 8) return 'High — sluggish warm-ups or higher effort at usual loads'
+    return 'Severe — wiped out, unusually heavy fatigue'
   }
-  if (value <= 3) return 'Minimal — muscles feel recovered'
-  if (value <= 6) return 'Moderate DOMS — noticeable stiffness on movement'
-  if (value <= 8) return 'High DOMS — tender to touch, reduced force output'
-  return 'Severe DOMS — persistent soreness >48h, range of motion limited'
+  if (value <= 3) return 'Minimal — muscles feel ready'
+  if (value <= 6) return 'Moderate DOMS — stiff early in warm-up'
+  if (value <= 8) return 'High DOMS — tender with reduced output'
+  return 'Severe DOMS — soreness limiting normal range of motion'
 }
 
-function BodyHeatmapGraphic(props: { strainedMuscles: string[] }) {
-  const lower = props.strainedMuscles.map((m) => m.toLowerCase())
-  const upperActive =
-    lower.length === 0 ||
-    lower.some((m) => m.includes('chest') || m.includes('shoulder') || m.includes('arm') || m.includes('back'))
-  const lowerActive =
-    lower.length === 0 ||
-    lower.some((m) => m.includes('quad') || m.includes('hamstring') || m.includes('glute') || m.includes('leg'))
+function formatShortDate(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Recently'
+  return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function MuscleBodyMap({ muscles }: { muscles: Array<{ muscle_group: string; status: 'ok' | 'watch' | 'high' }> }) {
+  const toneFor = (targets: string[]): string => {
+    const matches = muscles.filter((item) => targets.some((t) => item.muscle_group.toLowerCase().includes(t)))
+    if (matches.some((item) => item.status === 'high')) return '#c62f45'
+    if (matches.some((item) => item.status === 'watch')) return '#e0a83a'
+    if (matches.length > 0) return '#6fb2ec'
+    return 'var(--hifi-track)'
+  }
 
   return (
-    <svg
-      width="56"
-      height="118"
-      viewBox="0 0 64 136"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-      style={{ flexShrink: 0 }}
-    >
-      <circle cx="32" cy="14" r="9" fill="#E5A97B" />
-      <rect x="28" y="23" width="8" height="6" rx="3" fill="#E5A97B" />
-      <path
-        d="M16 32C16 29.5 20 28 32 28C44 28 48 29.5 48 32L52 66C52 68 49 69 47 67L43 40H41L42 74H22L23 40H21L17 67C15 69 12 68 12 66L16 32Z"
-        fill="#E5A97B"
-      />
-      <path d="M22 74H31L29 124C29 127 24 127 24 124L22 74Z" fill="#E5A97B" />
-      <path d="M33 74H42L40 124C40 127 35 127 35 124L33 74Z" fill="#E5A97B" />
-      {upperActive && (
-        <>
-          <circle cx="19" cy="35" r="5" fill="#EF4444" fillOpacity="0.85" />
-          <circle cx="45" cy="35" r="5" fill="#EF4444" fillOpacity="0.85" />
-          <circle cx="32" cy="43" r="6" fill="#F97316" fillOpacity="0.8" />
-        </>
-      )}
-      <circle cx="32" cy="60" r="6" fill="#EF4444" fillOpacity="0.8" />
-      {lowerActive && (
-        <>
-          <circle cx="26" cy="96" r="5" fill="#EF4444" fillOpacity="0.8" />
-          <circle cx="38" cy="96" r="5" fill="#EF4444" fillOpacity="0.8" />
-        </>
-      )}
+    <svg width="72" height="132" viewBox="0 0 72 132" fill="none" aria-hidden="true">
+      <circle cx="36" cy="14" r="9" fill="var(--hifi-track)" stroke="var(--line)" />
+      <rect x="31" y="24" width="10" height="6" rx="3" fill="var(--hifi-track)" />
+      {/* Shoulders / Arms */}
+      <rect x="13" y="30" width="9" height="32" rx="4.5" fill={toneFor(['shoulder', 'arm'])} />
+      <rect x="50" y="30" width="9" height="32" rx="4.5" fill={toneFor(['shoulder', 'arm'])} />
+      {/* Chest & Back */}
+      <rect x="24" y="30" width="24" height="20" rx="5" fill={toneFor(['chest', 'back'])} />
+      {/* Core */}
+      <rect x="25" y="52" width="22" height="18" rx="4" fill={toneFor(['core'])} />
+      {/* Quads / Hamstrings / Glutes / Legs */}
+      <rect x="24" y="73" width="10" height="46" rx="5" fill={toneFor(['quad', 'hamstring', 'glute', 'leg'])} />
+      <rect x="38" y="73" width="10" height="46" rx="5" fill={toneFor(['quad', 'hamstring', 'glute', 'leg'])} />
     </svg>
   )
 }
 
-function OvertrainingAlerts() {
-  const navigate = useNavigate()
-  const user = getCurrentUser()
-  const userId = user?.id
+function ReadinessGauge({ score, risk }: { score: number; risk: 'none' | 'moderate' | 'high' }) {
+  const radius = 37
+  const circumference = 2 * Math.PI * radius
+  const dashOffset = circumference * (1 - Math.max(0, Math.min(100, score)) / 100)
+  const modifier = risk === 'high' ? 'is-high' : risk === 'moderate' ? 'is-moderate' : 'is-ready'
 
-  const [status, setStatus] = useState<OvertrainingAlertStatus | null>(null)
-  const [checkIns, setCheckIns] = useState<LocalCheckInEntry[]>(() => readLocalCheckIns(userId))
-  const [loading, setLoading] = useState(true)
-  const [busyAction, setBusyAction] = useState<'apply' | 'dismiss' | 'feedback' | null>(null)
-  const [bannerMessage, setBannerMessage] = useState<string | null>(null)
-  const [showCheckIn, setShowCheckIn] = useState(false)
+  return (
+    <div className="ot-gauge" role="img" aria-label={`Readiness score ${score} out of 100`}>
+      <svg viewBox="0 0 88 88" aria-hidden="true">
+        <circle className="ot-gauge-track" cx="44" cy="44" r={radius} />
+        <circle
+          className={`ot-gauge-value ${modifier}`}
+          cx="44"
+          cy="44"
+          r={radius}
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+        />
+      </svg>
+      <div className="ot-gauge-center" aria-hidden="true">
+        <strong>{score}</strong>
+        <span>/100</span>
+      </div>
+    </div>
+  )
+}
 
-  const [cnsFatigue, setCnsFatigue] = useState(8)
-  const [domsSoreness, setDomsSoreness] = useState(8)
-  const [sleepQuality, setSleepQuality] = useState<SleepQualityId>('poor')
-  const [jointStrain, setJointStrain] = useState<JointStrainId>('mild')
-  const [selectedMuscles, setSelectedMuscles] = useState<string[]>(['Chest', 'Shoulders'])
+export default function OvertrainingAlerts() {
+  const navigate = usePageNavigate()
+  const userId = getCurrentUser()?.id
+
+  const [status, setStatus] = useState<OvertrainingAlertStatus | null>(() => getSavedOvertrainingAlerts(userId))
+  const [loading, setLoading] = useState(() => !getSavedOvertrainingAlerts(userId))
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const [busy, setBusy] = useState<'apply' | 'clear' | 'rest' | 'dismiss' | 'checkin' | string | null>(null)
+  const [showForm, setShowForm] = useState(false)
+
+  // Neutral defaults so check-ins reflect actual feeling rather than biasing toward severe fatigue.
+  const [fatigueLevel, setFatigueLevel] = useState(5)
+  const [sorenessLevel, setSorenessLevel] = useState(4)
+  const [sleepQuality, setSleepQuality] = useState<SleepQuality>('average')
+  const [jointStrain, setJointStrain] = useState<JointStrain>('none')
+  const [selectedMuscles, setSelectedMuscles] = useState<string[]>([])
   const [notes, setNotes] = useState('')
 
-  const computePhysiologicalStatus = useCallback(
-    async (
-      entries: LocalCheckInEntry[],
-      modsAppliedOverride?: boolean,
-      dismissedOverride?: boolean,
-    ): Promise<OvertrainingAlertStatus> => {
-      let sessions7d = 0
-      let highRpeSets = 0
-      let totalCompletedSets = 0
-      let featuredLift = 'compound lifts'
-
-      if (userId) {
-        try {
-          const history: WorkoutHistoryEntry[] = await fetchWorkoutHistory(userId)
-          const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
-          const recent = history.filter((w) => {
-            const t = Date.parse(w.started_at)
-            return Number.isFinite(t) ? t >= sevenDaysAgo : true
-          })
-          sessions7d = recent.length
-          for (const w of recent) {
-            for (const ex of w.exercises) {
-              if (ex.name && featuredLift === 'compound lifts') featuredLift = ex.name
-              for (const s of ex.sets) {
-                const weight = Number(s.weight_kg || 0)
-                const reps = Number(s.reps || 0)
-                const isDone = s.is_completed !== false && (s.is_completed || reps > 0 || weight > 0)
-                if (!isDone) continue
-
-                totalCompletedSets += 1
-                if (typeof s.rpe === 'number' && s.rpe >= 8.5) {
-                  highRpeSets += 1
-                }
-              }
-            }
-          }
-        } catch {
-          // ignore network errors
-        }
-      }
-
-      const highFatigueLogs = entries.filter(
-        (item) =>
-          item.effectiveFatigue >= 7 ||
-          item.effectiveSoreness >= 7 ||
-          item.effectiveFatigue + item.effectiveSoreness >= 13,
-      )
-      const repeatedFatigueCount = highFatigueLogs.length
-
-      const strainedMuscles: string[] = []
-      for (const log of highFatigueLogs) {
-        for (const m of log.muscles) {
-          if (!strainedMuscles.includes(m)) strainedMuscles.push(m)
-        }
-      }
-
-      const highFrequency = sessions7d >= 6
-      const highCumulativeVolume = sessions7d >= 4 && totalCompletedSets >= 75
-      const highCnsStrain = sessions7d >= 3 && highRpeSets >= 20
-      const excessiveTrainingLoad = highFrequency || highCumulativeVolume || highCnsStrain
-
-      const insufficientRecovery =
-        repeatedFatigueCount >= 2 || (repeatedFatigueCount >= 1 && sessions7d >= 4)
-
-      const savedState = readStoredState(userId)
-      const modsApplied = modsAppliedOverride ?? Boolean(savedState.modsApplied)
-      const dismissed = dismissedOverride ?? Boolean(savedState.dismissed)
-
-      if (!excessiveTrainingLoad && !insufficientRecovery) {
-        return {
-          has_alert: false,
-          risk_level: 'none',
-          load_increase_pct: 0,
-          sessions_last_7_days: sessions7d,
-          total_sets_last_7_days: totalCompletedSets,
-          high_rpe_sets_count: highRpeSets,
-          repeated_fatigue_reports: repeatedFatigueCount,
-          strained_muscles: strainedMuscles,
-          headline: 'Your acute-to-chronic training load and recovery markers are within optimal range.',
-          critical_alert_title: null,
-          critical_alert_body: null,
-          critical_recommendation: null,
-          fatigue_feedback_title: null,
-          fatigue_feedback_body: null,
-          fatigue_action: null,
-          ai_modification_title: null,
-          ai_modification_body: null,
-          volume_reduction_pct: 15,
-          mods_applied: modsApplied,
-          dismissed: false,
-        }
-      }
-
-      const displayLoadPct =
-        totalCompletedSets > 60
-          ? Math.min(85, Math.max(20, Math.round(((totalCompletedSets - 60) / 60) * 100)))
-          : 35
-      const musclesLabel =
-        strainedMuscles.length > 0 ? strainedMuscles.slice(0, 2).join('/').toLowerCase() : 'chest/shoulders'
-
-      const criticalBody =
-        excessiveTrainingLoad
-          ? `Your 7-day training load is ${displayLoadPct}% above recommended recovery thresholds (${sessions7d} sessions, ${totalCompletedSets} working sets${highRpeSets > 0 ? `, ${highRpeSets} sets at RPE ≥ 8.5` : ''}). Heart Rate Variability (HRV) and CNS readiness are suppressed.`
-          : `You have logged ${repeatedFatigueCount} high-fatigue & soreness recovery check-ins. Systemic CNS readiness and muscle recovery are significantly suppressed.`
-
-      return {
-        has_alert: !dismissed,
-        risk_level: 'high',
-        load_increase_pct: displayLoadPct,
-        sessions_last_7_days: sessions7d,
-        total_sets_last_7_days: totalCompletedSets,
-        high_rpe_sets_count: highRpeSets,
-        repeated_fatigue_reports: repeatedFatigueCount,
-        strained_muscles: strainedMuscles.length > 0 ? strainedMuscles : ['Chest', 'Shoulders'],
-        headline:
-          "Based on your fatigue tracking, heart rate variability, and recent high-intensity workouts, we've detected signs of potential overtraining. Please review the recommendations below.",
-        critical_alert_title: 'CRITICAL ALERT: Overtraining Risk High',
-        critical_alert_body: criticalBody,
-        critical_recommendation:
-          "Take a dedicated rest day or swap today's high-intensity session for active recovery.",
-        fatigue_feedback_title: 'Soreness & Fatigue Feedback Detected',
-        fatigue_feedback_body:
-          repeatedFatigueCount > 0
-            ? `High soreness reported in ${musclesLabel} across ${repeatedFatigueCount} recovery check-in${repeatedFatigueCount > 1 ? 's' : ''}. Muscle recovery requires rest.`
-            : `High cumulative fatigue accumulated across ${sessions7d} sessions (${totalCompletedSets} sets on ${featuredLift}). Muscle tissue recovery requires rest.`,
-        fatigue_action: `Force-adjust today's ${featuredLift} sets to RPE 6 or replace with lighter mobility movements.`,
-        ai_modification_title: 'AI Modification Suggestion Active',
-        ai_modification_body:
-          'To prevent injury, we have automatically lowered your overall training volume for your next workout by 15%. Target sets are reduced.',
-        volume_reduction_pct: 15,
-        mods_applied: modsApplied,
-        dismissed,
-      }
-    },
-    [userId],
-  )
-
   useEffect(() => {
+    if (!userId) {
+      setLoading(false)
+      setError('Sign in to review your recovery and readiness status.')
+      return
+    }
     let active = true
-    const currentEntries = readLocalCheckIns(userId)
-    setCheckIns(currentEntries)
-
-    computePhysiologicalStatus(currentEntries).then((localEval) => {
-      if (active) {
-        setStatus(localEval)
-        setLoading(false)
-      }
-    })
-
+    setError(null)
+    fetchOvertrainingAlerts({ forceRefresh: true })
+      .then((next) => {
+        if (active) setStatus(next)
+      })
+      .catch((err: unknown) => {
+        if (active && !getSavedOvertrainingAlerts(userId)) {
+          setError(describeError(err, "We couldn't load your recovery status right now."))
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
     return () => {
       active = false
     }
-  }, [userId, computePhysiologicalStatus])
+  }, [userId])
+
+  const resetCheckInForm = () => {
+    setFatigueLevel(5)
+    setSorenessLevel(4)
+    setSleepQuality('average')
+    setJointStrain('none')
+    setSelectedMuscles([])
+    setNotes('')
+  }
 
   const toggleMuscle = (muscle: string) => {
     setSelectedMuscles((current) =>
-      current.includes(muscle) ? current.filter((m) => m !== muscle) : [...current, muscle],
+      current.includes(muscle) ? current.filter((item) => item !== muscle) : [...current, muscle],
     )
   }
 
-  const handleSubmitCheckIn = async (e: FormEvent) => {
-    e.preventDefault()
-    setBusyAction('feedback')
-
-    const sleepPenalty = SLEEP_OPTIONS.find((o) => o.id === sleepQuality)?.penalty ?? 0
-    const jointPenalty = JOINT_OPTIONS.find((o) => o.id === jointStrain)?.penalty ?? 0
-    const effectiveFatigue = Math.min(10, cnsFatigue + sleepPenalty)
-    const effectiveSoreness = Math.min(10, domsSoreness + jointPenalty)
-
-    const newEntry: LocalCheckInEntry = {
-      id: `${Date.now()}`,
-      cnsFatigue,
-      domsSoreness,
-      effectiveFatigue,
-      effectiveSoreness,
-      sleepQuality,
-      jointStrain,
-      muscles: selectedMuscles.length > 0 ? selectedMuscles : ['Chest', 'Shoulders'],
-      notes: notes.trim() || undefined,
-      createdAt: new Date().toISOString(),
-    }
-
-    const updatedEntries = [newEntry, ...checkIns]
-    setCheckIns(updatedEntries)
-    writeLocalCheckIns(userId, updatedEntries)
-    const stateKey = getStateStorageKey(userId)
-    const sessionStateKey = overtrainingStateSessionKey(userId)
-    if (stateKey) {
-      localStorage.setItem(
-        stateKey,
-        JSON.stringify({ modsApplied: false, dismissed: false, dismissedAt: null }),
-      )
-    }
-
-    const nextStatus = await computePhysiologicalStatus(updatedEntries, false, false)
-    setStatus(nextStatus)
-    if (sessionStateKey) sessionStorage.setItem(sessionStateKey, JSON.stringify(nextStatus))
-    setShowCheckIn(false)
-    setNotes('')
-    setBusyAction(null)
-
-    if (nextStatus.has_alert) {
-      setBannerMessage(
-        'Recovery check-in saved: repeated fatigue pattern detected. Review the AI recommendations below.',
-      )
-    } else {
-      setBannerMessage(
-        `Check-in saved (${nextStatus.repeated_fatigue_reports}/2 high-fatigue logs). A single fatigued session is normal — an alert triggers only when fatigue repeats or combines with ≥ 4 sessions/week.`,
-      )
+  const handleSubmitCheckIn = async (event: FormEvent) => {
+    event.preventDefault()
+    setBusy('checkin')
+    setNotice(null)
+    try {
+      const next = await submitFatigueFeedback({
+        fatigue_level: fatigueLevel,
+        soreness_level: sorenessLevel,
+        sleep_quality: sleepQuality,
+        joint_strain: jointStrain,
+        sore_muscles: selectedMuscles,
+        notes: notes.trim() || undefined,
+      })
+      setStatus(next)
+      setShowForm(false)
+      resetCheckInForm()
+      setNotice({
+        kind: 'success',
+        text: next.has_alert
+          ? 'Check-in logged and combined with your 7-day workload.'
+          : 'Check-in logged. Readiness stays in a healthy range.',
+      })
+    } catch (err) {
+      setNotice({ kind: 'error', text: describeError(err, "We couldn't save your check-in.") })
+    } finally {
+      setBusy(null)
     }
   }
 
-  const handleApplyMods = async () => {
-    setBusyAction('apply')
-    const stateKey = getStateStorageKey(userId)
-    const sessionStateKey = overtrainingStateSessionKey(userId)
-    const modPctKey = overtrainingModPctStorageKey(userId)
-    if (stateKey) {
-      localStorage.setItem(
-        stateKey,
-        JSON.stringify({ modsApplied: true, dismissed: false, dismissedAt: null }),
-      )
+  const runAction = async (
+    key: 'apply' | 'clear' | 'rest' | 'dismiss',
+    action: () => Promise<OvertrainingAlertStatus>,
+    successText: string,
+    failureText: string,
+  ) => {
+    setBusy(key)
+    setNotice(null)
+    try {
+      const next = await action()
+      setStatus(next)
+      setNotice({ kind: 'success', text: successText })
+      if (key === 'dismiss') navigate('/workouts')
+    } catch (err) {
+      setNotice({ kind: 'error', text: describeError(err, failureText) })
+    } finally {
+      setBusy(null)
     }
-    if (modPctKey) localStorage.setItem(modPctKey, '15')
-    const nextStatus = await computePhysiologicalStatus(checkIns, true, false)
-    setStatus(nextStatus)
-    if (sessionStateKey) sessionStorage.setItem(sessionStateKey, JSON.stringify(nextStatus))
-    setBannerMessage('AI Deload applied: next workout volume lowered by 15% and target RPE capped at 6.')
-    setBusyAction(null)
   }
 
-  const handleDismiss = async () => {
-    setBusyAction('dismiss')
-    const stateKey = getStateStorageKey(userId)
-    const sessionStateKey = overtrainingStateSessionKey(userId)
-    const modPctKey = overtrainingModPctStorageKey(userId)
-    if (stateKey) {
-      localStorage.setItem(
-        stateKey,
-        JSON.stringify({ modsApplied: false, dismissed: true, dismissedAt: new Date().toISOString() }),
-      )
+  const handleDeleteCheckIn = async (entryId: string) => {
+    setBusy(entryId)
+    setNotice(null)
+    try {
+      const next = await deleteFatigueFeedback(entryId)
+      setStatus(next)
+      setNotice({ kind: 'success', text: 'Check-in removed and readiness updated.' })
+    } catch (err) {
+      setNotice({ kind: 'error', text: describeError(err, "We couldn't delete that check-in.") })
+    } finally {
+      setBusy(null)
     }
-    if (modPctKey) localStorage.removeItem(modPctKey)
-    if (sessionStateKey) sessionStorage.removeItem(sessionStateKey)
-    setBusyAction(null)
-    navigate('/workouts')
-  }
-
-  const handleResetHistory = async () => {
-    writeLocalCheckIns(userId, [])
-    const stateKey = getStateStorageKey(userId)
-    const sessionStateKey = overtrainingStateSessionKey(userId)
-    if (stateKey) localStorage.removeItem(stateKey)
-    if (sessionStateKey) sessionStorage.removeItem(sessionStateKey)
-    setCheckIns([])
-    const nextStatus = await computePhysiologicalStatus([], false, false)
-    setStatus(nextStatus)
-    setBannerMessage('Fatigue logs cleared and re-synced with your workout history.')
   }
 
   if (loading) {
     return (
-      <div className="screen state-card" style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
-        Loading recovery analysis...
+      <div className="screen hifi-screen ot-screen">
+        <header className="ot-header">
+          <button type="button" className="ot-back" onClick={() => navigate('/workouts')}>
+            <ChevronLeft size={18} aria-hidden="true" /> Workouts
+          </button>
+        </header>
+        <p className="hifi-card hifi-muted" role="status">Analyzing your training load and recovery…</p>
       </div>
     )
   }
 
-  const showAlertCards = Boolean(status && status.has_alert && status.risk_level !== 'none')
-  const activeStrainedMuscles = status?.strained_muscles ?? []
+  if (error && !status) {
+    return (
+      <div className="screen hifi-screen ot-screen">
+        <header className="ot-header">
+          <button type="button" className="ot-back" onClick={() => navigate('/workouts')}>
+            <ChevronLeft size={18} aria-hidden="true" /> Workouts
+          </button>
+        </header>
+        <div className="hifi-card" role="alert">
+          <p className="hifi-muted">{error}</p>
+        </div>
+      </div>
+    )
+  }
+
+  const risk = status?.risk_level ?? 'none'
+  const modifier = risk === 'high' ? 'is-high' : risk === 'moderate' ? 'is-moderate' : 'is-ready'
+  const tierLabel = risk === 'high' ? 'Deload recommended' : risk === 'moderate' ? 'Watch fatigue' : 'Ready'
 
   return (
-    <div
-      className="screen"
-      style={{
-        minHeight: '100vh',
-        backgroundColor: '#121114',
-        color: '#f4f4f6',
-        padding: '20px 18px 110px',
-        boxSizing: 'border-box',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+    <div className="screen hifi-screen ot-screen">
+      <header className="ot-header">
+        <button type="button" className="ot-back" onClick={() => navigate('/workouts')}>
+          <ChevronLeft size={18} aria-hidden="true" /> Workouts
+        </button>
         <button
           type="button"
-          onClick={() => navigate(-1)}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#8e8e93',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '15px',
-            cursor: 'pointer',
-            padding: '4px 0',
-          }}
+          className="hifi-pill"
+          aria-expanded={showForm}
+          onClick={() => setShowForm((open) => !open)}
         >
-          ← Back
+          {showForm ? 'Close check-in' : 'Log check-in'}
         </button>
+      </header>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={handleResetHistory}
-            title="Clear fatigue logs & re-sync"
-            style={{
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: '#a1a1aa',
-              borderRadius: '999px',
-              padding: '7px 10px',
-              fontSize: '11.5px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            <Repeat2 size={13} /> Reset Logs
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowCheckIn((prev) => !prev)}
-            style={{
-              background: showCheckIn ? 'rgba(168, 85, 247, 0.28)' : 'rgba(168, 85, 247, 0.14)',
-              border: '1px solid rgba(168, 85, 247, 0.4)',
-              color: '#d8b4fe',
-              borderRadius: '999px',
-              padding: '7px 13px',
-              fontSize: '12px',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-            }}
-          >
-            <Plus size={14} />
-            {showCheckIn ? 'Close Check-in' : 'Recovery Check-in'}
-          </button>
-        </div>
+      <div className="ot-page-title-row">
+        <h1 className="hifi-page-title">Recovery &amp; readiness</h1>
+        <p>Evaluated from your completed workouts, fatigue ratings, RPE, and check-ins.</p>
       </div>
 
-      <div style={{ textAlign: 'center', marginBottom: '18px' }}>
-        <h1
-          style={{
-            fontSize: '21px',
-            fontWeight: 800,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            margin: '0 0 10px',
-            color: '#ffffff',
-          }}
-        >
-          OVERTRAINING ALERTS
-        </h1>
-        <p
-          style={{
-            margin: '0 auto',
-            maxWidth: '350px',
-            fontSize: '13.5px',
-            lineHeight: 1.45,
-            color: '#a1a1aa',
-          }}
-        >
-          {showAlertCards
-            ? status?.headline
-            : 'The AI evaluates cumulative 7-day workload (≥4 sessions & ≥75 sets or ≥20 sets at RPE ≥8.5) and repeated post-workout fatigue check-ins.'}
-        </p>
-      </div>
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '8px',
-          marginBottom: '18px',
-        }}
-      >
-        <div
-          style={{
-            backgroundColor: '#1b1a1f',
-            border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: '12px',
-            padding: '10px 6px',
-            textAlign: 'center',
-          }}
-        >
-          <div style={{ fontSize: '10.5px', color: '#8e8e93' }}>7d Sessions</div>
-          <div style={{ fontSize: '15px', fontWeight: 800, color: '#fff', marginTop: '2px' }}>
-            {status?.sessions_last_7_days ?? 0}
-          </div>
-        </div>
-        <div
-          style={{
-            backgroundColor: '#1b1a1f',
-            border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: '12px',
-            padding: '10px 6px',
-            textAlign: 'center',
-          }}
-        >
-          <div style={{ fontSize: '10.5px', color: '#8e8e93' }}>7d Sets</div>
-          <div style={{ fontSize: '15px', fontWeight: 800, color: '#fff', marginTop: '2px' }}>
-            {status?.total_sets_last_7_days ?? 0}/75
-          </div>
-        </div>
-        <div
-          style={{
-            backgroundColor: '#1b1a1f',
-            border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: '12px',
-            padding: '10px 6px',
-            textAlign: 'center',
-          }}
-        >
-          <div style={{ fontSize: '10.5px', color: '#8e8e93' }}>RPE ≥ 8.5</div>
-          <div style={{ fontSize: '15px', fontWeight: 800, color: '#fff', marginTop: '2px' }}>
-            {status?.high_rpe_sets_count ?? 0}/20
-          </div>
-        </div>
-        <div
-          style={{
-            backgroundColor: '#1b1a1f',
-            border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: '12px',
-            padding: '10px 6px',
-            textAlign: 'center',
-          }}
-        >
-          <div style={{ fontSize: '10.5px', color: '#8e8e93' }}>Fatigue Logs</div>
-          <div style={{ fontSize: '15px', fontWeight: 800, color: '#fff', marginTop: '2px' }}>
-            {status?.repeated_fatigue_reports ?? 0}/2
-          </div>
-        </div>
-      </div>
-
-      {bannerMessage && (
-        <div
-          role="status"
-          style={{
-            backgroundColor: 'rgba(34, 197, 94, 0.12)',
-            border: '1px solid rgba(34, 197, 94, 0.35)',
-            color: '#86efac',
-            padding: '12px 14px',
-            borderRadius: '12px',
-            fontSize: '13px',
-            lineHeight: 1.4,
-            marginBottom: '16px',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '8px',
-          }}
-        >
-          <span style={{ fontWeight: 800 }}>✓</span>
-          <span>{bannerMessage}</span>
+      {notice && (
+        <div className={`ot-notice${notice.kind === 'error' ? ' is-error' : ''}`} role={notice.kind === 'error' ? 'alert' : 'status'}>
+          {notice.kind === 'error' ? <AlertCircle size={17} aria-hidden="true" /> : <CheckCircle2 size={17} aria-hidden="true" />}
+          <span>{notice.text}</span>
         </div>
       )}
 
-      {showCheckIn && (
-        <form
-          onSubmit={handleSubmitCheckIn}
-          style={{
-            backgroundColor: '#1b1a1f',
-            border: '1px solid rgba(168, 85, 247, 0.4)',
-            borderRadius: '16px',
-            padding: '16px',
-            marginBottom: '18px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '15px',
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 700, fontSize: '14.5px', color: '#f3e8ff' }}>
-              Post-Workout Recovery &amp; Readiness Check-in
-            </div>
-            <div style={{ fontSize: '12px', color: '#8e8e93', marginTop: '2px' }}>
-              Used by the AI to correlate your internal recovery with your logged training volume.
-            </div>
-          </div>
+      {showForm && (
+        <form className="hifi-card ot-form" onSubmit={handleSubmitCheckIn}>
+          <h2 className="hifi-card-label">Recovery check-in</h2>
 
-          <label style={{ fontSize: '12.5px', color: '#d4d4d8', display: 'grid', gap: '5px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Systemic / CNS Fatigue</span>
-              <strong style={{ color: '#c084fc' }}>{cnsFatigue}/10</strong>
-            </div>
-            <input
-              type="range"
-              min={1}
-              max={10}
-              value={cnsFatigue}
-              onChange={(e) => setCnsFatigue(Number(e.target.value))}
-            />
-            <span style={{ fontSize: '11.5px', color: '#8e8e93' }}>{describeScale(cnsFatigue, 'cns')}</span>
+          <label className="ot-slider-field">
+            <span className="ot-slider-head">
+              <span>Systemic fatigue</span>
+              <strong>{fatigueLevel}/10</strong>
+            </span>
+            <input type="range" min={1} max={10} value={fatigueLevel} onChange={(e) => setFatigueLevel(Number(e.target.value))} />
+            <span className="hifi-muted">{describeScale(fatigueLevel, 'cns')}</span>
           </label>
 
-          <label style={{ fontSize: '12.5px', color: '#d4d4d8', display: 'grid', gap: '5px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Localized Muscle Soreness (DOMS)</span>
-              <strong style={{ color: '#c084fc' }}>{domsSoreness}/10</strong>
-            </div>
-            <input
-              type="range"
-              min={1}
-              max={10}
-              value={domsSoreness}
-              onChange={(e) => setDomsSoreness(Number(e.target.value))}
-            />
-            <span style={{ fontSize: '11.5px', color: '#8e8e93' }}>{describeScale(domsSoreness, 'doms')}</span>
+          <label className="ot-slider-field">
+            <span className="ot-slider-head">
+              <span>Muscle soreness (DOMS)</span>
+              <strong>{sorenessLevel}/10</strong>
+            </span>
+            <input type="range" min={1} max={10} value={sorenessLevel} onChange={(e) => setSorenessLevel(Number(e.target.value))} />
+            <span className="hifi-muted">{describeScale(sorenessLevel, 'doms')}</span>
           </label>
 
           <div>
-            <div style={{ fontSize: '12.5px', color: '#d4d4d8', marginBottom: '7px' }}>Last Night&apos;s Sleep Quality</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-              {SLEEP_OPTIONS.map((opt) => {
-                const active = sleepQuality === opt.id
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setSleepQuality(opt.id)}
-                    style={{
-                      padding: '8px 6px',
-                      borderRadius: '10px',
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      border: active ? '1px solid #a855f7' : '1px solid #2e2d35',
-                      backgroundColor: active ? 'rgba(168, 85, 247, 0.22)' : '#141318',
-                      color: active ? '#f3e8ff' : '#a1a1aa',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                )
-              })}
+            <p className="hifi-muted" style={{ marginBottom: 6 }}>Last night&apos;s sleep</p>
+            <div className="ot-choice-grid">
+              {SLEEP_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`ot-choice${sleepQuality === opt.id ? ' is-selected' : ''}`}
+                  aria-pressed={sleepQuality === opt.id}
+                  onClick={() => setSleepQuality(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
           </div>
 
           <div>
-            <div style={{ fontSize: '12.5px', color: '#d4d4d8', marginBottom: '7px' }}>Joint &amp; Tendon Status</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-              {JOINT_OPTIONS.map((opt) => {
-                const active = jointStrain === opt.id
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setJointStrain(opt.id)}
-                    style={{
-                      padding: '8px 6px',
-                      borderRadius: '10px',
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      border: active ? '1px solid #a855f7' : '1px solid #2e2d35',
-                      backgroundColor: active ? 'rgba(168, 85, 247, 0.22)' : '#141318',
-                      color: active ? '#f3e8ff' : '#a1a1aa',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                )
-              })}
+            <p className="hifi-muted" style={{ marginBottom: 6 }}>Joint / tendon strain</p>
+            <div className="ot-choice-grid">
+              {JOINT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`ot-choice${jointStrain === opt.id ? ' is-selected' : ''}`}
+                  aria-pressed={jointStrain === opt.id}
+                  onClick={() => setJointStrain(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
           </div>
 
           <div>
-            <div style={{ fontSize: '12.5px', color: '#d4d4d8', marginBottom: '7px' }}>
-              Muscles Experiencing High Soreness
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            <p className="hifi-muted" style={{ marginBottom: 6 }}>Sore muscles (optional)</p>
+            <div className="ot-chips">
               {MUSCLE_OPTIONS.map((muscle) => {
-                const active = selectedMuscles.includes(muscle)
+                const selected = selectedMuscles.includes(muscle)
                 return (
                   <button
                     key={muscle}
                     type="button"
+                    className={`ot-chip${selected ? ' is-selected' : ''}`}
+                    aria-pressed={selected}
                     onClick={() => toggleMuscle(muscle)}
-                    style={{
-                      padding: '5px 11px',
-                      borderRadius: '999px',
-                      fontSize: '12px',
-                      border: active ? '1px solid #a855f7' : '1px solid #2e2d35',
-                      backgroundColor: active ? 'rgba(168, 85, 247, 0.25)' : '#141318',
-                      color: active ? '#f3e8ff' : '#a1a1aa',
-                      cursor: 'pointer',
-                    }}
                   >
                     {muscle}
                   </button>
@@ -791,276 +366,220 @@ function OvertrainingAlerts() {
 
           <input
             type="text"
-            placeholder="Optional context (e.g. heavy bench PR, high work stress...)"
+            className="ot-notes-input"
+            maxLength={300}
+            placeholder="Optional notes (e.g. heavy squats, travel, short sleep)"
+            aria-label="Recovery check-in notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              borderRadius: '10px',
-              backgroundColor: '#121114',
-              border: '1px solid #2e2d35',
-              color: '#fff',
-              fontSize: '13px',
-              boxSizing: 'border-box',
-            }}
           />
 
-          <button
-            type="submit"
-            disabled={busyAction === 'feedback'}
-            style={{
-              backgroundColor: '#7c3aed',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '12px',
-              padding: '12px',
-              fontWeight: 700,
-              fontSize: '13.5px',
-              cursor: 'pointer',
-            }}
-          >
-            {busyAction === 'feedback' ? 'Evaluating Recovery Pattern...' : 'Submit Recovery Check-in'}
+          <button type="submit" className="ot-action-btn is-primary" disabled={busy !== null}>
+            {busy === 'checkin' ? 'Saving check-in…' : 'Save recovery check-in'}
           </button>
         </form>
       )}
 
-      {!showAlertCards ? (
-        <div
-          style={{
-            backgroundColor: '#1b1a1f',
-            border: '1px solid rgba(34, 197, 94, 0.3)',
-            borderRadius: '18px',
-            padding: '26px 20px',
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '12px',
-          }}
-        >
-          <div
-            style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '999px',
-              backgroundColor: 'rgba(74, 222, 128, 0.14)',
-              color: '#4ade80',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '22px',
-              fontWeight: 800,
-            }}
-          >
-            ✓
-          </div>
-          <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>Recovery &amp; Workload Optimal</h2>
-          <p style={{ margin: 0, fontSize: '13.5px', color: '#a1a1aa', lineHeight: 1.5 }}>
-            Your cumulative 7-day load ({status?.sessions_last_7_days ?? 0} workouts,{' '}
-            {status?.total_sets_last_7_days ?? 0} working sets, {status?.high_rpe_sets_count ?? 0} sets at RPE ≥ 8.5)
-            is within healthy recovery limits.
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowCheckIn(true)}
-            style={{
-              marginTop: '6px',
-              backgroundColor: '#25232c',
-              border: '1px solid rgba(168, 85, 247, 0.35)',
-              color: '#e9d5ff',
-              borderRadius: '999px',
-              padding: '9px 16px',
-              fontSize: '13px',
-              fontWeight: 600,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-            }}
-          >
-            <Dumbbell size={15} /> Log Post-Workout Recovery Check-in
-          </button>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <section
-            style={{
-              backgroundColor: '#1d191b',
-              border: '1.5px solid #c26d53',
-              borderRadius: '16px',
-              padding: '16px',
-              display: 'flex',
-              gap: '14px',
-              alignItems: 'flex-start',
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', paddingTop: '2px' }}>
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '999px',
-                  border: '2px solid #e07a5f',
-                  color: '#e07a5f',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 800,
-                  fontSize: '16px',
-                }}
-              >
-                !
+      {status && (
+        <>
+          <section className="hifi-card" aria-labelledby="ot-overview-heading">
+            <h2 className="hifi-card-label" id="ot-overview-heading">Readiness summary</h2>
+            <div className="ot-overview">
+              <ReadinessGauge score={status.readiness_score} risk={risk} />
+              <div className="ot-overview-copy">
+                <div className="ot-overview-badges">
+                  <span className={`ot-tier-badge ${modifier}`}>{tierLabel}</span>
+                  {status.acwr !== null && (
+                    <span className="ot-tier-badge">ACWR {status.acwr.toFixed(2)}x</span>
+                  )}
+                  {status.deload_active && (
+                    <span className="ot-tier-badge">-{status.volume_reduction_pct}% deload active</span>
+                  )}
+                  {status.rest_day_scheduled && (
+                    <span className="ot-tier-badge is-ready">Rest day set</span>
+                  )}
+                </div>
+                <p className="ot-overview-headline">{status.headline}</p>
+                <p className="ot-overview-summary">{status.summary}</p>
               </div>
-              <BodyHeatmapGraphic strainedMuscles={activeStrainedMuscles} />
             </div>
 
-            <div style={{ flex: 1 }}>
-              <h2
-                style={{
-                  margin: '0 0 8px',
-                  fontSize: '15px',
-                  fontWeight: 800,
-                  color: '#e07a5f',
-                }}
+            <div className="ot-metrics">
+              <div className="ot-metric">
+                <span>7d Sessions</span>
+                <strong>{status.sessions_last_7_days}</strong>
+              </div>
+              <div className="ot-metric">
+                <span>7d Sets</span>
+                <strong>{status.total_sets_last_7_days}</strong>
+              </div>
+              <div className="ot-metric">
+                <span>RPE ≥ 8.5</span>
+                <strong>{status.high_rpe_sets_count}</strong>
+              </div>
+              <div className="ot-metric">
+                <span>Avg Fatigue</span>
+                <strong>{status.avg_workout_fatigue_7d !== null ? `${status.avg_workout_fatigue_7d}/10` : '–'}</strong>
+              </div>
+            </div>
+          </section>
+
+          <section className="hifi-card" aria-labelledby="ot-signals-heading">
+            <h2 className="hifi-card-label" id="ot-signals-heading">Signals measured</h2>
+            <ul className="ot-signals">
+              {status.signals.map((signal) => (
+                <li className="ot-signal" key={signal.id}>
+                  <div className="ot-signal-top">
+                    <span className="ot-signal-name">
+                      <span className={`ot-dot is-${signal.severity}`} aria-hidden="true" />
+                      {signal.label}
+                    </span>
+                    <span className="ot-signal-value">{signal.value}</span>
+                  </div>
+                  <p className="ot-signal-detail">{signal.detail}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {status.muscle_strain.length > 0 && (
+            <section className="hifi-card" aria-labelledby="ot-muscles-heading">
+              <h2 className="hifi-card-label" id="ot-muscles-heading">Muscle recovery (7 days)</h2>
+              <div className="ot-muscles-wrap">
+                <MuscleBodyMap muscles={status.muscle_strain} />
+                <ul className="ot-muscle-list">
+                  {status.muscle_strain.map((item) => (
+                    <li className="ot-muscle-row" key={item.muscle_group}>
+                      <span>{item.muscle_group}</span>
+                      <span className="ot-muscle-meta">
+                        {item.sets_7d} sets
+                        {item.hours_since_trained !== null ? ` · ${item.hours_since_trained}h ago` : ''}
+                        {item.reported_sore ? ' · Sore' : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+          )}
+
+          <section className="hifi-card" aria-labelledby="ot-actions-heading">
+            <h2 className="hifi-card-label" id="ot-actions-heading">Recommendations &amp; actions</h2>
+            <ul className="ot-recommendations">
+              {status.recommendations.map((rec) => (
+                <li key={rec}>{rec}</li>
+              ))}
+            </ul>
+            <div className="ot-actions">
+              {status.deload_active ? (
+                <button
+                  type="button"
+                  className="ot-action-btn"
+                  disabled={busy !== null}
+                  onClick={() => runAction(
+                    'clear',
+                    clearOvertrainingMods,
+                    'Deload turned off. Next workout returns to normal targets.',
+                    "We couldn't turn off the deload.",
+                  )}
+                >
+                  {busy === 'clear' ? 'Updating…' : `Disable -${status.volume_reduction_pct}% deload`}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="ot-action-btn is-primary"
+                  disabled={busy !== null}
+                  onClick={() => runAction(
+                    'apply',
+                    applyOvertrainingMods,
+                    `-${status.volume_reduction_pct}% deload applied to your next workout and today's AI plan.`,
+                    "We couldn't apply the deload.",
+                  )}
+                >
+                  {busy === 'apply' ? 'Applying…' : `Apply -${status.volume_reduction_pct}% deload`}
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="ot-action-btn"
+                disabled={busy !== null || status.rest_day_scheduled}
+                onClick={() => runAction(
+                  'rest',
+                  scheduleRecoveryRestDay,
+                  "Today's AI workout was swapped to an active recovery rest day.",
+                  "We couldn't swap today to a rest day.",
+                )}
               >
-                {status?.critical_alert_title}
-              </h2>
-              <p style={{ margin: '0 0 10px', fontSize: '13.5px', lineHeight: 1.45, color: '#e4e4e7' }}>
-                {status?.critical_alert_body}
-              </p>
-              <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.45, color: '#d4d4d8' }}>
-                <strong style={{ color: '#ffffff' }}>Recommendation:</strong> {status?.critical_recommendation}
-              </p>
+                {busy === 'rest'
+                  ? 'Updating plan…'
+                  : status.rest_day_scheduled
+                    ? 'Rest day scheduled for today'
+                    : 'Swap today to rest day'}
+              </button>
+
+              {status.has_alert && (
+                <button
+                  type="button"
+                  className="ot-action-btn is-ghost"
+                  disabled={busy !== null}
+                  onClick={() => runAction(
+                    'dismiss',
+                    dismissOvertrainingAlert,
+                    'Alert dismissed until your next workout or check-in.',
+                    "We couldn't dismiss the alert.",
+                  )}
+                >
+                  {busy === 'dismiss' ? 'Dismissing…' : 'Dismiss and train anyway'}
+                </button>
+              )}
             </div>
           </section>
 
-          <section
-            style={{
-              backgroundColor: '#1b1922',
-              border: '1.5px solid #6b4c8c',
-              borderRadius: '16px',
-              padding: '16px',
-              display: 'flex',
-              gap: '14px',
-              alignItems: 'flex-start',
-            }}
-          >
-            <div
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '12px',
-                backgroundColor: 'rgba(139, 92, 246, 0.16)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <Dumbbell color="#a78bfa" size={22} />
+          <section className="hifi-card" aria-labelledby="ot-checkins-heading">
+            <div className="hifi-card-footer">
+              <h2 className="hifi-card-label" id="ot-checkins-heading">Recent check-ins (7 days)</h2>
+              {!showForm && (
+                <button type="button" className="hifi-pill" onClick={() => setShowForm(true)}>
+                  <Plus size={14} aria-hidden="true" /> Add
+                </button>
+              )}
             </div>
-
-            <div style={{ flex: 1 }}>
-              <h2 style={{ margin: '0 0 8px', fontSize: '15px', fontWeight: 700, color: '#ffffff' }}>
-                {status?.fatigue_feedback_title}
-              </h2>
-              <p style={{ margin: '0 0 10px', fontSize: '13.5px', lineHeight: 1.45, color: '#d4d4d8' }}>
-                {status?.fatigue_feedback_body}
+            {status.recent_checkins.length === 0 ? (
+              <p className="hifi-muted">
+                No check-ins logged in the last 7 days. Fatigue ratings from finished workouts are still tracked automatically.
               </p>
-              <p style={{ margin: '0 0 13px', fontSize: '13px', lineHeight: 1.45, color: '#d4d4d8' }}>
-                <strong style={{ color: '#ffffff' }}>Action:</strong> {status?.fatigue_action}
-              </p>
-            </div>
+            ) : (
+              <ul className="ot-checkins">
+                {status.recent_checkins.map((entry) => (
+                  <li className="ot-checkin-item" key={entry.id}>
+                    <div className="ot-checkin-body">
+                      <span className="ot-checkin-scores">
+                        Fatigue {entry.fatigue_level}/10 · Soreness {entry.soreness_level}/10
+                      </span>
+                      <span className="ot-checkin-meta">
+                        {formatShortDate(entry.created_at)} · Sleep: {entry.sleep_quality} · Joints: {entry.joint_strain}
+                        {entry.sore_muscles.length > 0 ? ` · ${entry.sore_muscles.join(', ')}` : ''}
+                      </span>
+                      {entry.notes && <span className="ot-checkin-meta">“{entry.notes}”</span>}
+                    </div>
+                    <button
+                      type="button"
+                      className="ot-checkin-delete"
+                      disabled={busy !== null}
+                      aria-label={`Delete check-in from ${formatShortDate(entry.created_at)}`}
+                      onClick={() => handleDeleteCheckIn(entry.id)}
+                    >
+                      {busy === entry.id ? <Sparkles size={15} aria-hidden="true" /> : <Trash2 size={15} aria-hidden="true" />}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
-
-          <section
-            style={{
-              backgroundColor: '#1c1c21',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '16px',
-              padding: '16px',
-              display: 'flex',
-              gap: '14px',
-              alignItems: 'flex-start',
-            }}
-          >
-            <div
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '12px',
-                backgroundColor: 'rgba(139, 92, 246, 0.14)',
-                color: '#a78bfa',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                fontWeight: 800,
-                fontSize: '14px',
-              }}
-            >
-              AI
-            </div>
-
-            <div style={{ flex: 1 }}>
-              <h2 style={{ margin: '0 0 8px', fontSize: '15px', fontWeight: 700, color: '#ffffff' }}>
-                {status?.ai_modification_title}
-              </h2>
-              <p style={{ margin: 0, fontSize: '13.5px', lineHeight: 1.45, color: '#d4d4d8' }}>
-                {status?.ai_modification_body}
-              </p>
-            </div>
-          </section>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
-            <button
-              type="button"
-              onClick={handleApplyMods}
-              disabled={busyAction !== null || status?.mods_applied}
-              style={{
-                width: '100%',
-                padding: '15px',
-                borderRadius: '999px',
-                border: 'none',
-                backgroundColor: status?.mods_applied ? '#3b2754' : '#582c83',
-                color: '#ffffff',
-                fontSize: '15px',
-                fontWeight: 700,
-                cursor: status?.mods_applied ? 'default' : 'pointer',
-                boxShadow: '0 8px 24px rgba(88, 44, 131, 0.4)',
-              }}
-            >
-              {busyAction === 'apply'
-                ? 'Applying...'
-                : status?.mods_applied
-                  ? '✓ Suggested Rest/Mods Applied (-15% Volume)'
-                  : 'Apply Suggested Rest/Mods'}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleDismiss}
-              disabled={busyAction !== null}
-              style={{
-                width: '100%',
-                padding: '14px',
-                borderRadius: '999px',
-                border: '1px solid #4b4b52',
-                backgroundColor: 'transparent',
-                color: '#a1a1aa',
-                fontSize: '14.5px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              {busyAction === 'dismiss' ? 'Dismissing...' : 'Dismiss and continue anyway'}
-            </button>
-          </div>
-        </div>
+        </>
       )}
     </div>
   )
 }
-
-export default OvertrainingAlerts

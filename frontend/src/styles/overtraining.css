@@ -1,0 +1,317 @@
+/* Overtraining & Recovery Alert styles matching redesign.css / ui/redesign tokens. */
+
+.app-shell:has(.ot-screen) {
+  background: linear-gradient(161.7deg, rgb(0, 59, 210) -10%, rgb(249, 249, 249) 22%, rgb(233, 246, 251) 83%, rgb(0, 59, 210) 125%) fixed;
+}
+:root[data-theme="dark"] .app-shell:has(.ot-screen) {
+  background: linear-gradient(161.7deg, rgb(0, 40, 140) -10%, #0f1115 22%, #10151b 83%, rgb(0, 40, 140) 125%) fixed;
+}
+
+/* Workouts banner */
+.hifi-card.ot-banner {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  color: var(--hifi-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-out), border-color var(--motion-fast) ease-out;
+}
+.hifi-card.ot-banner.is-high {
+  border-color: rgba(198, 47, 69, 0.45);
+  background: linear-gradient(135deg, rgba(198, 47, 69, 0.08) 0%, var(--hifi-card) 60%);
+}
+.hifi-card.ot-banner.is-moderate {
+  border-color: rgba(168, 107, 0, 0.38);
+  background: linear-gradient(135deg, rgba(224, 168, 58, 0.1) 0%, var(--hifi-card) 60%);
+}
+.hifi-card.ot-banner:active { transform: scale(0.99); }
+.hifi-card.ot-banner:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+
+.ot-banner-icon {
+  display: grid;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--hifi-well);
+  color: var(--primary);
+}
+.ot-banner.is-high .ot-banner-icon { background: var(--negative-tint); color: var(--negative); }
+.ot-banner.is-moderate .ot-banner-icon { background: rgba(168, 107, 0, 0.14); color: var(--warning); }
+
+.ot-banner-copy { display: grid; flex: 1; gap: 3px; min-width: 0; }
+.ot-banner-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.ot-banner-title { font-size: 15px; font-weight: 500; line-height: 1.2; }
+.ot-banner-subtitle { color: var(--hifi-muted); font-size: 13px; line-height: 1.35; }
+.ot-banner-arrow { flex: none; color: var(--hifi-faint); }
+
+.ot-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--hifi-well);
+  color: var(--hifi-muted);
+  font-family: var(--hifi-mono);
+  font-size: 11px;
+  line-height: 1.3;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.ot-tier-badge.is-high { background: var(--negative-tint); color: var(--negative); }
+.ot-tier-badge.is-moderate { background: rgba(168, 107, 0, 0.14); color: var(--warning); }
+.ot-tier-badge.is-ready { background: var(--green-tint); color: var(--green); }
+
+/* Recovery screen */
+.ot-screen { gap: 16px; }
+
+.ot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ot-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 4px 0 0;
+  border: 0;
+  color: var(--hifi-muted);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+}
+.ot-back:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; border-radius: 8px; }
+.ot-page-title-row { display: grid; gap: 4px; }
+.ot-page-title-row p { margin: 0; color: var(--hifi-muted); font-size: 14px; line-height: 1.4; }
+
+.ot-overview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+.ot-gauge { position: relative; width: 88px; height: 88px; flex: none; }
+.ot-gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ot-gauge circle { fill: none; stroke-width: 7; }
+.ot-gauge-track { stroke: var(--hifi-track); }
+.ot-gauge-value { stroke-linecap: round; transition: stroke-dashoffset 600ms var(--ease-out); }
+.ot-gauge-value.is-ready { stroke: var(--green); }
+.ot-gauge-value.is-moderate { stroke: var(--warning); }
+.ot-gauge-value.is-high { stroke: var(--negative); }
+.ot-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  font-family: var(--hifi-mono);
+}
+.ot-gauge-center strong { font-size: 24px; font-weight: 400; line-height: 1; }
+.ot-gauge-center span { color: var(--hifi-faint); font-size: 11px; }
+
+.ot-overview-copy { display: grid; gap: 6px; min-width: 0; }
+.ot-overview-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ot-overview-headline { margin: 0; font-size: 17px; font-weight: 500; line-height: 1.25; }
+.ot-overview-summary { margin: 0; color: var(--hifi-muted); font-size: 13.5px; line-height: 1.45; }
+
+.ot-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.ot-metric {
+  display: grid;
+  gap: 4px;
+  padding: 10px 6px;
+  border-radius: 10px;
+  background: var(--hifi-well);
+  text-align: center;
+}
+.ot-metric span { color: var(--hifi-muted); font-size: 11px; }
+.ot-metric strong { font-family: var(--hifi-mono); font-size: 15px; font-weight: 400; }
+
+@media (max-width: 360px) {
+  .ot-overview { grid-template-columns: 1fr; justify-items: start; }
+  .ot-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.ot-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--green-tint);
+  color: var(--green);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+.ot-notice.is-error { background: var(--negative-tint); color: var(--negative); }
+.ot-notice > svg { flex: none; margin-top: 2px; }
+
+.ot-signals { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ot-signal {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--hifi-well);
+}
+.ot-signal-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ot-signal-name { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
+.ot-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--green); }
+.ot-dot.is-watch { background: var(--warning); }
+.ot-dot.is-high { background: var(--negative); }
+.ot-signal-value { color: var(--hifi-ink); font-family: var(--hifi-mono); font-size: 13px; }
+.ot-signal-detail { margin: 0; color: var(--hifi-muted); font-size: 13px; line-height: 1.4; }
+
+.ot-muscles-wrap {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+.ot-muscle-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ot-muscle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--hifi-well);
+  font-size: 13px;
+}
+.ot-muscle-meta { color: var(--hifi-muted); font-family: var(--hifi-mono); font-size: 11.5px; white-space: nowrap; }
+
+.ot-recommendations { display: grid; gap: 8px; margin: 0; padding-left: 18px; color: var(--hifi-muted); font-size: 14px; line-height: 1.45; }
+.ot-actions { display: grid; gap: 10px; }
+.ot-action-btn {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 31px;
+  background: var(--hifi-button);
+  color: var(--hifi-ink);
+  box-shadow: inset 0 0 4px var(--hifi-shadow);
+  cursor: pointer;
+  font-family: var(--hifi-mono);
+  font-size: 13px;
+  text-transform: uppercase;
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.ot-action-btn:active { transform: scale(0.98); }
+.ot-action-btn:disabled { cursor: not-allowed; opacity: 0.55; }
+.ot-action-btn:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+.ot-action-btn.is-primary {
+  background: #1563a6;
+  color: #fff;
+  box-shadow: none;
+}
+:root[data-theme="dark"] .ot-action-btn.is-primary { background: #6fb2ec; color: #0f1115; }
+.ot-action-btn.is-ghost {
+  background: transparent;
+  color: var(--hifi-muted);
+  box-shadow: none;
+  border: 1px solid var(--line);
+}
+
+/* Recovery check-in form */
+.ot-form { animation: content-in var(--motion) var(--ease-out); }
+.ot-slider-field { display: grid; gap: 6px; font-size: 14px; }
+.ot-slider-head { display: flex; justify-content: space-between; align-items: baseline; }
+.ot-slider-head strong { color: var(--primary); font-family: var(--hifi-mono); }
+.ot-slider-field input[type="range"] { width: 100%; accent-color: var(--primary); cursor: pointer; }
+.ot-choice-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.ot-choice {
+  min-height: 40px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--hifi-well);
+  color: var(--hifi-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.ot-choice.is-selected {
+  border-color: var(--primary);
+  background: rgba(21, 99, 166, 0.14);
+  color: var(--primary);
+}
+.ot-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ot-chip {
+  min-height: 34px;
+  padding: 4px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--hifi-well);
+  color: var(--hifi-muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ot-chip.is-selected {
+  border-color: var(--primary);
+  background: rgba(21, 99, 166, 0.16);
+  color: var(--primary);
+  font-weight: 500;
+}
+.ot-notes-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--hifi-well);
+  color: var(--hifi-ink);
+  font: inherit;
+  font-size: 14px;
+}
+.ot-notes-input:focus { outline: 2px solid #0052b1; outline-offset: 1px; }
+
+/* Recent check-ins list */
+.ot-checkins { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ot-checkin-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--hifi-well);
+}
+.ot-checkin-body { display: grid; gap: 4px; min-width: 0; }
+.ot-checkin-scores { font-family: var(--hifi-mono); font-size: 13px; }
+.ot-checkin-meta { color: var(--hifi-muted); font-size: 12.5px; line-height: 1.4; }
+.ot-checkin-delete {
+  display: grid;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--hifi-faint);
+  cursor: pointer;
+}
+.ot-checkin-delete:hover { color: var(--negative); }
+.ot-checkin-delete:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ot-banner, .ot-action-btn, .ot-gauge-value, .ot-form { transition: none; animation: none; }
+}

@@ -8,6 +8,7 @@ from app.core.auth import current_user, optional_user
 from app.core.local_day import LocalDay, local_day
 from app.facades.workout_facade import workout_facade
 from app.schemas.exercise import Exercise, ExerciseListResponse
+from app.schemas.overtraining import FatigueFeedbackCreate, OvertrainingStatusResponse
 from app.schemas.workout import (
     CustomExerciseCreate,
     LiveWorkoutAdjustmentRequest,
@@ -113,6 +114,78 @@ def delete_workout_history(
 ) -> dict[str, str]:
     workout_facade.delete_history_entry(user_id, workout_id)
     return {"status": "deleted"}
+
+
+@router.get("/overtraining-alerts", response_model=OvertrainingStatusResponse)
+def get_overtraining_alerts(
+    response: Response,
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+) -> OvertrainingStatusResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return workout_facade.get_overtraining_status(user_id, day)
+
+
+@router.post("/fatigue-feedback", response_model=OvertrainingStatusResponse)
+def submit_fatigue_feedback(
+    payload: FatigueFeedbackCreate,
+    response: Response,
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+) -> OvertrainingStatusResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return workout_facade.submit_fatigue_feedback(user_id, payload, day)
+
+
+@router.delete("/fatigue-feedback/{entry_id}", response_model=OvertrainingStatusResponse)
+def remove_fatigue_feedback(
+    entry_id: UUID,
+    response: Response,
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+) -> OvertrainingStatusResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return workout_facade.delete_fatigue_feedback(user_id, str(entry_id), day)
+
+
+@router.post("/overtraining-alerts/apply", response_model=OvertrainingStatusResponse)
+def apply_overtraining_deload(
+    response: Response,
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+) -> OvertrainingStatusResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return workout_facade.apply_overtraining_mods(user_id, day)
+
+
+@router.delete("/overtraining-alerts/apply", response_model=OvertrainingStatusResponse)
+def clear_overtraining_deload(
+    response: Response,
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+) -> OvertrainingStatusResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return workout_facade.clear_overtraining_mods(user_id, day)
+
+
+@router.post("/overtraining-alerts/rest-day", response_model=OvertrainingStatusResponse)
+def swap_today_to_rest_day(
+    response: Response,
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+) -> OvertrainingStatusResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return workout_facade.schedule_recovery_rest_day(user_id, day)
+
+
+@router.post("/overtraining-alerts/dismiss", response_model=OvertrainingStatusResponse)
+def dismiss_overtraining(
+    response: Response,
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+) -> OvertrainingStatusResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return workout_facade.dismiss_overtraining_alert(user_id, day)
 
 
 @router.get("/exercises", response_model=ExerciseListResponse)
