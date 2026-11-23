@@ -1,12 +1,34 @@
 import { useEffect, useState } from 'react'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import AiTipCard from '../components/home/AiTipCard'
-import WeekActivity from '../components/home/WeekActivity'
-import DailyIntake from '../components/nutrition/DailyIntake'
-import HydrationCard from '../components/home/HydrationCard'
+import HydrationSummary from '../components/home/HydrationSummary'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, isPremiumActive, planTodaysWorkout, type DashboardSummary } from '../services/api'
+import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
+import orbImage from '../assets/home/orb.svg'
+import workoutImage from '../assets/home/workout.webp'
+import '../styles/home.css'
+
+const percent = (current: number, target: number) => (target > 0 ? Math.max(0, Math.min(1, current / target)) : 0)
+
+function ProgressBar({ value }: { value: number }) {
+  return (
+    <span className="home-bar" aria-hidden="true">
+      <span style={{ width: `${value * 100}%` }} />
+    </span>
+  )
+}
+
+/** Today against the 7-day average: Health Connect gives no daily goal to measure against. */
+function ActivityStat({ value, average, unit }: { value: number; average: number; unit: string }) {
+  return (
+    <div className="home-activity-stat">
+      <strong>{value.toLocaleString('en-US')}</strong>
+      <span>/{average.toLocaleString('en-US')} avg {unit}</span>
+      <ProgressBar value={percent(value, average)} />
+    </div>
+  )
+}
 
 // Nothing shows while loading; screen readers still hear it.
 function Home() {
@@ -50,174 +72,151 @@ function Home() {
   if (error) return <div className="screen state-card" role="alert">{error}</div>
 
   // The page is drawn straight away; only the parts that need the dashboard wait for it, and the
-  // tip and activity load at the same time instead of after it.
+  // tip and hydration load at the same time instead of after it.
   const nutrition = summary?.nutrition
   const plan = summary?.plan
   const completedWorkoutToday = summary?.completed_workout_today
   const activity = summary?.activity
+  const consumed = nutrition ? nutrition.target_kcals - nutrition.remaining_kcals : 0
+  const kcalGoal = nutrition?.target_kcals ?? 0
   const macros = [
     { label: 'Protein', current: nutrition?.current_protein ?? 0, target: nutrition?.target_protein ?? 0 },
     { label: 'Carbs', current: nutrition?.current_carbs ?? 0, target: nutrition?.target_carbs ?? 0 },
     { label: 'Fat', current: nutrition?.current_fat ?? 0, target: nutrition?.target_fat ?? 0 },
   ]
   const firstName = (summary?.user_name || user?.name || '').split(' ')[0]
-  const today = summary?.current_date_formatted ?? new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit' })
+  const today = summary?.current_date_formatted ?? new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 19 ? 'Good afternoon' : 'Good evening'
+  // The dashboard's routine estimate only describes the plan when both name the same workout.
+  const duration = summary?.workout && summary.workout.title === plan?.title ? summary.workout.estimated_duration_minutes : null
 
   return (
-    <div className="screen">
-      <header className="screen-header">
+    <div className="screen home-screen">
+      <header className="home-header">
         <div>
-          <p className="eyebrow">{today}</p>
-          <h1>Hello, {firstName}</h1>
+          <p className="home-date">{today}</p>
+          <h1 className="home-greeting">{greeting}{firstName ? `, ${firstName}` : ''}</h1>
         </div>
         <PremiumUpsellButton />
       </header>
 
-      <section className="section" aria-labelledby="nutrition-summary">
-        <div className="section-heading">
-          <h2 className="section-title" id="nutrition-summary">Nutrition</h2>
-          <span className="section-links">
-            <button className="text-link" type="button" onClick={() => navigate(isPremiumActive(user) ? '/scan-meal' : '/premium')}>Scan plate</button>
-            <button className="text-link" type="button" onClick={() => navigate('/log-meals')}>Log a meal</button>
-          </span>
-        </div>
-        <DailyIntake
-          consumed={nutrition ? nutrition.target_kcals - nutrition.remaining_kcals : 0}
-          goal={nutrition?.target_kcals ?? 0}
-          macros={macros}
-          pending={!nutrition}
-        />
-      </section>
-
-      {user?.id && (
-        <section className="section" aria-labelledby="activity-summary">
-          <div className="section-heading">
-            <h2 className="section-title" id="activity-summary">Activity</h2>
-            <button className="text-link" type="button" onClick={() => navigate('/workouts')}>Log a workout</button>
+      <h2 className="home-heading">Daily overview</h2>
+      <div className="home-cards">
+        <section className="home-card" aria-labelledby="home-nutrition" aria-busy={!nutrition}>
+          <h2 className="home-card-label" id="home-nutrition">Nutrition</h2>
+          <div className="home-nutrition">
+            <div className="home-orb" role="img" aria-label={nutrition ? `${Math.round(consumed)} of ${kcalGoal} kcal eaten` : 'Loading your daily intake'}>
+              <img src={orbImage} alt="" width={135.45} height={140.934} />
+              <p className="home-orb-value" aria-hidden="true">
+                <strong>{nutrition ? Math.round(consumed).toLocaleString('en-US') : '–'}</strong>
+                <span>/{nutrition ? kcalGoal.toLocaleString('en-US') : '–'} kcal</span>
+              </p>
+            </div>
+            <ul className="home-macros">
+              {macros.map((macro) => (
+                <li key={macro.label}>
+                  <span className="home-macro-name">{macro.label}</span>
+                  <span className="home-macro-value">
+                    <strong>{nutrition ? Math.round(macro.current) : '–'}</strong>/{nutrition ? Math.round(macro.target) : '–'} g
+                  </span>
+                  <ProgressBar value={percent(macro.current, macro.target)} />
+                </li>
+              ))}
+            </ul>
           </div>
-          <WeekActivity userId={user.id} />
+          <div className="home-card-footer">
+            <p className="home-caption">{nutrition ? `${Math.round(percent(consumed, kcalGoal) * 100)}% of goal` : ' '}</p>
+            <button className="home-pill" type="button" onClick={() => navigate('/log-meals')}>Log a meal</button>
+          </div>
         </section>
-      )}
 
-      <section className="section" aria-labelledby="trainer-insight">
-        <h2 className="section-title" id="trainer-insight">Recommended for you</h2>
         <AiTipCard onApplied={() => fetchDashboardSummary({ forceRefresh: true }).then(setSummary).catch(() => undefined)} />
-      </section>
 
-      <section className="section" aria-labelledby="daily-steps">
-        <h2 className="section-title" id="daily-steps">Steps</h2>
-        {activity?.connected ? (
-          <div className="card activity-card">
-            <div className="activity-stats">
-              <div className="activity-stat">
-                <span>Steps today</span>
-                <strong>{activity.steps_today.toLocaleString()}</strong>
+        <section className="home-card" aria-labelledby="home-activity" aria-busy={!summary}>
+          <h2 className="home-card-label" id="home-activity">Activity</h2>
+          {activity?.connected ? (
+            <>
+              <div className="home-activity">
+                <ActivityStat value={activity.steps_today} average={activity.steps_avg_7d} unit="steps" />
+                <ActivityStat value={activity.active_calories_today} average={activity.active_calories_avg_7d} unit="kcal" />
               </div>
-              <div className="activity-stat">
-                <span>Active kcal</span>
-                <strong>{activity.active_calories_today}</strong>
-              </div>
-            </div>
-            <p className="activity-note">
-              Health Connect · 7-day average {activity.steps_avg_7d.toLocaleString()} steps and{' '}
-              {activity.active_calories_avg_7d} active kcal. Included in your AI trainer guidance.
-            </p>
-            {activity.source === 'preview' && (
-              <p className="activity-note">Browser preview activity. The Android app reads Health Connect directly.</p>
-            )}
-          </div>
-        ) : (
-          <div className="card activity-card activity-empty">
-            <div>
-              <h3>Bring your steps into the plan</h3>
-              <p>Connect Health Connect so the AI trainer can read steps and active calories.</p>
-            </div>
-            <button className="secondary-action" type="button" onClick={() => navigate('/profile')}>
-              Connect
-            </button>
-          </div>
-        )}
-      </section>
-
-      <section className="section" aria-labelledby="hydration-summary">
-        <h2 className="section-title" id="hydration-summary">Hydration</h2>
-        <HydrationCard />
-      </section>
-
-      <section className="section" aria-labelledby="programmed-training">
-        <h2 className="section-title" id="programmed-training">Today's set</h2>
-        {!summary || (planning && !plan && !completedWorkoutToday) ? (
-          // Same card shape straight away, so nothing jumps in later at the bottom of the page.
-          <div className="card training-card empty-state" role="status" aria-busy="true">
-            {summary ? "Planning today's workout…" : "Loading today's workout…"}
-          </div>
-        ) : completedWorkoutToday ? (
-          <div className="card training-card">
-            <div className="scheduled-training-heading">
-              <h3>Workout completed today</h3>
-            </div>
-            <p className="training-meta">{completedWorkoutToday.name}</p>
-          </div>
-        ) : plan ? (
-          plan.is_rest_day ? (
-            <div className="card training-card">
-              <div className="scheduled-training-heading">
-                <h3>Rest day</h3>
-              </div>
-              <p className="training-meta">Recovery recommended by your AI trainer</p>
-              {plan.ai_reasoning && (
-                <p className="training-reasoning">{plan.ai_reasoning}</p>
+              {activity.source === 'preview' && (
+                <p className="home-caption">Browser preview activity. The Android app reads Health Connect directly.</p>
               )}
-            </div>
+            </>
           ) : (
-          <div className="card training-card">
-            <div className="scheduled-training-heading">
-              <h3>{plan.title}</h3>
-              {plan.routine_id === null ? (
-                <span className="ai-adjusted-badge">AI generated</span>
-              ) : plan.ai_adjusted && <span className="ai-adjusted-badge">AI adjusted</span>}
+            <div className="home-card-footer">
+              <p className="home-muted">Connect Health Connect so the AI trainer can read your steps and active calories.</p>
+              <button className="home-pill" type="button" onClick={() => navigate('/profile')} disabled={!summary}>Connect</button>
             </div>
-            <p className="training-meta">{plan.exercises.length} exercises</p>
-            {plan.exercises.length > 0 && (
-              <ul className="scheduled-exercises" aria-label="Planned exercises and sets">
-                {plan.exercises.map((exercise) => (
-                  <li key={exercise.exercise_id}>
-                    <span>{exercise.name}</span>
-                    <span className="scheduled-exercise-sets">{exercise.sets} × {exercise.reps}{exercise.previous_weight_kg ? ` · ${exercise.previous_weight_kg} kg` : ''}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {plan.ai_adjusted && plan.ai_reasoning && (
-              <p className="training-reasoning">{plan.ai_reasoning}</p>
-            )}
-            <button className="primary-button" type="button" onClick={() => navigate('/workouts/active', { state: {
-              planId: plan.id,
-              routineId: plan.routine_id,
-              name: plan.title,
-              startedAt: new Date().toISOString(),
-              exercises: plan.exercises.map((exercise) => ({
-                exercise_id: exercise.exercise_id,
-                name: exercise.name,
-                previous_weight_kg: exercise.previous_weight_kg ?? null,
-                previous_reps: exercise.reps,
-                target_sets: exercise.sets,
-                target_reps: exercise.reps,
-                sets: Array.from({ length: Math.max(1, exercise.sets) }, (_, index) => ({
-                  set_number: index + 1,
-                  weight_kg: exercise.previous_weight_kg ?? 0,
-                  reps: exercise.reps,
-                  is_completed: false,
-                })),
-              })),
-            } })}>Start workout</button>
-          </div>
-          )
-        ) : (
-          <div className="card training-card empty-state">No workout scheduled for today.</div>
-        )}
-      </section>
+          )}
+        </section>
 
+        <section className="home-card" aria-labelledby="home-workout">
+          <h2 className="home-card-label" id="home-workout">AI workout</h2>
+          {!summary || (planning && !plan && !completedWorkoutToday) ? (
+            // Same card shape straight away, so nothing jumps in later at the bottom of the page.
+            <p className="home-muted" role="status" aria-busy="true">
+              {summary ? "Planning today's workout…" : "Loading today's workout…"}
+            </p>
+          ) : completedWorkoutToday ? (
+            <p className="home-plan-intro">Workout completed today<span>{completedWorkoutToday.name}</span></p>
+          ) : plan?.is_rest_day ? (
+            <>
+              <p className="home-plan-intro">Rest day<span>Recovery recommended by your AI trainer</span></p>
+              {plan.ai_reasoning && <p className="home-muted">{plan.ai_reasoning}</p>}
+            </>
+          ) : plan ? (
+            <>
+              <p className="home-plan-intro">Today's plan<span>based on your goals and progress</span></p>
+              <div className="home-workout">
+                <img className="home-workout-image" src={workoutImage} alt="" width={88} height={88} />
+                <div className="home-workout-body">
+                  <h3>{plan.title}</h3>
+                  {plan.routine_id === null ? (
+                    <span className="home-badge">AI generated</span>
+                  ) : plan.ai_adjusted && <span className="home-badge">AI adjusted</span>}
+                  <div className="home-workout-meta">
+                    <p className="home-caption">
+                      {duration ? <span>{duration} min</span> : null}
+                      <span>{plan.exercises.length} exercises</span>
+                    </p>
+                    <button className="home-pill" type="button" onClick={() => navigate('/workouts/active', { state: {
+                      planId: plan.id,
+                      routineId: plan.routine_id,
+                      name: plan.title,
+                      startedAt: new Date().toISOString(),
+                      exercises: plan.exercises.map((exercise) => ({
+                        exercise_id: exercise.exercise_id,
+                        name: exercise.name,
+                        previous_weight_kg: exercise.previous_weight_kg ?? null,
+                        previous_reps: exercise.reps,
+                        target_sets: exercise.sets,
+                        target_reps: exercise.reps,
+                        sets: Array.from({ length: Math.max(1, exercise.sets) }, (_, index) => ({
+                          set_number: index + 1,
+                          weight_kg: exercise.previous_weight_kg ?? 0,
+                          reps: exercise.reps,
+                          is_completed: false,
+                        })),
+                      })),
+                    } })}>Start</button>
+                  </div>
+                </div>
+              </div>
+              {plan.ai_adjusted && plan.ai_reasoning && <p className="home-muted">{plan.ai_reasoning}</p>}
+            </>
+          ) : (
+            <div className="home-card-footer">
+              <p className="home-muted">No workout scheduled for today.</p>
+              <button className="home-pill" type="button" onClick={() => navigate('/workouts')}>Workouts</button>
+            </div>
+          )}
+        </section>
+
+        <HydrationSummary />
+      </div>
     </div>
   )
 }

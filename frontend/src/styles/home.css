@@ -1,0 +1,156 @@
+/* Home redesign from the high-fidelity Figma mockup ("1/HOME"). Scoped to .home-screen so the
+   other pages keep the wireframe style until they are redesigned too. */
+@import '@fontsource/space-mono/400.css';
+@import '@fontsource-variable/roboto';
+
+.home-screen {
+  --home-ink: #424242;
+  --home-muted: #727272;
+  --home-faint: #acacac;
+  --home-card: #fff;
+  --home-track: #f9f9f9;
+  --home-fill: #cee2fd;
+  --home-fill-edge: rgba(15, 62, 133, 0.25);
+  --home-well: #fafafa;
+  --home-button: #fff;
+  --home-shadow: rgba(0, 0, 0, 0.25);
+  --home-sans: "Roboto Variable", Roboto, ui-sans-serif, system-ui, sans-serif;
+  --home-mono: "Space Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  display: grid;
+  gap: 16px;
+  color: var(--home-ink);
+  font-family: var(--home-sans);
+}
+
+:root[data-theme="dark"] .home-screen {
+  --home-ink: #ececec;
+  --home-muted: #b0b0b0;
+  --home-faint: #8a8a8a;
+  --home-card: #1c1f24;
+  --home-track: #2a2d33;
+  --home-fill: #4b78b8;
+  --home-fill-edge: rgba(0, 0, 0, 0.4);
+  --home-well: #24272d;
+  --home-button: #2a2d33;
+  --home-shadow: rgba(0, 0, 0, 0.6);
+}
+
+/* Blue wash in the top right corner, fading into a pale lilac ground. */
+.app-shell:has(.home-screen) {
+  background:
+    radial-gradient(110% 45% at 100% 0%, rgba(0, 82, 177, 0.9) 0%, rgba(141, 207, 232, 0.35) 55%, transparent 80%),
+    linear-gradient(180deg, #e9eef8 0%, #f6f6fe 40%, #f8f8ff 100%);
+}
+:root[data-theme="dark"] .app-shell:has(.home-screen) {
+  background:
+    radial-gradient(110% 45% at 100% 0%, rgba(0, 62, 140, 0.75) 0%, rgba(20, 60, 100, 0.3) 55%, transparent 80%),
+    #0f1115;
+}
+
+.home-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.home-date { margin: 0 0 4px; color: var(--home-muted); font-size: 14px; text-transform: uppercase; }
+.home-greeting { margin: 0; font-size: 20px; font-weight: 500; line-height: 1.2; }
+.home-heading { margin: 0; padding-top: 8px; font-size: 24px; font-weight: 400; line-height: 1.2; }
+.home-cards { display: grid; gap: 16px; margin-top: -4px; }
+
+.home-card { display: grid; gap: 16px; padding: 16px; border-radius: 12px; background: var(--home-card); }
+.home-card-label { margin: 0; font-size: 16px; font-weight: 300; line-height: 12px; text-transform: uppercase; }
+.home-card-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.home-card-actions { display: flex; flex: none; align-items: center; gap: 12px; }
+.home-caption { display: grid; gap: 2px; margin: 0; color: var(--home-faint); font-family: var(--home-mono); font-size: 14px; line-height: 1.1; }
+.home-muted { margin: 0; color: var(--home-muted); font-size: 14px; line-height: 1.4; }
+.home-text-link { color: var(--home-muted); font-family: var(--home-mono); font-size: 14px; text-transform: uppercase; }
+
+/* Button/Default: white pill pressed into the card. */
+.home-pill {
+  position: relative;
+  flex: none;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 31px;
+  color: var(--home-ink);
+  background: var(--home-button);
+  box-shadow: inset 0 0 4px var(--home-shadow);
+  cursor: pointer;
+  font-family: var(--home-mono);
+  font-size: 14px;
+  line-height: 1.3;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+/* Keeps a 44px touch target around the small pill. */
+.home-pill::before { content: ""; position: absolute; inset: -10px -4px; }
+.home-pill:active { transform: scale(0.97); }
+.home-pill:disabled { cursor: not-allowed; opacity: 0.5; }
+.home-pill.is-big { padding: 8px 24px; background: rgba(255, 255, 255, 0.1); font-size: 18px; }
+.home-pill:focus-visible, .ai-insight-close:focus-visible, .ai-insight-why:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+
+.home-bar { position: relative; display: block; height: 12px; overflow: hidden; border-radius: 16px; background: var(--home-track); box-shadow: inset 0 1px 2px var(--home-shadow); }
+.home-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--home-fill); box-shadow: inset 0 0 2px 1px var(--home-fill-edge); transition: width 550ms var(--ease-out); }
+
+/* Nutrition */
+.home-nutrition { display: flex; align-items: center; justify-content: center; gap: 36px; padding-bottom: 16px; }
+.home-orb { position: relative; flex: none; width: 126px; height: 126px; overflow: hidden; }
+.home-orb img { position: absolute; top: calc(50% + 9.27px - 70.467px); left: calc(50% + 6.52px - 67.725px); max-width: none; }
+.home-orb-value { position: absolute; inset: 0 6px 0 0; display: grid; place-content: center; gap: 4px; margin: 0; color: #424242; font-family: var(--home-mono); text-align: center; }
+.home-orb-value strong { font-size: 24px; font-weight: 400; line-height: 1.1; }
+.home-orb-value span { font-size: 14px; line-height: 1; }
+.home-macros { display: grid; flex: 1; gap: 12px; max-width: 160px; margin: 0; padding: 0; list-style: none; }
+.home-macros li { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 0; }
+.home-macro-name { padding-left: 2px; color: var(--home-faint); font-size: 14px; text-transform: uppercase; }
+.home-macro-value { padding-right: 2px; color: var(--home-faint); font-family: var(--home-mono); font-size: 14px; }
+.home-macro-value strong { color: var(--home-ink); font-size: 18px; font-weight: 400; line-height: 1.2; }
+.home-macros .home-bar { grid-column: 1 / -1; }
+
+/* Activity */
+.home-activity { display: grid; grid-template-columns: repeat(2, minmax(0, 140px)); justify-content: center; gap: 24px; padding-bottom: 16px; }
+.home-activity-stat { display: grid; gap: 4px; justify-items: center; font-family: var(--home-mono); text-align: center; }
+.home-activity-stat strong { font-size: 24px; font-weight: 400; line-height: 1.1; }
+.home-activity-stat span { color: var(--home-faint); font-size: 14px; line-height: 1; white-space: nowrap; }
+.home-activity-stat .home-bar { width: 100%; margin-top: 8px; }
+
+/* AI workout */
+.home-plan-intro { display: grid; margin: 0; font-size: 16px; line-height: 1.2; }
+.home-plan-intro span { color: var(--home-faint); }
+.home-workout { display: flex; gap: 12px; min-height: 88px; padding: 8px 0 16px; }
+.home-workout-image { flex: none; width: 88px; height: 88px; border-radius: 6px; object-fit: cover; object-position: 50% 30%; }
+.home-workout-body { display: flex; flex: 1; flex-direction: column; justify-content: space-between; gap: 8px; min-width: 0; }
+.home-workout-body h3 { margin: 0; font-size: 20px; font-weight: 400; line-height: 1.2; overflow-wrap: anywhere; }
+.home-workout-meta { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+.home-workout-meta .home-caption { color: var(--home-muted); }
+.home-badge { align-self: flex-start; padding: 2px 8px; border-radius: 31px; color: var(--home-muted); background: var(--home-well); font-family: var(--home-mono); font-size: 12px; text-transform: uppercase; }
+
+/* Hydration */
+.home-water { position: relative; overflow: hidden; border-radius: 16px; background: var(--home-well); box-shadow: inset -1px 2px 4px rgba(175, 175, 175, 0.5); }
+.home-water-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 14px;
+  background: linear-gradient(90deg, #f6faff 8%, #bed4e9 35%, #85aed2 60%, #4d88bc 85%, #1563a6 100%);
+  transition: width 550ms var(--ease-out);
+}
+.home-water-value { position: relative; display: grid; margin: 0; padding: 16px; font-family: var(--home-mono); }
+.home-water-value strong { color: #424242; font-size: 24px; font-weight: 400; line-height: 1.1; }
+.home-water-value span { color: #727272; font-size: 14px; line-height: 1.12; }
+
+/* AI insight: the mockup's sheet, kept in the page so it never covers the cards. */
+.ai-insight { gap: 8px; border-radius: 28px 28px 12px 12px; background: linear-gradient(180deg, rgba(141, 207, 232, 0.21) 0%, rgba(1, 78, 144, 0.21) 100%), var(--home-card); box-shadow: 0 -2px 8px rgba(131, 131, 131, 0.25); }
+.ai-insight-top { display: flex; align-items: center; justify-content: space-between; min-height: 30px; }
+.ai-insight-close { display: grid; place-items: center; width: 44px; height: 44px; margin: -12px -12px -12px 0; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.ai-insight-close:disabled { cursor: not-allowed; opacity: 0.5; }
+.ai-insight-message { margin: 0; font-size: 20px; font-weight: 500; line-height: 1.25; }
+.ai-insight .ai-tip-notice p { margin: 0; color: var(--home-muted); font-size: 14px; line-height: 1.4; }
+.ai-insight-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding-top: 8px; }
+.ai-insight-why { display: grid; place-items: center; width: 44px; height: 44px; margin-right: auto; padding: 0; border: 0; color: var(--home-muted); background: transparent; cursor: pointer; }
+:root[data-theme="dark"] .ai-insight-close img { filter: invert(1); }
+
+@media (max-width: 360px) {
+  .home-nutrition { flex-direction: column; gap: 16px; }
+  .home-macros { width: 100%; max-width: none; }
+  .home-activity { gap: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-bar > span, .home-water-fill { transition: none; }
+}

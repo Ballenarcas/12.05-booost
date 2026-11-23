@@ -1,7 +1,8 @@
-import { CircleHelp, Lightbulb } from 'lucide-react'
+import { CircleHelp } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { decideTip, fetchCurrentTip, undoTip, type AiTip } from '../../services/api'
 import { useDialogBehavior } from '../../utils/useDialogBehavior'
+import closeIcon from '../../assets/home/close.svg'
 
 const ENCOURAGEMENT = 'Keep it up! Every meal and workout you log helps me give you better tips.'
 const UNDO_WINDOW_MS = 8000
@@ -73,27 +74,31 @@ export default function AiTipCard({ onApplied }: { onApplied: () => void }) {
 
   return (
     <>
-      <div className="card ai-banner ai-tip" aria-live="polite" aria-busy={!loaded}>
-        <Lightbulb size={21} aria-hidden="true" />
-        <div className="ai-tip-body">
-          <p className="ai-tip-message" key={tip?.id ?? (loaded ? 'done' : 'loading')}>{tip ? tip.message : loaded ? ENCOURAGEMENT : 'Thinking about your day…'}</p>
-          {notice && (
-            <div className="ai-tip-notice" role="status">
-              <p>{notice}</p>
-              {undoTipId && <button type="button" className="ai-tip-btn" disabled={busy} onClick={undo}>Undo</button>}
-            </div>
-          )}
+      <section className="home-card ai-insight" aria-labelledby="ai-insight-label" aria-live="polite" aria-busy={!loaded}>
+        <div className="ai-insight-top">
+          <h2 className="home-card-label" id="ai-insight-label">AI insight</h2>
           {tip && (
-            <div className="ai-tip-actions">
-              <button type="button" className="ai-tip-btn ai-tip-accept" disabled={busy} onClick={() => decide('accepted')}>Accept</button>
-              <button type="button" className="ai-tip-btn" disabled={busy} onClick={() => decide('dismissed')}>Dismiss</button>
-              <button type="button" className="ai-tip-btn ai-tip-why" aria-label="Why this tip?" onClick={() => setShowWhy(true)}>
-                <CircleHelp size={16} aria-hidden="true" />
-              </button>
-            </div>
+            <button type="button" className="ai-insight-close" aria-label="Dismiss tip" disabled={busy} onClick={() => decide('dismissed')}>
+              <img src={closeIcon} alt="" width={14} height={14} />
+            </button>
           )}
         </div>
-      </div>
+        <p className="ai-insight-message" key={tip?.id ?? (loaded ? 'done' : 'loading')}>{tip ? tip.message : loaded ? ENCOURAGEMENT : 'Thinking about your day…'}</p>
+        {notice && (
+          <div className="ai-tip-notice" role="status">
+            <p>{notice}</p>
+            {undoTipId && <button type="button" className="home-pill" disabled={busy} onClick={undo}>Undo</button>}
+          </div>
+        )}
+        {tip && (
+          <div className="ai-insight-actions">
+            <button type="button" className="ai-insight-why" aria-label="Why this tip?" onClick={() => setShowWhy(true)}>
+              <CircleHelp size={18} aria-hidden="true" />
+            </button>
+            <button type="button" className="home-pill is-big" disabled={busy} onClick={() => decide('accepted')}>Accept</button>
+          </div>
+        )}
+      </section>
 
       {showWhy && tip && (
         <div className="ai-tip-backdrop" onClick={() => setShowWhy(false)}>
