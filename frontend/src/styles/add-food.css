@@ -26,7 +26,7 @@ body:has(.add-food-screen), .add-food-screen { background: #f9f9f9; }
   font-size: 14px;
   text-transform: uppercase;
 }
-.add-food-type[aria-pressed="true"] { background: var(--hifi-fill); box-shadow: inset 0 0 4px rgba(15, 62, 133, 0.45); }
+.add-food-type[aria-pressed="true"] { color: var(--hifi-on-selected); background: var(--hifi-selected); }
 
 /* Food name and quantity: white cards with the label above a mono value and a hairline. */
 .add-food-fields { display: grid; gap: 10px; }
@@ -68,7 +68,7 @@ body:has(.add-food-screen), .add-food-screen { background: #f9f9f9; }
   font-family: var(--hifi-mono);
   font-size: 12px;
 }
-.add-food-presets button[aria-pressed="true"] { color: var(--hifi-ink); background: var(--hifi-fill); }
+.add-food-presets button[aria-pressed="true"] { color: var(--hifi-on-selected); background: var(--hifi-selected); }
 
 .add-food-suggestions {
   position: absolute;

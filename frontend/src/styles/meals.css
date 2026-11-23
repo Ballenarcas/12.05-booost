@@ -29,14 +29,13 @@
 .meals-panel-list { display: grid; gap: 8px; }
 
 .meals-card {
-  display: flex;
-  min-height: 77px;
-  gap: 4px;
+  display: grid;
   border-radius: 10px;
   background: var(--hifi-card);
   box-shadow: inset -1px -1px 5px #ececec;
 }
 :root[data-theme="dark"] .meals-card { box-shadow: none; }
+.meals-card-top { display: flex; min-height: 77px; gap: 4px; }
 .meals-card-main {
   display: flex;
   min-width: 0;
@@ -57,7 +56,19 @@
 .meals-card-name { color: #6c6c6c; font-family: var(--hifi-mono); font-size: 14px; line-height: 1.12; overflow-wrap: anywhere; }
 :root[data-theme="dark"] .meals-card-name { color: var(--hifi-muted); }
 .meals-card-side { display: flex; flex: none; flex-direction: column; align-items: flex-end; justify-content: space-between; padding: 0 12px 12px 0; }
-.meals-card-heart { display: grid; width: 44px; height: 44px; margin-right: -12px; place-items: center; padding: 0; border: 0; color: var(--hifi-faint); background: transparent; cursor: pointer; }
+.meals-card-icons { display: flex; align-items: center; }
+/* Figma "Meal card": a thin grey chevron, down while closed and up while open. */
+.meals-card-chevron { color: var(--hifi-faint); transition: transform var(--motion) var(--ease-out); pointer-events: none; }
+.meals-card[data-open="true"] .meals-card-chevron { transform: rotate(180deg); }
+.meals-card-details { display: grid; gap: 8px; padding: 0 16px 12px; animation: content-in var(--motion) var(--ease-out); }
+.meals-card-foods { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; color: var(--hifi-faint); font-family: var(--hifi-mono); font-size: 14px; line-height: 1.12; }
+.meals-card-foods li { display: flex; justify-content: space-between; gap: 12px; }
+.meals-card-foods li span:last-child { flex: none; text-align: right; }
+.meals-card-foods b { color: #828282; font-weight: 400; }
+:root[data-theme="dark"] .meals-card-foods b { color: var(--hifi-muted); }
+.meals-card-foods-empty { margin: 0; color: var(--hifi-faint); font-family: var(--hifi-mono); font-size: 14px; }
+.meals-card-edit { justify-self: end; min-height: 36px; }
+.meals-card-heart { display: grid; width: 40px; height: 44px; place-items: center; padding: 0; border: 0; color: var(--hifi-faint); background: transparent; cursor: pointer; }
 .meals-card-heart[aria-pressed="true"] { color: var(--negative); }
 /* Busy only blocks a second tap; the heart already shows the new state. */
 .meals-card-heart:disabled { cursor: default; }
@@ -95,5 +106,7 @@
   100% { transform: scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
+  .meals-card-chevron { transition: none; }
+  .meals-card-details { animation: none; }
   .meals-card-heart.is-pop svg, .meals-card-heart.is-unpop svg, .meals-card-heart.is-pop::after { animation: none; }
 }

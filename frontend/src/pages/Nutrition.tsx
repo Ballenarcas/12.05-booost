@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, ChefHat, ChevronLeft, ChevronRight, Heart, Loader2, Plus, Scale, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ChefHat, ChevronDown, ChevronLeft, ChevronRight, Heart, Loader2, Plus, Scale, Search, Trash2, X } from 'lucide-react';
 import { usePageNavigate } from '../utils/usePageNavigate';
 import {
   addFavoriteMeal,
@@ -99,6 +99,7 @@ export default function Nutrition() {
   // Set while the edit dialog is editing a favorite instead of a logged meal.
   const [editingFavoriteId, setEditingFavoriteId] = useState<string | null>(null);
   const [heartBusyId, setHeartBusyId] = useState<string | null>(null);
+  const [openMealId, setOpenMealId] = useState<string | null>(null);
   // Which heart just changed, so only that one animates (not hearts already set on load).
   const [heartAnim, setHeartAnim] = useState<{ id: string; kind: 'pop' | 'unpop' } | null>(null);
   const [favoriteNotice, setFavoriteNotice] = useState<string | null>(null);
@@ -546,25 +547,53 @@ export default function Nutrition() {
             meals.map((meal) => {
               const isFavorite = favoritesByKey.has(favoriteKey(meal.meal_type, meal.meal_name));
               return (
-                <article className="meals-card" key={meal.id}>
-                  <button className="meals-card-main" type="button" onClick={() => openEditModal(meal)} aria-label={`${meal.meal_type}: ${meal.meal_name}, ${meal.item_calories} kcal. Edit`}>
-                    <span className="meals-card-type">{meal.meal_type}</span>
-                    <span className="meals-card-name">{meal.meal_name}</span>
-                  </button>
-                  <span className="meals-card-side">
+                <article className="meals-card" key={meal.id} data-open={openMealId === meal.id}>
+                  <div className="meals-card-top">
                     <button
-                      className={`meals-card-heart${heartAnim?.id === meal.id ? ` is-${heartAnim.kind}` : ''}`}
-                      onAnimationEnd={() => setHeartAnim(null)}
+                      className="meals-card-main"
                       type="button"
-                      onClick={() => toggleFavorite(meal)}
-                      disabled={heartBusyId === meal.id}
-                      aria-pressed={isFavorite}
-                      aria-label={isFavorite ? `Remove ${meal.meal_name} from favorites` : `Save ${meal.meal_name} as a favorite`}
+                      onClick={() => setOpenMealId(openMealId === meal.id ? null : meal.id)}
+                      aria-expanded={openMealId === meal.id}
+                      aria-label={`${meal.meal_type}: ${meal.meal_name}, ${meal.item_calories} kcal. ${openMealId === meal.id ? 'Hide' : 'Show'} contents`}
                     >
-                      <Heart size={18} aria-hidden="true" fill={isFavorite ? 'currentColor' : 'none'} />
+                      <span className="meals-card-type">{meal.meal_type}</span>
+                      <span className="meals-card-name">{meal.meal_name}</span>
                     </button>
-                    <span className="meals-card-kcal">{meal.item_calories}kcal</span>
-                  </span>
+                    <span className="meals-card-side">
+                      <span className="meals-card-icons">
+                        <button
+                          className={`meals-card-heart${heartAnim?.id === meal.id ? ` is-${heartAnim.kind}` : ''}`}
+                          onAnimationEnd={() => setHeartAnim(null)}
+                          type="button"
+                          onClick={() => toggleFavorite(meal)}
+                          disabled={heartBusyId === meal.id}
+                          aria-pressed={isFavorite}
+                          aria-label={isFavorite ? `Remove ${meal.meal_name} from favorites` : `Save ${meal.meal_name} as a favorite`}
+                        >
+                          <Heart size={18} aria-hidden="true" fill={isFavorite ? 'currentColor' : 'none'} />
+                        </button>
+                        <ChevronDown className="meals-card-chevron" size={22} strokeWidth={1.5} aria-hidden="true" />
+                      </span>
+                      <span className="meals-card-kcal">{meal.item_calories}kcal</span>
+                    </span>
+                  </div>
+                  {openMealId === meal.id && (
+                    <div className="meals-card-details">
+                      {meal.ingredients?.length ? (
+                        <ul className="meals-card-foods" aria-label={`Contents of ${meal.meal_name}`}>
+                          {meal.ingredients.map((ingredient, index) => (
+                            <li key={`${ingredient.name}-${index}`}>
+                              <span>{ingredient.name}</span>
+                              <span><b>{Math.round(ingredient.quantity_g)}g</b> {Math.round(ingredient.calories_per_100g * ingredient.quantity_g / 100)}kcal</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="meals-card-foods-empty">{meal.weight_g ? `${Math.round(Number(meal.weight_g))}g · ` : ''}No ingredient breakdown for this meal.</p>
+                      )}
+                      <button className="hifi-link-button meals-card-edit" type="button" onClick={() => openEditModal(meal)}>Edit</button>
+                    </div>
+                  )}
                 </article>
               );
             })

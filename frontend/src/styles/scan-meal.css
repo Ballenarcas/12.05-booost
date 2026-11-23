@@ -82,9 +82,10 @@
 }
 .scan-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .scan-viewfinder:not([data-camera="live"]) .scan-video { visibility: hidden; }
-/* While the photo is analysed, a scan band as tall as the photo slides over it so its bright edge
-   sweeps up and down like a scanner. Moving it with transform keeps the animation off the layout. */
+/* While the photo is analysed, a scan band sweeps down and back up with its tinted trail
+   always on the side opposite the direction of movement (::before downward, ::after upward). */
 .scan-photo { position: relative; overflow: hidden; }
+.scan-photo[data-scanning="true"]::before,
 .scan-photo[data-scanning="true"]::after {
   content: "";
   position: absolute;
@@ -92,20 +93,45 @@
   right: 0;
   left: 0;
   height: 100%;
-  border-bottom: 1px solid #fff;
-  /* Only the last 15% is tinted, so a short band trails the bright line. */
-  background: linear-gradient(180deg, transparent 85%, rgba(249, 249, 249, 0.35) 92%, #96bad8 100%);
-  box-shadow: 0 1px 10px rgba(150, 186, 216, 0.9);
   pointer-events: none;
-  transform: translateY(-47%);
-  animation: scan-sweep 2.6s ease-in-out infinite alternate;
+  will-change: transform, opacity;
 }
-@keyframes scan-sweep {
-  from { transform: translateY(-97%); }
-  to { transform: translateY(-1%); }
+.scan-photo[data-scanning="true"]::before {
+  border-bottom: 1.5px solid #fff;
+  background: linear-gradient(180deg, transparent 84%, rgba(249, 249, 249, 0.35) 92%, #96bad8 100%);
+  box-shadow: 0 1px 10px rgba(150, 186, 216, 0.9);
+  transform: translateY(-98%);
+  animation: scan-sweep-down 5.2s ease-in-out infinite;
+}
+.scan-photo[data-scanning="true"]::after {
+  border-top: 1.5px solid #fff;
+  background: linear-gradient(0deg, transparent 84%, rgba(249, 249, 249, 0.35) 92%, #96bad8 100%);
+  box-shadow: 0 -1px 10px rgba(150, 186, 216, 0.9);
+  transform: translateY(2%);
+  opacity: 0;
+  animation: scan-sweep-up 5.2s ease-in-out infinite;
+}
+@keyframes scan-sweep-down {
+  0% { transform: translateY(-98%); opacity: 0.5; }
+  5% { opacity: 1; }
+  45% { opacity: 1; }
+  50% { transform: translateY(-2%); opacity: 0.5; }
+  55% { opacity: 0; }
+  95% { opacity: 0; }
+  100% { transform: translateY(-98%); opacity: 0.5; }
+}
+@keyframes scan-sweep-up {
+  0% { transform: translateY(2%); opacity: 0.5; }
+  5% { opacity: 0; }
+  45% { opacity: 0; }
+  50% { transform: translateY(98%); opacity: 0.5; }
+  55% { opacity: 1; }
+  95% { opacity: 1; }
+  100% { transform: translateY(2%); opacity: 0.5; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .scan-photo[data-scanning="true"]::after { animation: none; }
+  .scan-photo[data-scanning="true"]::before { animation: none; opacity: 1; transform: translateY(-47%); }
+  .scan-photo[data-scanning="true"]::after { display: none; }
 }
 .scan-frame { position: absolute; z-index: 1; width: 83%; height: auto; max-height: 90%; }
 .scan-viewfinder-copy {

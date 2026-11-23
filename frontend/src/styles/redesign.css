@@ -13,6 +13,10 @@
   --hifi-card: #fff;
   --hifi-track: #f9f9f9;
   --hifi-fill: #cee2fd;
+  /* Selected buttons (Figma "Button" Variante2): brand/primary fill. The label is a deep navy, not
+     the mockup's white, which reads at only ~1.9:1 on this blue. */
+  --hifi-selected: #8dcfe8;
+  --hifi-on-selected: #0b3a5c;
   --hifi-fill-edge: rgba(15, 62, 133, 0.25);
   --hifi-well: #fafafa;
   --hifi-button: #fff;
@@ -32,6 +36,8 @@
   --hifi-card: #1c1f24;
   --hifi-track: #2a2d33;
   --hifi-fill: #4b78b8;
+  --hifi-selected: #2f6f8f;
+  --hifi-on-selected: #fff;
   --hifi-fill-edge: rgba(0, 0, 0, 0.4);
   --hifi-well: #24272d;
   --hifi-button: #2a2d33;
@@ -219,8 +225,8 @@
 }
 :root :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet)
   :is(.primary-button, .btn-modal-submit, .tip-accept-btn, .quantity-warning-accept) {
-  background: var(--hifi-fill);
-  box-shadow: inset 0 0 4px rgba(15, 62, 133, 0.45);
+  color: var(--hifi-on-selected);
+  background: var(--hifi-selected);
 }
 :root :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet) .danger-action { color: var(--negative); }
 :root :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet)
@@ -243,5 +249,23 @@
 }
 :root :is(.btn-modal-close, .modal-close):hover { color: var(--text); background: var(--surface-raised); }
 /* The date picker's chosen day uses the redesign's light-blue selection, like the meal-type chips. */
-:root .date-sheet .date-day[aria-pressed="true"] { color: var(--hifi-ink); background: var(--hifi-fill); box-shadow: inset 0 0 4px rgba(15, 62, 133, 0.45); }
+:root .date-sheet .date-day[aria-pressed="true"] { color: var(--hifi-on-selected); background: var(--hifi-selected); box-shadow: inset 0 0 4px var(--hifi-shadow); }
 :root .date-sheet .icon-button { border: 0; background: transparent; }
+
+/* Round glass back button shared by redesigned subpages (Add food, Scan). */
+.scan-back {
+  display: grid;
+  justify-self: start;
+  width: 44px;
+  height: 44px;
+  margin: -4px 0 0 -4px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.scan-back:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+.scan-back:active { transform: translateY(1px); }
+:root[data-theme="dark"] .scan-back img { filter: invert(1); }

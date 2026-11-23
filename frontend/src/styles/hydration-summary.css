@@ -21,4 +21,4 @@
 .hydration-more > .hifi-link-button { justify-self: start; }
 .hydration-more .hydration-unit-toggle { border: 0; background: var(--hifi-well); }
 .hydration-more .hydration-unit-toggle button { font-family: var(--hifi-mono); font-weight: 400; text-transform: uppercase; }
-.hydration-more .hydration-unit-toggle button[aria-pressed='true'] { color: var(--hifi-ink); background: var(--hifi-fill); }
+.hydration-more .hydration-unit-toggle button[aria-pressed='true'] { color: var(--hifi-on-selected); background: var(--hifi-selected); }

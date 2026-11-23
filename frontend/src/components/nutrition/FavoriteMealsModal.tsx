@@ -119,9 +119,9 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
                   onClick={() => setDay(option)}
                   style={{
                     flex: 1, minHeight: '48px', borderRadius: '14px', cursor: 'pointer', fontSize: '14px', fontWeight: 700,
-                    border: `1px solid ${day === option ? 'var(--primary)' : 'var(--line)'}`,
-                    color: 'var(--text)',
-                    backgroundColor: day === option ? 'var(--hifi-fill, #cee2fd)' : 'var(--surface)',
+                    border: `1px solid ${day === option ? 'transparent' : 'var(--line)'}`,
+                    color: day === option ? 'var(--hifi-on-selected)' : 'var(--text)',
+                    backgroundColor: day === option ? 'var(--hifi-selected)' : 'var(--surface)',
                   }}
                 >
                   {option === 'today' ? 'Today' : 'Another day'}
