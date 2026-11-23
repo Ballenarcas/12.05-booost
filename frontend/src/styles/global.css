@@ -50,7 +50,7 @@
 @media (max-width: 360px) {
   .activity-empty { grid-template-columns: 1fr; }
 }
-.health-card { padding: 1rem; }
+.settings-card.health-card { padding: 1.25rem 1rem; }
 .health-header { display: flex; align-items: center; gap: 0.7rem; }
 .health-header > svg { flex: none; color: var(--text-muted); }
 .health-header p { flex: 1; min-width: 0; margin: 0; color: var(--text-muted); font-size: 0.875rem; line-height: 1.45; }
@@ -532,7 +532,7 @@ select.settings-input { appearance: none; padding-right: 2rem; background-image:
 .subscription-value { color: var(--text); font-size: 0.9375rem; font-weight: 500; }
 .subscription-value.is-active { color: var(--green); }
 .subscription-value.is-cancelled { color: var(--negative); }
-.subscription-note { margin: 0.5rem 0 0; color: var(--text-muted); font-size: 0.875rem; line-height: 1.5; }
+.subscription-note { margin: 0; padding: 0.5rem 0 1.25rem; color: var(--text-muted); font-size: 0.875rem; line-height: 1.5; }
 @media (max-width: 360px) {
   .action-row .action-button { gap: 0.3rem; padding: 0 0.5rem; font-size: 0.8125rem; white-space: nowrap; }
   .ai-banner { gap: 0.5rem; padding: 0.85rem; }
@@ -565,7 +565,7 @@ select.settings-input { appearance: none; padding-right: 2rem; background-image:
 .profile-field .settings-input::-webkit-inner-spin-button, .profile-field .settings-input::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
 .profile-email { min-width: 0; color: var(--text-muted); font-size: 0.875rem; overflow-wrap: anywhere; text-align: right; }
 .profile-save { animation: content-in var(--motion) var(--ease-out); }
-.profile-row-button { display: flex; width: 100%; min-height: 3.5rem; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0; border: 0; color: var(--text-muted); background: transparent; cursor: pointer; font-size: 0.9375rem; font-weight: 500; text-align: left; }
+.profile-row-button { display: flex; width: 100%; min-height: 3.5rem; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 0; border: 0; color: var(--text-muted); background: transparent; cursor: pointer; font-size: 0.9375rem; font-weight: 500; text-align: left; }
 .profile-row-button.is-danger { justify-content: flex-start; gap: 0.5rem; color: var(--negative); }
 .settings-row + .profile-row-button { border-top: 1px solid var(--line); }
 .settings-row:has(+ .profile-row-button) { border-bottom: 0; }
