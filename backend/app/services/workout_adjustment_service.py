@@ -41,6 +41,7 @@ HISTORY_DAYS = 60
 MAX_HISTORY_OPTIONS = 3
 FATIGUE_WINDOW_DAYS = 7
 FATIGUE_RECENT_DAYS = 3  # only a recent session should ease tomorrow's plan
+AI_TIMEOUT_SECONDS = 25.0
 
 
 def _is_gpt_oss(model: str) -> bool:
@@ -108,7 +109,12 @@ async def _request_json(prompt: str, schema: dict[str, Any]) -> Any:
         request["max_tokens"] = 2048
         request["response_format"] = {"type": "json_object"}
 
-    client = AsyncOpenAI(api_key=settings.ai_api_key, base_url=settings.ai_base_url)
+    client = AsyncOpenAI(
+        api_key=settings.ai_api_key,
+        base_url=settings.ai_base_url,
+        timeout=AI_TIMEOUT_SECONDS,
+        max_retries=0,
+    )
     try:
         for attempt in range(2):
             try:

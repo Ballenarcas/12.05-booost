@@ -102,6 +102,13 @@ jobs:
           PORTAINER_API_TOKEN: ${{ secrets.PORTAINER_API_TOKEN }}
         run: |
           set -euo pipefail
+          umask 077
+
+          tmp_dir=$(mktemp -d "${RUNNER_TEMP:-/tmp}/portainer-redeploy.XXXXXX")
+          trap 'rm -rf "$tmp_dir"' EXIT
+          stack_file="${tmp_dir}/stack.json"
+          body_file="${tmp_dir}/body.json"
+          redeploy_file="${tmp_dir}/redeploy.out"
 
           for name in PORTAINER_URL PORTAINER_STACK_ID PORTAINER_API_TOKEN; do
             if [ -z "${!name:-}" ]; then
@@ -144,7 +151,7 @@ jobs:
           # compose file fails with "required variable ... is missing a
           # value", picked at random because Compose walks a Go map.
           # Echo the stored values back so the redeploy keeps them.
-          code=$(curl "${opts[@]}" "${auth[@]}" -o /tmp/stack.json -w '%{http_code}' \
+          code=$(curl "${opts[@]}" "${auth[@]}" -o "$stack_file" -w '%{http_code}' \
             "${stack_url}${query}") || code=000
           case "$code" in
             200) ;;
@@ -163,14 +170,13 @@ jobs:
               ;;
             *)
               echo "::error::Could not read stack ${PORTAINER_STACK_ID} (HTTP ${code})"
-              show_error /tmp/stack.json
+              show_error "$stack_file"
               exit 1
               ;;
           esac
 
-          chmod 600 /tmp/stack.json
-          env_json=$(jq -c '.Env // []' /tmp/stack.json)
-          reference=$(jq -r '.GitConfig.ReferenceName // ""' /tmp/stack.json)
+          env_json=$(jq -c '.Env // []' "$stack_file")
+          reference=$(jq -r '.GitConfig.ReferenceName // ""' "$stack_file")
           echo "Stack ${PORTAINER_STACK_ID} defines $(jq 'length' <<<"$env_json") environment variable(s)"
 
           # Belt and braces: register every stored value with the runner so it
@@ -180,9 +186,8 @@ jobs:
           # log may show `***` for a URL in the later steps.
           while IFS= read -r value; do
             [ ${#value} -ge 8 ] || continue
-            case "$value" in *$'\n'*) continue ;; esac
             echo "::add-mask::${value}"
-          done < <(jq -r '.[] | .value // empty' <<<"$env_json")
+          done < <(jq -r '.[] | .value // empty | split("\n")[]' <<<"$env_json")
 
           # Fail before touching the stack when a `${VAR:?}` has no value.
           # Portainer only reports one of them, chosen at random, per attempt.
@@ -208,21 +213,20 @@ jobs:
           jq -n --argjson env "$env_json" --arg ref "$reference" \
             '{"RepullImageAndRedeploy": true, "PullImage": true, "Prune": false, "Env": $env}
              + (if $ref == "" then {} else {"RepositoryReferenceName": $ref} end)' \
-            > /tmp/body.json
-          chmod 600 /tmp/body.json
+            > "$body_file"
 
           url="${stack_url}/git/redeploy${query}"
           for attempt in 1 2 3; do
-            code=$(curl "${opts[@]}" -o /tmp/redeploy.out -w '%{http_code}' -X PUT \
+            code=$(curl "${opts[@]}" -o "$redeploy_file" -w '%{http_code}' -X PUT \
               "${auth[@]}" \
               -H 'Content-Type: application/json' \
-              --data-binary @/tmp/body.json "$url") || code=000
+              --data-binary @"$body_file" "$url") || code=000
             echo "attempt ${attempt}: Portainer answered HTTP ${code}"
             if [ "$code" = "200" ]; then
               echo "Stack ${PORTAINER_STACK_ID} accepted the redeploy"
               exit 0
             fi
-            show_error /tmp/redeploy.out
+            show_error "$redeploy_file"
             case "$code" in
               000)
                 echo "::error::Could not reach ${PORTAINER_URL} over the tailnet."

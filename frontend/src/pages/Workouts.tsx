@@ -2,7 +2,7 @@ import { ArrowRight, ChevronDown, Dumbbell, Pencil, Plus, Repeat2, Sparkles, Tra
 import { useEffect, useMemo, useState } from 'react'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { deleteRoutine, deleteWorkoutHistoryEntry, fetchRoutines, fetchWorkoutHistory, getCurrentUser, readSavedCopy } from '../services/api'
+import { activeWorkoutStorageKey, deleteRoutine, deleteWorkoutHistoryEntry, fetchRoutines, fetchWorkoutHistory, getCurrentUser, overtrainingModPctStorageKey, readSavedCopy } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import { lastLifts, type LastLift } from '../utils/lastLifts'
 import { OvertrainingBanner } from '../components/workout/OvertrainingBanner'
@@ -19,13 +19,43 @@ function formatWorkoutDate(value: string): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
-function getOvertrainingModPct(): number {
-  const modPct = Number(localStorage.getItem('set_plate_overtraining_mod_pct') || '0')
+function isCardioExercise(exercise: WorkoutHistoryEntry['exercises'][number]): boolean {
+  return Boolean(
+    exercise.is_cardio ||
+    exercise.sets.some((set) => (set.duration_seconds ?? 0) > 0 || (set.distance_km ?? 0) > 0),
+  )
+}
+
+function formatCardioDuration(seconds: number | null | undefined): string | null {
+  if (!seconds || seconds <= 0) return null
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const mins = Math.floor(seconds / 60)
+  const rem = Math.round(seconds % 60)
+  return rem > 0 ? `${mins}m ${rem}s` : `${mins} min`
+}
+
+function formatCardioSummary(sets: WorkoutHistoryEntry['exercises'][number]['sets']): string {
+  const set = sets.find((item) => item.is_completed) ?? sets[0]
+  if (!set) return 'Cardio'
+  const parts: string[] = []
+  const duration = formatCardioDuration(set.duration_seconds)
+  if (duration) parts.push(duration)
+  if (set.distance_km != null && set.distance_km > 0) {
+    const km = Number.isInteger(set.distance_km) ? String(set.distance_km) : String(Number(set.distance_km.toFixed(2)))
+    parts.push(`${km} km`)
+  }
+  return parts.length > 0 ? parts.join(' · ') : 'Cardio'
+}
+
+function getOvertrainingModPct(userId?: string): number {
+  const key = overtrainingModPctStorageKey(userId)
+  if (!key) return 0
+  const modPct = Number(localStorage.getItem(key) || '0')
   return Number.isFinite(modPct) && modPct > 0 ? modPct : 0
 }
 
-function applyOvertrainingVolumeReduction(targetSets: number): number {
-  const modPct = getOvertrainingModPct()
+function applyOvertrainingVolumeReduction(targetSets: number, userId?: string): number {
+  const modPct = getOvertrainingModPct(userId)
   if (modPct > 0 && targetSets >= 2) {
     // At least one set fewer (or -15%) once there are 2 sets or more.
     return Math.max(1, Math.min(targetSets - 1, Math.round(targetSets * (1 - modPct / 100))))
@@ -33,8 +63,8 @@ function applyOvertrainingVolumeReduction(targetSets: number): number {
   return targetSets
 }
 
-function applyOvertrainingWeightReduction(weightKg: number): number {
-  const modPct = getOvertrainingModPct()
+function applyOvertrainingWeightReduction(weightKg: number, userId?: string): number {
+  const modPct = getOvertrainingModPct(userId)
   if (modPct > 0 && weightKg > 0) {
     // Lower the load by the deload percentage, rounded to 0.5 kg.
     const reduced = weightKg * (1 - modPct / 100)
@@ -45,10 +75,10 @@ function applyOvertrainingWeightReduction(weightKg: number): number {
 
 // Routines store no weight, so each exercise starts from the last weight the user lifted for it,
 // lowered while an overtraining deload is active.
-function createActiveExercises(routine: Routine, lifts: Map<string, LastLift>): ActiveExercise[] {
-  const modActive = getOvertrainingModPct() > 0
+function createActiveExercises(routine: Routine, lifts: Map<string, LastLift>, userId?: string): ActiveExercise[] {
+  const modActive = getOvertrainingModPct(userId) > 0
   return routine.exercises.map((exercise) => {
-    const adjustedSets = applyOvertrainingVolumeReduction(exercise.target_sets ?? 1)
+    const adjustedSets = applyOvertrainingVolumeReduction(exercise.target_sets ?? 1, userId)
     const lastWeight = lifts.get(exercise.exercise_id)?.weight_kg ?? null
     return {
       exercise_id: exercise.exercise_id,
@@ -59,7 +89,7 @@ function createActiveExercises(routine: Routine, lifts: Map<string, LastLift>): 
       target_reps: exercise.target_reps,
       sets: Array.from({ length: adjustedSets }, (_, index) => ({
         set_number: index + 1,
-        weight_kg: applyOvertrainingWeightReduction(lastWeight ?? 0),
+        weight_kg: applyOvertrainingWeightReduction(lastWeight ?? 0, userId),
         reps: exercise.reps_by_set?.[index] ?? exercise.target_reps ?? 0,
         rpe: modActive ? 6 : undefined,
         is_completed: false,
@@ -109,18 +139,18 @@ function Workouts() {
   const [workoutToDelete, setWorkoutToDelete] = useState<WorkoutHistoryEntry | null>(null)
   const [isDeletingWorkout, setIsDeletingWorkout] = useState(false)
   const [workoutDeleteError, setWorkoutDeleteError] = useState<string | null>(null)
-  const [activeDeloadPct, setActiveDeloadPct] = useState<number>(() => getOvertrainingModPct())
+  const [activeDeloadPct, setActiveDeloadPct] = useState<number>(() => getOvertrainingModPct(currentUserId))
 
   useEffect(() => {
-    setActiveDeloadPct(getOvertrainingModPct())
-  }, [])
+    setActiveDeloadPct(getOvertrainingModPct(currentUserId))
+  }, [currentUserId])
 
   useEffect(() => {
     fetchRoutines()
       .then(setRoutines)
       .catch((requestError: Error) => setError(describeError(requestError, "We couldn't load your routines. Please try again.")))
       .finally(() => setIsLoading(false))
-  }, [])
+  }, [currentUserId])
 
   useEffect(() => {
     if (!currentUserId) {
@@ -146,29 +176,53 @@ function Workouts() {
   }, [currentUserId])
 
   function startWorkout(routine?: Routine) {
-    const modActive = getOvertrainingModPct() > 0
+    const modActive = getOvertrainingModPct(currentUserId) > 0
     const baseName = routine?.name ?? 'Empty workout'
     navigate('/workouts/active', {
       state: {
         routineId: routine?.id,
         name: modActive && routine ? `${baseName} (AI Deload -15%)` : baseName,
         startedAt: new Date().toISOString(),
-        exercises: routine ? createActiveExercises(routine, lifts) : [],
+        exercises: routine ? createActiveExercises(routine, lifts, currentUserId) : [],
       },
     })
   }
 
   function repeatWorkout(workout: WorkoutHistoryEntry) {
-    const modActive = getOvertrainingModPct() > 0
+    const modActive = getOvertrainingModPct(currentUserId) > 0
     const exercises: ActiveExercise[] = workout.exercises.map((exercise) => {
+      const isCardio = isCardioExercise(exercise)
       const previousSets = [...exercise.sets].sort((first, second) => first.set_number - second.set_number)
       const lastSet = previousSets[previousSets.length - 1]
-      const targetCount = applyOvertrainingVolumeReduction(previousSets.length || 1)
+      if (isCardio) {
+        return {
+          exercise_id: exercise.exercise_id,
+          name: exercise.name,
+          is_cardio: true,
+          previous_weight_kg: null,
+          previous_reps: null,
+          target_sets: 1,
+          target_reps: null,
+          sets: [{
+            set_number: 1,
+            weight_kg: 0,
+            reps: 0,
+            // Start empty: a copied time would be saved as if this block was done again.
+            duration_seconds: null,
+            distance_km: null,
+            cardio_status: 'idle',
+            cardio_accumulated: 0,
+            is_completed: false,
+          }],
+        }
+      }
+      const targetCount = applyOvertrainingVolumeReduction(previousSets.length || 1, currentUserId)
       const slicedSets = previousSets.slice(0, targetCount)
 
       return {
         exercise_id: exercise.exercise_id,
         name: exercise.name,
+        is_cardio: false,
         previous_weight_kg: lastSet?.weight_kg ?? null,
         previous_reps: lastSet?.reps ?? null,
         target_sets: targetCount,
@@ -176,7 +230,7 @@ function Workouts() {
         sets: slicedSets.length > 0
           ? slicedSets.map((set, index) => ({
             set_number: index + 1,
-            weight_kg: applyOvertrainingWeightReduction(set.weight_kg),
+            weight_kg: applyOvertrainingWeightReduction(set.weight_kg, currentUserId),
             reps: set.reps,
             rpe: modActive ? 6 : undefined,
             is_completed: false,
@@ -196,6 +250,7 @@ function Workouts() {
 
   function editWorkout(workout: WorkoutHistoryEntry) {
     const exercises: ActiveExercise[] = workout.exercises.map((exercise) => {
+      const isCardio = isCardioExercise(exercise)
       const sets = [...exercise.sets]
         .sort((first, second) => first.set_number - second.set_number)
         .map((set, index) => ({
@@ -203,17 +258,24 @@ function Workouts() {
           weight_kg: set.weight_kg,
           reps: set.reps,
           rpe: set.rpe,
+          duration_seconds: set.duration_seconds ?? null,
+          distance_km: set.distance_km ?? null,
+          cardio_status: isCardio ? ((set.duration_seconds ?? 0) > 0 || set.is_completed ? 'finished' as const : 'manual' as const) : undefined,
+          cardio_accumulated: isCardio ? (set.duration_seconds ?? 0) : undefined,
           is_completed: set.is_completed,
         }))
 
       return {
         exercise_id: exercise.exercise_id,
         name: exercise.name,
-        previous_weight_kg: sets[sets.length - 1]?.weight_kg ?? null,
-        previous_reps: sets[sets.length - 1]?.reps ?? null,
+        is_cardio: isCardio,
+        previous_weight_kg: isCardio ? null : (sets[sets.length - 1]?.weight_kg ?? null),
+        previous_reps: isCardio ? null : (sets[sets.length - 1]?.reps ?? null),
         target_sets: sets.length || 1,
-        target_reps: sets[sets.length - 1]?.reps ?? null,
-        sets: sets.length > 0 ? sets : [{ set_number: 1, weight_kg: 0, reps: 0, is_completed: false }],
+        target_reps: isCardio ? null : (sets[sets.length - 1]?.reps ?? null),
+        sets: sets.length > 0
+          ? sets
+          : [{ set_number: 1, weight_kg: 0, reps: 0, ...(isCardio ? { cardio_status: 'manual' as const } : {}), is_completed: false }],
       }
     })
 
@@ -229,7 +291,8 @@ function Workouts() {
   }
 
   function requestEmptyWorkout() {
-    const saved = localStorage.getItem('set_plate_active_workout')
+    const workoutKey = activeWorkoutStorageKey(currentUserId)
+    const saved = workoutKey ? localStorage.getItem(workoutKey) : null
     if (saved) {
       try {
         const activeWorkout = JSON.parse(saved) as { name?: string; exercises?: unknown[]; startedAt?: string }
@@ -239,21 +302,23 @@ function Workouts() {
           return
         }
       } catch {
-        localStorage.removeItem('set_plate_active_workout')
+        if (workoutKey) localStorage.removeItem(workoutKey)
       }
     }
     startWorkout()
   }
 
   function discardAndStartEmptyWorkout() {
-    localStorage.removeItem('set_plate_active_workout')
+    const workoutKey = activeWorkoutStorageKey(currentUserId)
+    if (workoutKey) localStorage.removeItem(workoutKey)
     sessionStorage.removeItem('set_plate_pending_exercise')
     setShowDiscardActiveWorkout(false)
     startWorkout()
   }
 
   function clearDeloadModification() {
-    localStorage.removeItem('set_plate_overtraining_mod_pct')
+    const modKey = overtrainingModPctStorageKey(currentUserId)
+    if (modKey) localStorage.removeItem(modKey)
     if (currentUserId) {
       localStorage.setItem(
         `set_plate_overtraining_state_${currentUserId}`,
@@ -439,7 +504,7 @@ function Workouts() {
                     {workout.exercises.slice(0, 3).map((exercise) => (
                       <li key={exercise.exercise_id}>
                         <span>{exercise.name}</span>
-                        <span>{summarizeSets(exercise.sets)}</span>
+                        <span>{isCardioExercise(exercise) ? formatCardioSummary(exercise.sets) : summarizeSets(exercise.sets)}</span>
                       </li>
                     ))}
                     {workout.exercises.length > 3 && <li><span>+{workout.exercises.length - 3} more</span></li>}

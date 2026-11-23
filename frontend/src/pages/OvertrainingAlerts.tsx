@@ -1,7 +1,7 @@
 import { Dumbbell, Plus, Repeat2 } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchWorkoutHistory, getCurrentUser } from '../services/api'
+import { fetchWorkoutHistory, getCurrentUser, overtrainingModPctStorageKey, overtrainingStateSessionKey } from '../services/api'
 import type { WorkoutHistoryEntry } from '../types/workout'
 
 export interface OvertrainingAlertStatus {
@@ -72,17 +72,19 @@ const JOINT_OPTIONS: Array<{ id: JointStrainId; label: string; penalty: number }
   { id: 'sharp', label: 'Noticeable joint strain', penalty: 2 },
 ]
 
-function getStorageKey(userId?: string): string {
-  return `set_plate_recovery_checkins_${userId ?? 'guest'}`
+function getStorageKey(userId?: string): string | null {
+  return userId ? `set_plate_recovery_checkins_${userId}` : null
 }
 
-function getStateStorageKey(userId?: string): string {
-  return `set_plate_overtraining_state_${userId ?? 'guest'}`
+function getStateStorageKey(userId?: string): string | null {
+  return userId ? `set_plate_overtraining_state_${userId}` : null
 }
 
 function readLocalCheckIns(userId?: string): LocalCheckInEntry[] {
   try {
-    const raw = localStorage.getItem(getStorageKey(userId))
+    const key = getStorageKey(userId)
+    if (!key) return []
+    const raw = localStorage.getItem(key)
     if (!raw) return []
     const parsed: unknown = JSON.parse(raw)
     return Array.isArray(parsed) ? (parsed as LocalCheckInEntry[]) : []
@@ -93,7 +95,8 @@ function readLocalCheckIns(userId?: string): LocalCheckInEntry[] {
 
 function writeLocalCheckIns(userId: string | undefined, items: LocalCheckInEntry[]): void {
   try {
-    localStorage.setItem(getStorageKey(userId), JSON.stringify(items))
+    const key = getStorageKey(userId)
+    if (key) localStorage.setItem(key, JSON.stringify(items))
   } catch {
     // ignore storage errors
   }
@@ -101,7 +104,9 @@ function writeLocalCheckIns(userId: string | undefined, items: LocalCheckInEntry
 
 function readStoredState(userId?: string): StoredOvertrainingState {
   try {
-    const raw = localStorage.getItem(getStateStorageKey(userId))
+    const key = getStateStorageKey(userId)
+    if (!key) return {}
+    const raw = localStorage.getItem(key)
     if (!raw) return {}
     return JSON.parse(raw) as StoredOvertrainingState
   } catch {
@@ -371,14 +376,18 @@ function OvertrainingAlerts() {
     const updatedEntries = [newEntry, ...checkIns]
     setCheckIns(updatedEntries)
     writeLocalCheckIns(userId, updatedEntries)
-    localStorage.setItem(
-      getStateStorageKey(userId),
-      JSON.stringify({ modsApplied: false, dismissed: false, dismissedAt: null }),
-    )
+    const stateKey = getStateStorageKey(userId)
+    const sessionStateKey = overtrainingStateSessionKey(userId)
+    if (stateKey) {
+      localStorage.setItem(
+        stateKey,
+        JSON.stringify({ modsApplied: false, dismissed: false, dismissedAt: null }),
+      )
+    }
 
     const nextStatus = await computePhysiologicalStatus(updatedEntries, false, false)
     setStatus(nextStatus)
-    sessionStorage.setItem('set_plate_overtraining_state', JSON.stringify(nextStatus))
+    if (sessionStateKey) sessionStorage.setItem(sessionStateKey, JSON.stringify(nextStatus))
     setShowCheckIn(false)
     setNotes('')
     setBusyAction(null)
@@ -396,34 +405,46 @@ function OvertrainingAlerts() {
 
   const handleApplyMods = async () => {
     setBusyAction('apply')
-    localStorage.setItem(
-      getStateStorageKey(userId),
-      JSON.stringify({ modsApplied: true, dismissed: false, dismissedAt: null }),
-    )
-    localStorage.setItem('set_plate_overtraining_mod_pct', '15')
+    const stateKey = getStateStorageKey(userId)
+    const sessionStateKey = overtrainingStateSessionKey(userId)
+    const modPctKey = overtrainingModPctStorageKey(userId)
+    if (stateKey) {
+      localStorage.setItem(
+        stateKey,
+        JSON.stringify({ modsApplied: true, dismissed: false, dismissedAt: null }),
+      )
+    }
+    if (modPctKey) localStorage.setItem(modPctKey, '15')
     const nextStatus = await computePhysiologicalStatus(checkIns, true, false)
     setStatus(nextStatus)
-    sessionStorage.setItem('set_plate_overtraining_state', JSON.stringify(nextStatus))
+    if (sessionStateKey) sessionStorage.setItem(sessionStateKey, JSON.stringify(nextStatus))
     setBannerMessage('AI Deload applied: next workout volume lowered by 15% and target RPE capped at 6.')
     setBusyAction(null)
   }
 
   const handleDismiss = async () => {
     setBusyAction('dismiss')
-    localStorage.setItem(
-      getStateStorageKey(userId),
-      JSON.stringify({ modsApplied: false, dismissed: true, dismissedAt: new Date().toISOString() }),
-    )
-    localStorage.removeItem('set_plate_overtraining_mod_pct')
-    sessionStorage.removeItem('set_plate_overtraining_state')
+    const stateKey = getStateStorageKey(userId)
+    const sessionStateKey = overtrainingStateSessionKey(userId)
+    const modPctKey = overtrainingModPctStorageKey(userId)
+    if (stateKey) {
+      localStorage.setItem(
+        stateKey,
+        JSON.stringify({ modsApplied: false, dismissed: true, dismissedAt: new Date().toISOString() }),
+      )
+    }
+    if (modPctKey) localStorage.removeItem(modPctKey)
+    if (sessionStateKey) sessionStorage.removeItem(sessionStateKey)
     setBusyAction(null)
     navigate('/workouts')
   }
 
   const handleResetHistory = async () => {
     writeLocalCheckIns(userId, [])
-    localStorage.removeItem(getStateStorageKey(userId))
-    sessionStorage.removeItem('set_plate_overtraining_state')
+    const stateKey = getStateStorageKey(userId)
+    const sessionStateKey = overtrainingStateSessionKey(userId)
+    if (stateKey) localStorage.removeItem(stateKey)
+    if (sessionStateKey) sessionStorage.removeItem(sessionStateKey)
     setCheckIns([])
     const nextStatus = await computePhysiologicalStatus([], false, false)
     setStatus(nextStatus)

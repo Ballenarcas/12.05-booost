@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import { AlertCircle, CheckCircle2, ChevronRight, Loader2, LogOut } from 'lucide-react'
-import { cancelPremium, clearDashboardCache, clearSession, getCurrentUser, isPremiumActive, updateUserSettings } from '../services/api'
+import { cancelPremium, clearSession, getCurrentUser, isPremiumActive, updateUserSettings } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import { useDialogBehavior } from '../utils/useDialogBehavior'
 import { applyTheme, getTheme } from '../utils/theme'
@@ -105,14 +105,7 @@ function Profile() {
   }
 
   const confirmLogout = () => {
-    try {
-      clearSession()
-      localStorage.removeItem('set_plate_active_workout')
-      sessionStorage.removeItem('set_plate_pending_exercise')
-    } catch {
-      // The redirect still signs the user out when storage is unavailable.
-    }
-    clearDashboardCache()
+    clearSession()
     setIsLogoutOpen(false)
     navigate('/login', { replace: true })
   }

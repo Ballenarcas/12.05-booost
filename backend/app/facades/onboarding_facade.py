@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 from fastapi import HTTPException
 
-from app.core.auth import issue_access_token
+from app.core.auth import issue_access_token, revoke_user_sessions
 from app.core.config import get_settings
 from app.core.reset_quota import allow_reset_email
 from app.core.security import hash_password, verify_password
@@ -218,7 +218,7 @@ class OnboardingFacade:
             logger.error("Could not save the password reset: %s", err, exc_info=True)
             return None
 
-        link = f"{get_settings().app_url.rstrip('/')}/reset-password?token={quote(token)}"
+        link = f"{get_settings().app_url.rstrip('/')}/reset-password#token={quote(token)}"
         return email, link
 
     def confirm_password_reset(self, payload: PasswordResetConfirm) -> None:
@@ -250,17 +250,28 @@ class OnboardingFacade:
             if not claimed.data:
                 raise HTTPException(status_code=400, detail=INVALID_RESET_LINK)
 
-            supabase.table("users").update(
-                {"password": hash_password(payload.new_password)}
-            ).eq("id", reset["user_id"]).execute()
+            hashed = hash_password(payload.new_password)
+            changed_at = datetime.now(timezone.utc)
+            try:
+                supabase.table("users").update(
+                    {"password": hashed, "password_changed_at": changed_at.isoformat()}
+                ).eq("id", reset["user_id"]).execute()
+            except Exception as err:
+                text = str(err)
+                if "password_changed_at" not in text and "PGRST204" not in text and "42703" not in text:
+                    raise
+                logger.warning("users.password_changed_at column is missing; skipping DB timestamp update.")
+                supabase.table("users").update(
+                    {"password": hashed}
+                ).eq("id", reset["user_id"]).execute()
+
+            revoke_user_sessions(str(reset["user_id"]), changed_at)
             supabase.table("password_resets").delete().eq("user_id", reset["user_id"]).execute()
         except HTTPException:
             raise
         except Exception as err:
             logger.error("Could not reset the password: %s", err, exc_info=True)
             raise HTTPException(status_code=500, detail="Could not update the password. Please try again.") from err
-        # shortcut: sessions are stateless, so devices already signed in stay signed in until their
-        # token expires (AUTH_TOKEN_TTL_HOURS). Add a password_changed_at check in auth.py to end them.
 
 
 onboarding_facade = OnboardingFacade()

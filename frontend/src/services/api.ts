@@ -88,6 +88,29 @@ export interface DashboardSummary {
 }
 
 const SESSION_KEY = 'set_plate_session'
+const STORAGE_PREFIX = 'set_plate_'
+
+export function activeWorkoutStorageKey(userId: string | undefined = getCurrentUser()?.id): string | null {
+  return userId ? `${STORAGE_PREFIX}active_workout:${userId}` : null
+}
+
+export function overtrainingModPctStorageKey(userId: string | undefined = getCurrentUser()?.id): string | null {
+  return userId ? `${STORAGE_PREFIX}overtraining_mod_pct:${userId}` : null
+}
+
+export function overtrainingStateSessionKey(userId: string | undefined = getCurrentUser()?.id): string | null {
+  return userId ? `${STORAGE_PREFIX}overtraining_state:${userId}` : null
+}
+
+function clearStorageByPrefix(storage: Storage, prefix: string): void {
+  try {
+    Object.keys(storage)
+      .filter((key) => key.startsWith(prefix))
+      .forEach((key) => storage.removeItem(key))
+  } catch {
+    // Storage can be unavailable in restricted browsing contexts.
+  }
+}
 
 export function getAccessToken(): string | null {
   try {
@@ -98,15 +121,17 @@ export function getAccessToken(): string | null {
 }
 
 export function clearSession(): void {
-  clearDashboardCache()
-  forgetSavedCopies()
-  forgetSavedStatistics()
-  try {
-    localStorage.removeItem(SESSION_KEY)
-    localStorage.removeItem('set_plate_user')
-  } catch {
-    // Storage can be unavailable in restricted browsing contexts.
-  }
+  shortCache.clear()
+  dashboardRequests.clear()
+  insightRequests.clear()
+  nutritionRequests.clear()
+  adjustmentRequests.clear()
+  workoutStatisticsCache.clear()
+  routinesRequests.clear()
+  exerciseListCache.clear()
+  exerciseListInflight.clear()
+  clearStorageByPrefix(localStorage, STORAGE_PREFIX)
+  clearStorageByPrefix(sessionStorage, STORAGE_PREFIX)
 }
 
 /**
@@ -252,31 +277,34 @@ export async function planTodaysWorkout(userId: string): Promise<void> {
   clearDashboardCache()
 }
 
-let routinesRequest: Promise<Routine[]> | null = null
+const routinesRequests = new Map<string, Promise<Routine[]>>()
 
 export function clearRoutinesCache(): void {
-  routinesRequest = null
+  routinesRequests.clear()
   forgetSavedCopies('routines:')
 }
 
 export async function fetchRoutines(): Promise<Routine[]> {
-  if (routinesRequest) return routinesRequest
   const user = getCurrentUser()
-  if (!user?.id) throw new Error('Finish setting up your profile to see your routines')
-  routinesRequest = apiFetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(user.id)}`, {
+  const userId = user?.id
+  if (!userId) throw new Error('Finish setting up your profile to see your routines')
+  const existing = routinesRequests.get(userId)
+  if (existing) return existing
+  const request = apiFetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(userId)}`, {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
       if (!response.ok) throw new Error("We couldn't load your routines. Please try again.")
       const routines = await response.json() as Routine[]
-      saveCopy(`routines:${user.id}`, routines)
+      saveCopy(`routines:${userId}`, routines)
       return routines
     })
     .catch((error: unknown) => {
-      routinesRequest = null
+      if (routinesRequests.get(userId) === request) routinesRequests.delete(userId)
       throw error
     })
-  return routinesRequest
+  routinesRequests.set(userId, request)
+  return request
 }
 
 export async function createRoutine(payload: RoutineCreatePayload): Promise<Routine> {
@@ -641,6 +669,7 @@ export async function loginUser(email: string, password: string): Promise<import
   }
 
   const profile = await response.json() as import('../types').UserProfile & { access_token: string }
+  clearSession()
   try {
     localStorage.setItem(SESSION_KEY, profile.access_token)
     localStorage.setItem('set_plate_user', JSON.stringify(profile))
@@ -956,6 +985,7 @@ export async function submitUserOnboarding(formData: import('../types').UserOnbo
   if (data.calorie_goal) {
     localProfile.calorie_goal = data.calorie_goal
   }
+  clearSession()
   try {
     if (data.access_token) localStorage.setItem(SESSION_KEY, data.access_token)
     localStorage.setItem('set_plate_user', JSON.stringify(localProfile))

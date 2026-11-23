@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Crown, Dumbbell, Flame,
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { usePageNavigate } from '../utils/usePageNavigate'
-import { fetchExerciseById, fetchExercises, getCurrentUser, isPremiumActive, PremiumRequiredError, requestWarmupRecommendation, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry } from '../services/api'
+import { fetchExerciseById, fetchExercises, getCurrentUser, isPremiumActive, PremiumRequiredError, requestWarmupRecommendation, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry, activeWorkoutStorageKey } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { Exercise } from '../types'
 import type {
@@ -38,7 +38,6 @@ const REST_OPTIONS: WheelOption<number | null>[] = [
     return { value: seconds, label: minutes ? `${minutes}min ${seconds % 60}s` : `${seconds}s` }
   }),
 ]
-const ACTIVE_WORKOUT_KEY = 'set_plate_active_workout'
 const ADJUSTMENT_ACTION_LABELS: Record<LiveWorkoutAdjustmentAction, string> = {
   reduce_load: 'Reduce the load',
   reduce_reps: 'Reduce the reps',
@@ -236,7 +235,44 @@ function CardioManualForm({
   )
 }
 
-function formatPrevious({ previous_weight_kg: weight, previous_reps: reps }: ActiveExercise): string {
+function finalizeCardioSet(set: WorkoutSet): WorkoutSet {
+  if (set.cardio_status === 'running' || set.cardio_status === 'paused') {
+    let finalSeconds = set.cardio_accumulated || 0
+    if (set.cardio_status === 'running' && set.cardio_started_at) {
+      finalSeconds += Math.max(0, Math.floor((Date.now() - Date.parse(set.cardio_started_at)) / 1000))
+    }
+    finalSeconds = Math.max(1, finalSeconds)
+    return {
+      ...set,
+      cardio_status: 'finished',
+      cardio_started_at: null,
+      cardio_accumulated: finalSeconds,
+      duration_seconds: finalSeconds,
+      is_completed: true,
+    }
+  }
+  // Only a block the user finished or ticked counts. A time alone (e.g. a hint) does not.
+  if (set.cardio_status === 'finished' || set.is_completed) {
+    const finalSeconds = Math.max(0, set.duration_seconds ?? set.cardio_accumulated ?? 0)
+    return {
+      ...set,
+      cardio_status: 'finished',
+      cardio_started_at: null,
+      cardio_accumulated: finalSeconds,
+      duration_seconds: finalSeconds,
+      is_completed: finalSeconds > 0 || Boolean(set.distance_km && set.distance_km > 0) || set.is_completed,
+    }
+  }
+  return set
+}
+
+// "Weighted" and "Assisted" variants are listed as their own equipment, so they still take a weight.
+export function isBodyweightOnly(equipment?: string[] | null): boolean {
+  return !!equipment?.length && equipment.every((item) => item.trim().toLowerCase() === 'body weight')
+}
+
+function formatPrevious({ previous_weight_kg: weight, previous_reps: reps, is_bodyweight }: ActiveExercise): string {
+  if (is_bodyweight) return reps ? `${reps} reps` : '–'
   if (weight === null || weight === undefined) return '–'
   return reps ? `${weight}×${reps}` : `${weight}`
 }
@@ -395,7 +431,9 @@ function useScreenAwake() {
 
 function readSavedSession(): ActiveSession | null {
   try {
-    return getSession(JSON.parse(localStorage.getItem(ACTIVE_WORKOUT_KEY) ?? 'null'))
+    const key = activeWorkoutStorageKey()
+    if (!key) return null
+    return getSession(JSON.parse(localStorage.getItem(key) ?? 'null'))
   } catch {
     return null
   }
@@ -449,7 +487,8 @@ function ActiveWorkout() {
 
   useEffect(() => {
     sessionRef.current = session
-    if (session) localStorage.setItem(ACTIVE_WORKOUT_KEY, JSON.stringify({ ...session, rpeValues }))
+    const key = activeWorkoutStorageKey()
+    if (session && key) localStorage.setItem(key, JSON.stringify({ ...session, rpeValues }))
   }, [session, rpeValues])
 
   useEffect(() => {
@@ -505,7 +544,7 @@ function ActiveWorkout() {
 
   useEffect(() => {
     session?.exercises.forEach((exercise) => {
-      if ((exercise.images?.length && exercise.is_cardio !== undefined) || imageLookups.current.has(exercise.exercise_id)) return
+      if ((exercise.images?.length && exercise.is_cardio !== undefined && exercise.is_bodyweight !== undefined) || imageLookups.current.has(exercise.exercise_id)) return
       imageLookups.current.add(exercise.exercise_id)
       fetchExerciseById(exercise.exercise_id)
         .catch(() => fetchExercises({ q: exercise.name, limit: 100 }).then((result: { items: Exercise[] }) =>
@@ -522,6 +561,7 @@ function ActiveWorkout() {
                   ...item, 
                   images: catalogExercise.images?.length ? catalogExercise.images : item.images,
                   is_cardio: item.is_cardio !== undefined ? item.is_cardio : isCardio,
+                  is_bodyweight: isBodyweightOnly(catalogExercise.equipment),
                   sets: (item.is_cardio !== undefined ? item.is_cardio : isCardio) 
                         ? item.sets.map(s => ({...s, cardio_status: s.cardio_status || (s.duration_seconds ? 'finished' : 'idle')}))
                         : item.sets
@@ -548,7 +588,9 @@ function ActiveWorkout() {
           images: selection.images,
           previous_weight_kg: null,
           previous_reps: null,
-          is_cardio: isCardio
+          is_cardio: isCardio,
+          // Unknown until the catalog lookup runs when the selection carries no equipment.
+          is_bodyweight: selection.equipment ? isBodyweightOnly(selection.equipment) : undefined,
         }
         const initialSets = isCardio
           ? [{ ...createSet(1), cardio_status: 'idle' as const }]
@@ -664,23 +706,17 @@ function ActiveWorkout() {
   function finishCardioTimer(exerciseIndex: number) {
     const set = session?.exercises[exerciseIndex]?.sets[0];
     if (!set) return;
-    let finalSeconds = set.cardio_accumulated || 0;
-    if (set.cardio_status === 'running' && set.cardio_started_at) {
-      finalSeconds += Math.floor((Date.now() - Date.parse(set.cardio_started_at)) / 1000);
-    }
-    updateSet(exerciseIndex, 0, { 
-      cardio_status: 'finished', 
-      cardio_started_at: null, 
-      cardio_accumulated: finalSeconds,
-      duration_seconds: finalSeconds,
-      is_completed: true
-    });
+    const finalized = finalizeCardioSet(set.cardio_status === 'running' || set.cardio_status === 'paused' ? set : { ...set, cardio_status: 'running' });
+    updateSet(exerciseIndex, 0, finalized);
   }
 
   function saveManualCardio(exerciseIndex: number, mins: number, dist: number | null) {
+    const seconds = Math.max(1, Math.round(mins * 60));
     updateSet(exerciseIndex, 0, {
       cardio_status: 'finished',
-      duration_seconds: mins * 60,
+      cardio_started_at: null,
+      cardio_accumulated: seconds,
+      duration_seconds: seconds,
       distance_km: dist,
       is_completed: true
     });
@@ -893,13 +929,28 @@ function ActiveWorkout() {
       started_at: currentSession.startedAt,
       completed_at: new Date().toISOString(),
       fatigue_level: fatigueLevel,
-      exercises: currentSession.exercises.map(({ exercise_id, sets, is_cardio }, exerciseIndex) => ({
+      exercises: currentSession.exercises.map(({ exercise_id, sets, is_cardio, is_bodyweight }, exerciseIndex) => ({
         exercise_id,
-        is_cardio,
-        sets: sets.map((set) => ({
-          ...set,
-          rpe: rpeValues[`${exerciseIndex}:${set.set_number}`] ?? set.rpe ?? null,
-        })),
+        is_cardio: Boolean(is_cardio),
+        sets: sets.map((rawSet) => {
+          const set = is_cardio ? finalizeCardioSet(rawSet) : rawSet
+          return {
+            ...set,
+            ...(is_cardio
+              ? {
+                  weight_kg: 0,
+                  reps: 0,
+                  duration_seconds: set.duration_seconds ?? null,
+                  distance_km: set.distance_km ?? null,
+                  rpe: null,
+                }
+              : {
+                  // The weight field is hidden for bodyweight exercises, so never save a stale value.
+                  ...(is_bodyweight ? { weight_kg: 0 } : {}),
+                  rpe: rpeValues[`${exerciseIndex}:${set.set_number}`] ?? set.rpe ?? null,
+                }),
+          }
+        }),
       })),
     }
     try {
@@ -912,7 +963,8 @@ function ActiveWorkout() {
       } else {
         await saveWorkoutLog(user.id, payload)
       }
-      localStorage.removeItem(ACTIVE_WORKOUT_KEY)
+      const key = activeWorkoutStorageKey()
+      if (key) localStorage.removeItem(key)
       navigate('/workouts')
     } catch (error) {
       setSaveError(describeError(error, "We couldn't save your workout. Please try again."))
@@ -1130,7 +1182,8 @@ function ActiveWorkout() {
       setConfirmDiscard(true)
       return
     }
-    localStorage.removeItem(ACTIVE_WORKOUT_KEY)
+    const key = activeWorkoutStorageKey()
+    if (key) localStorage.removeItem(key)
     navigate('/workouts')
   }
 
@@ -1246,19 +1299,17 @@ function ActiveWorkout() {
                   let status = set.cardio_status || 'idle';
                   
                   if (isEditingWorkout && status === 'idle') {
-                     status = 'manual';
+                     status = set.duration_seconds ? 'finished' : 'manual';
                   }
 
                   if (status === 'manual') {
-                    const initialMins = set.duration_seconds ? Math.round(set.duration_seconds / 60) : undefined;
+                    const initialMins = set.duration_seconds ? Math.max(1, Math.round(set.duration_seconds / 60)) : undefined;
                     return <CardioManualForm 
                       initialMins={initialMins}
                       initialDist={set.distance_km || undefined}
                       onSave={(m, d) => saveManualCardio(exerciseIndex, m, d)} 
                       onCancel={() => {
-                        if (!isEditingWorkout) {
-                           updateSet(exerciseIndex, 0, { cardio_status: 'idle' })
-                        }
+                        updateSet(exerciseIndex, 0, { cardio_status: set.duration_seconds ? 'finished' : 'idle' })
                       }} 
                     />
                   }
@@ -1270,18 +1321,26 @@ function ActiveWorkout() {
                           <span className="cardio-label">Time</span>
                           <strong className="cardio-stat">{formatDuration(set.duration_seconds || 0)}</strong>
                         </div>
-                        {set.distance_km && (
+                        {set.distance_km != null && set.distance_km > 0 && (
                           <div>
                             <span className="cardio-label">Distance</span>
                             <strong className="cardio-stat">{set.distance_km} km</strong>
                           </div>
                         )}
-                        {set.distance_km && set.duration_seconds && (
+                        {set.distance_km != null && set.distance_km > 0 && (set.duration_seconds ?? 0) > 0 && (
                           <div>
                             <span className="cardio-label">Pace</span>
-                            <strong className="cardio-stat">{formatPace(set.duration_seconds, set.distance_km)}</strong>
+                            <strong className="cardio-stat">{formatPace(set.duration_seconds || 0, set.distance_km)}</strong>
                           </div>
                         )}
+                        <button
+                          className="secondary-action cardio-edit-button"
+                          type="button"
+                          aria-label={`Edit ${exercise.name} cardio`}
+                          onClick={() => updateSet(exerciseIndex, 0, { cardio_status: 'manual' })}
+                        >
+                          Edit
+                        </button>
                       </div>
                     )
                   }
@@ -1366,7 +1425,9 @@ function ActiveWorkout() {
                           </select>
                         </span>
                         <span className="previous-cell">{formatPrevious(exercise)}</span>
-                        <SetNumberInput label={`${exercise.name} set ${set.set_number} weight`} decimal value={set.weight_kg} onChange={(weight_kg) => updateSet(exerciseIndex, setIndex, { weight_kg })} />
+                        {exercise.is_bodyweight
+                          ? <span className="set-bodyweight" aria-label="Bodyweight, no weight to enter">BW</span>
+                          : <SetNumberInput label={`${exercise.name} set ${set.set_number} weight`} decimal value={set.weight_kg} onChange={(weight_kg) => updateSet(exerciseIndex, setIndex, { weight_kg })} />}
                         <SetNumberInput id={repsInputId(exerciseIndex, set.set_number)} label={`${exercise.name} set ${set.set_number} reps`} value={set.reps} invalid={missingReps === setKey} onChange={(reps) => {
                           updateSet(exerciseIndex, setIndex, { reps })
                           setMissingReps(null)

@@ -148,14 +148,14 @@ function syncedRecently(value: string | null): boolean {
   return Date.now() - synced.getTime() < FRESH_WINDOW_MS
 }
 
-let freshRequest: Promise<HealthConnectStatus> | null = null
+let freshRequest: { userId: string; promise: Promise<HealthConnectStatus> } | null = null
 
 export async function ensureHealthConnectFresh(
   userId: string,
   knownStatus?: HealthConnectStatus,
 ): Promise<HealthConnectStatus> {
-  if (freshRequest) return freshRequest
-  freshRequest = (async () => {
+  if (freshRequest && freshRequest.userId === userId) return freshRequest.promise
+  const promise = (async () => {
     const status = knownStatus ?? await fetchHealthConnectStatus()
     if (!status.connected) return status
     if (status.source === 'health_connect' && !bridge()) return status
@@ -166,7 +166,8 @@ export async function ensureHealthConnectFresh(
       return status
     }
   })().finally(() => {
-    freshRequest = null
+    if (freshRequest?.promise === promise) freshRequest = null
   })
-  return freshRequest
+  freshRequest = { userId, promise }
+  return promise
 }

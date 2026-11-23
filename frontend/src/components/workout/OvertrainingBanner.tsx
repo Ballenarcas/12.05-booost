@@ -34,8 +34,12 @@ export function OvertrainingBanner({ workouts }: OvertrainingBannerProps) {
     let active = true
 
     const evaluate = async () => {
-      const stateKey = `set_plate_overtraining_state_${userId ?? 'guest'}`
-      const checkInsKey = `set_plate_recovery_checkins_${userId ?? 'guest'}`
+      if (!userId) {
+        if (active) setAlertSummary(null)
+        return
+      }
+      const stateKey = `set_plate_overtraining_state_${userId}`
+      const checkInsKey = `set_plate_recovery_checkins_${userId}`
 
       let state: StoredState = {}
       try {
