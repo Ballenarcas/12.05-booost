@@ -27,7 +27,9 @@ const items: DockItem[] = [
 
 export default function GlassDock() {
   const navigate = usePageNavigate()
-  const { pathname } = useLocation()
+  const { pathname: currentPath } = useLocation()
+  // Meal pages live outside /nutrition but belong to its tab, as in the Figma meal screens.
+  const pathname = /^\/(scan-meal|log-meals|hydration)(\/|$)/.test(currentPath) ? '/nutrition' : currentPath
   // The longest matching path wins, so /workouts/statistics marks Statistics, not Workouts.
   const active = items.reduce((best, { path }, index) => {
     const matches = path === '/' ? pathname === '/' : pathname === path || pathname.startsWith(`${path}/`)

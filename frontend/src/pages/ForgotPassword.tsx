@@ -27,7 +27,7 @@ function ForgotPassword() {
   }
 
   return (
-    <main className="onboarding-container login-container">
+    <main className="onboarding-container hifi-theme login-container">
       <div className="onboarding-content login-content">
         <div className="login-mark">SET&amp;PLATE</div>
         <header className="onboarding-header login-header">

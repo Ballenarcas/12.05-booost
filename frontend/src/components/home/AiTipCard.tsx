@@ -74,9 +74,9 @@ export default function AiTipCard({ onApplied }: { onApplied: () => void }) {
 
   return (
     <>
-      <section className="home-card ai-insight" aria-labelledby="ai-insight-label" aria-live="polite" aria-busy={!loaded}>
+      <section className="hifi-card ai-insight" aria-labelledby="ai-insight-label" aria-live="polite" aria-busy={!loaded}>
         <div className="ai-insight-top">
-          <h2 className="home-card-label" id="ai-insight-label">AI insight</h2>
+          <h2 className="hifi-card-label" id="ai-insight-label">AI insight</h2>
           {tip && (
             <button type="button" className="ai-insight-close" aria-label="Dismiss tip" disabled={busy} onClick={() => decide('dismissed')}>
               <img src={closeIcon} alt="" width={14} height={14} />
@@ -87,7 +87,7 @@ export default function AiTipCard({ onApplied }: { onApplied: () => void }) {
         {notice && (
           <div className="ai-tip-notice" role="status">
             <p>{notice}</p>
-            {undoTipId && <button type="button" className="home-pill" disabled={busy} onClick={undo}>Undo</button>}
+            {undoTipId && <button type="button" className="hifi-pill" disabled={busy} onClick={undo}>Undo</button>}
           </div>
         )}
         {tip && (
@@ -95,7 +95,7 @@ export default function AiTipCard({ onApplied }: { onApplied: () => void }) {
             <button type="button" className="ai-insight-why" aria-label="Why this tip?" onClick={() => setShowWhy(true)}>
               <CircleHelp size={18} aria-hidden="true" />
             </button>
-            <button type="button" className="home-pill is-big" disabled={busy} onClick={() => decide('accepted')}>Accept</button>
+            <button type="button" className="hifi-pill is-big" disabled={busy} onClick={() => decide('accepted')}>Accept</button>
           </div>
         )}
       </section>

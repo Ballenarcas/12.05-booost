@@ -1,0 +1,144 @@
+/* Add food page from the Figma mockup ("5/MEALS"); shared pieces live in redesign.css. */
+
+.add-food-screen { width: min(100%, 28rem); min-height: 100svh; margin: 0 auto; padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem max(2rem, env(safe-area-inset-bottom)); }
+/* The page sits outside the app shell, so it paints the whole window. */
+body:has(.add-food-screen), .add-food-screen { background: #f9f9f9; }
+:root[data-theme="dark"] :is(body:has(.add-food-screen), .add-food-screen) { background: #0f1115; }
+
+.add-food-header { display: grid; }
+.add-food-header .hifi-page-header { margin-top: -4px; align-items: center; }
+.add-food-scan { display: inline-flex; align-items: center; gap: 10px; }
+
+.add-food-form { display: grid; gap: 20px; }
+
+/* Meal type chips: white pills; the chosen one is pressed in and tinted. */
+.add-food-types { display: flex; flex-wrap: wrap; gap: 8px; }
+.add-food-type {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 31px;
+  color: var(--hifi-ink);
+  background: var(--hifi-button);
+  box-shadow: inset 0 0 4px var(--hifi-shadow);
+  cursor: pointer;
+  font-family: var(--hifi-sans);
+  font-size: 14px;
+  text-transform: uppercase;
+}
+.add-food-type[aria-pressed="true"] { background: var(--hifi-fill); box-shadow: inset 0 0 4px rgba(15, 62, 133, 0.45); }
+
+/* Food name and quantity: white cards with the label above a mono value and a hairline. */
+.add-food-fields { display: grid; gap: 10px; }
+.add-food-field {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 8px 12px 12px;
+  border-radius: 10px;
+  background: var(--hifi-card);
+}
+.add-food-field > label { font-size: 20px; line-height: 1.2; }
+.hifi-theme .add-food-field input {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 0 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  outline: none;
+  color: #6c6c6c;
+  background: transparent;
+  font-family: var(--hifi-mono);
+  font-size: 14px;
+}
+.hifi-theme .add-food-field input:focus { border-bottom-color: #0052b1; }
+:root[data-theme="dark"] .add-food-field input { color: var(--hifi-ink); }
+.add-food-quantity { display: flex; align-items: baseline; gap: 4px; color: #6c6c6c; font-family: var(--hifi-mono); font-size: 14px; }
+.add-food-spinner { position: absolute; top: 44px; right: 12px; color: var(--hifi-muted); }
+.add-food-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.add-food-presets button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 31px;
+  color: var(--hifi-muted);
+  background: var(--hifi-well);
+  cursor: pointer;
+  font-family: var(--hifi-mono);
+  font-size: 12px;
+}
+.add-food-presets button[aria-pressed="true"] { color: var(--hifi-ink); background: var(--hifi-fill); }
+
+.add-food-suggestions {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% - 4px);
+  right: 0;
+  left: 0;
+  display: grid;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--hifi-card);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  list-style: none;
+}
+.add-food-suggestions button {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--hifi-ink);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+}
+.add-food-suggestions button:hover, .add-food-suggestions button:focus-visible { background: var(--hifi-well); outline: none; }
+.add-food-suggestions small { flex: none; color: var(--hifi-faint); font-family: var(--hifi-mono); font-size: 12px; }
+
+/* Macros of the portion being added: label left, grams right, thin bar below. */
+.add-food-macros { display: grid; gap: 14px; margin: 0; padding: 0 4px; list-style: none; }
+.add-food-macros li { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px; }
+.add-food-macro-name { color: #949191; font-size: 14px; text-transform: uppercase; }
+.add-food-macro-value { color: #525252; font-family: var(--hifi-mono); font-size: 16px; }
+:root[data-theme="dark"] .add-food-macro-value { color: var(--hifi-ink); }
+.add-food-macro-bar { grid-column: 1 / -1; height: 8px; overflow: hidden; border-radius: 11px; background: var(--hifi-well); box-shadow: inset 0 0 2px var(--hifi-shadow); }
+.add-food-macro-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--hifi-fill); box-shadow: inset 0 0 2px var(--hifi-shadow); transition: width 300ms var(--ease-out); }
+
+.add-food-add { justify-self: start; }
+
+/* The meal being built: one white row per food. */
+.add-food-contents { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.add-food-contents li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto 32px;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 4px 0 12px;
+  border-radius: 10px;
+  background: var(--hifi-card);
+}
+.add-food-content-name { overflow: hidden; font-size: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.add-food-content-grams { color: #6c6c6c; font-family: var(--hifi-mono); font-size: 14px; }
+.add-food-content-kcal { color: #b4b4b4; font-size: 14px; }
+.add-food-contents button { display: grid; width: 32px; height: 32px; place-items: center; padding: 0; border: 0; color: var(--hifi-faint); background: transparent; cursor: pointer; }
+
+.add-food-totals { display: grid; gap: 6px; margin: 4px 0 0; }
+.add-food-totals div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.add-food-totals dt { font-size: 24px; }
+.add-food-totals dd { margin: 0; font-size: 20px; font-weight: 500; }
+
+.add-food-save { justify-self: center; margin-top: 8px; }
+.add-food-tip { justify-self: center; display: inline-flex; align-items: center; gap: 6px; color: var(--hifi-muted); }
+.add-food-type:focus-visible, .add-food-presets button:focus-visible, .add-food-contents button:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }

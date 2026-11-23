@@ -20,8 +20,8 @@ interface MealRecommendationsModalProps {
 // Same threshold as the server (GOAL_REACHED_KCAL in meal_recommendation_service.py).
 const GOAL_REACHED_KCAL = 150;
 
-const iconButton ={ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: '6px', display: 'flex' } as const;
-const cardStyle = { backgroundColor: '#1c1c1e', borderRadius: '16px', padding: '14px 16px', border: '1px solid rgba(255,255,255,0.05)' } as const;
+const iconButton ={ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '6px', display: 'flex' } as const;
+const cardStyle = { backgroundColor: 'var(--surface)', borderRadius: '16px', padding: '14px 16px', border: '1px solid var(--line)' } as const;
 
 export default function MealRecommendationsModal({ onClose, onAdded, onPremiumRequired }: MealRecommendationsModalProps) {
   const [data, setData] = useState<MealRecommendations | null>(null);
@@ -142,10 +142,10 @@ export default function MealRecommendationsModal({ onClose, onAdded, onPremiumRe
                     <div key={item.id} style={cardStyle}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '14px', fontWeight: 700, color: '#ffffff', overflowWrap: 'anywhere' }}>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', overflowWrap: 'anywhere' }}>
                             {item.meal_type.toUpperCase()}: {item.name.toUpperCase()}
                           </div>
-                          <div style={{ marginTop: '4px', color: '#8e8e93', fontSize: '12.5px', display: 'flex', flexWrap: 'wrap', columnGap: '8px' }}>
+                          <div style={{ marginTop: '4px', color: 'var(--text-muted)', fontSize: '12.5px', display: 'flex', flexWrap: 'wrap', columnGap: '8px' }}>
                             {[`${item.calories} kcal`, `P ${item.proteins_g}g`, `C ${item.carbs_g}g`, `F ${item.fats_g}g`].map((part) => (
                               <span key={part} style={{ whiteSpace: 'nowrap' }}>{part}</span>
                             ))}
@@ -156,14 +156,14 @@ export default function MealRecommendationsModal({ onClose, onAdded, onPremiumRe
                         </button>
                       </div>
                       {item.reason && (
-                        <p style={{ margin: '8px 0 0', color: '#d1d1d6', fontSize: '13px', lineHeight: 1.4 }}>{item.reason}</p>
+                        <p style={{ margin: '8px 0 0', color: 'var(--text)', fontSize: '13px', lineHeight: 1.4 }}>{item.reason}</p>
                       )}
                       <button
                         type="button"
                         onClick={() => add(item)}
                         disabled={!!busy}
                         aria-label={`Add ${item.name} to today`}
-                        style={{ marginTop: '10px', width: '100%', minHeight: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', border: '1px solid #333', borderRadius: '12px', color: '#f3f3f5', backgroundColor: '#262628', cursor: 'pointer', fontSize: '13.5px', fontWeight: 700 }}
+                        style={{ marginTop: '10px', width: '100%', minHeight: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', border: '1px solid var(--line)', borderRadius: '12px', color: 'var(--text)', backgroundColor: 'var(--surface-raised)', cursor: 'pointer', fontSize: '13.5px', fontWeight: 700 }}
                       >
                         {busy === item.id ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
                         Add to today
@@ -182,7 +182,7 @@ export default function MealRecommendationsModal({ onClose, onAdded, onPremiumRe
               type="button"
               onClick={refresh}
               disabled={!!busy || data.refreshes_left <= 0}
-              style={{ width: '100%', minHeight: '46px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: '1px solid #333', borderRadius: '14px', color: data.refreshes_left > 0 ? '#f3f3f5' : '#6e6e73', backgroundColor: '#1c1c1e', cursor: data.refreshes_left > 0 ? 'pointer' : 'not-allowed', fontSize: '14px', fontWeight: 700 }}
+              style={{ width: '100%', minHeight: '46px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: '1px solid var(--line)', borderRadius: '14px', color: data.refreshes_left > 0 ? 'var(--text)' : 'var(--text-faint)', backgroundColor: 'var(--surface)', cursor: data.refreshes_left > 0 ? 'pointer' : 'not-allowed', fontSize: '14px', fontWeight: 700 }}
             >
               {busy === 'refresh' ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <RefreshCw size={16} aria-hidden="true" />}
               {data.refreshes_left > 0 ? `New suggestions · ${data.refreshes_left} left today` : 'No refreshes left today'}

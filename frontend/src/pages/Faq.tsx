@@ -27,7 +27,7 @@ export default function Faq() {
   const [openIndex, setOpenIndex] = useState<number | null>(null)
 
   return (
-    <div className="screen faq-screen">
+    <div className="screen hifi-theme faq-screen">
       <header className="active-workout-header">
         <button className="icon-button" type="button" onClick={() => navigate('/profile')} aria-label="Back to profile">
           <ChevronLeft size={22} />

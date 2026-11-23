@@ -1,0 +1,69 @@
+/* Workouts page from the Figma mockup ("2/WORKOUT"); shared pieces live in redesign.css. */
+
+.workouts-screen { gap: 24px; }
+
+/* Deep blue at the top and the bottom with a pale middle, as in the mockup. */
+.app-shell:has(.workouts-screen) {
+  background: linear-gradient(161.7deg, rgb(0, 59, 210) -10%, rgb(249, 249, 249) 22%, rgb(233, 246, 251) 83%, rgb(0, 59, 210) 125%) fixed;
+}
+:root[data-theme="dark"] .app-shell:has(.workouts-screen) {
+  background: linear-gradient(161.7deg, rgb(0, 40, 140) -10%, #0f1115 22%, #10151b 83%, rgb(0, 40, 140) 125%) fixed;
+}
+
+.hifi-card.workouts-deload { display: flex; align-items: center; gap: 12px; }
+.workouts-deload > svg { flex: none; color: #6c86ef; }
+.workouts-deload > div { flex: 1; min-width: 0; }
+.workouts-deload-title { margin: 0 0 2px; font-size: 14px; font-weight: 500; }
+
+/* AI workout: white fading into blue from the lower right corner. */
+.hifi-card.workouts-ai-card {
+  gap: 8px;
+  background: radial-gradient(160% 140% at 15% 0%, #fff 48%, #c4cff8 64%, #899ef2 78%, #4e6eeb 90%, #143de5 100%);
+}
+:root[data-theme="dark"] .hifi-card.workouts-ai-card { background: radial-gradient(120% 140% at 20% 0%, var(--hifi-card) 40%, #1f3a8a 80%); }
+.workouts-plan-intro { display: grid; margin: 0; font-size: 16px; line-height: 1.2; }
+.workouts-plan-intro span { color: var(--hifi-faint); }
+.workouts-plan { display: flex; gap: 12px; padding: 16px 0; }
+.workouts-plan-body { display: flex; flex: 1; flex-direction: column; justify-content: space-between; gap: 8px; min-width: 0; }
+.workouts-plan-body h3 { margin: 0; font-size: 20px; font-weight: 400; line-height: 1.2; overflow-wrap: anywhere; }
+.workouts-plan .hifi-caption { color: var(--hifi-muted); }
+
+/* Routine and history cards: a summary row that opens to show the exercises and actions. */
+.workouts-list { display: grid; gap: 8px; }
+.hifi-card.workouts-item { gap: 0; padding: 0; border-radius: 10px; }
+.workouts-item-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 64px;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  border: 0;
+  border-radius: inherit;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.workouts-item.is-history .workouts-item-toggle { align-items: flex-start; padding: 8px 12px; }
+.workouts-item-toggle:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+.workouts-item-text { display: grid; flex: 1; gap: 20px; min-width: 0; }
+.workouts-item.is-history .workouts-item-text { gap: 8px; }
+.workouts-item-name { overflow-wrap: anywhere; font-size: 20px; line-height: 1.2; }
+.workouts-item-meta { display: flex; flex-wrap: wrap; gap: 0 12px; font-family: var(--hifi-mono); font-size: 14px; line-height: 1; }
+.workouts-item-meta.is-muted { gap: 0 8px; color: var(--hifi-muted); }
+.workouts-item-chevron { flex: none; color: var(--hifi-faint); transition: transform var(--motion) var(--ease-out); }
+.workouts-item-toggle[aria-expanded="true"] .workouts-item-chevron { transform: rotate(180deg); }
+.workouts-item-date { flex: none; padding: 4px 0; color: #6c6c6c; font-size: 14px; text-transform: uppercase; }
+:root[data-theme="dark"] .workouts-item-date { color: var(--hifi-muted); }
+.workouts-item-details { display: grid; gap: 16px; padding: 0 12px 12px; animation: content-in var(--motion) var(--ease-out); }
+.workouts-history-rows { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 14px; }
+.workouts-history-rows li { display: flex; justify-content: space-between; gap: 12px; }
+.workouts-history-rows li span:last-child { flex: none; color: var(--hifi-muted); font-family: var(--hifi-mono); font-size: 12px; white-space: nowrap; }
+.workouts-create-routine { justify-self: start; padding: 0 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .workouts-item-chevron { transition: none; }
+  .workouts-item-details { animation: none; }
+}

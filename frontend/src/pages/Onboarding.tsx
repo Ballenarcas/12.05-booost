@@ -186,7 +186,7 @@ function Onboarding() {
   }
 
   return (
-    <div className="onboarding-container">
+    <div className="onboarding-container hifi-theme">
       {/* Screen 3: Success Confirmation */}
       {step === 3 && (
         <div className="completion-overlay">

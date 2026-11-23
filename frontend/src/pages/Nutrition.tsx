@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, Camera, ChefHat, ChevronLeft, ChevronRight, Heart, Loader2, PenLine, Plus, Scale, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ChefHat, ChevronLeft, ChevronRight, Heart, Loader2, Plus, Scale, Search, Trash2, X } from 'lucide-react';
 import { usePageNavigate } from '../utils/usePageNavigate';
 import {
   addFavoriteMeal,
@@ -16,14 +16,15 @@ import {
   updateMealLog,
   type TodayNutritionData,
 } from '../services/api';
-import DailyIntake from '../components/nutrition/DailyIntake';
+import IntakeCard from '../components/nutrition/IntakeCard';
 import MealDatePicker from '../components/nutrition/MealDatePicker';
 import FavoriteMealsModal from '../components/nutrition/FavoriteMealsModal';
 import MealRecommendationsModal from '../components/nutrition/MealRecommendationsModal';
 import { sameDay } from '../utils/monthGrid';
 import type { FavoriteMeal, FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
-import HydrationCard from '../components/home/HydrationCard';
+import HydrationSummary from '../components/home/HydrationSummary';
 import '../styles/log-meals.css';
+import '../styles/meals.css';
 
 // Names match ignoring case, like the server's unique rule.
 const favoriteKey = (mealType: string, name: string) => `${mealType}|${name.trim().toLowerCase()}`;
@@ -62,14 +63,12 @@ function toInputDate(date: Date): string {
 
 export default function Nutrition() {
   const navigate = usePageNavigate();
-  const scanTarget = isPremiumActive(getCurrentUser()) ? '/scan-meal' : '/premium';
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   // Start from the copy saved earlier in this visit, so the card and list show at once.
   const [cachedToday] = useState(() => getSavedDayNutrition(getCurrentUser()?.id ?? '', toInputDate(new Date())));
   const [meals, setMeals] = useState<MealLogItem[]>(cachedToday?.meals ?? []);
   const [targets, setTargets] = useState<Pick<TodayNutritionData, 'daily_goal' | 'target_proteins_g' | 'target_carbs_g' | 'target_fats_g'> | null>(cachedToday);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [isAddOpen, setIsAddOpen] = useState(false);
   const daySwipeRef = useRef<{ x: number; y: number; swiped: boolean } | null>(null);
   const [isLoading, setIsLoading] = useState(!cachedToday);
   
@@ -100,6 +99,8 @@ export default function Nutrition() {
   // Set while the edit dialog is editing a favorite instead of a logged meal.
   const [editingFavoriteId, setEditingFavoriteId] = useState<string | null>(null);
   const [heartBusyId, setHeartBusyId] = useState<string | null>(null);
+  // Which heart just changed, so only that one animates (not hearts already set on load).
+  const [heartAnim, setHeartAnim] = useState<{ id: string; kind: 'pop' | 'unpop' } | null>(null);
   const [favoriteNotice, setFavoriteNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -113,17 +114,38 @@ export default function Nutrition() {
 
   const toggleFavorite = async (meal: MealLogItem) => {
     const existing = favoritesByKey.get(favoriteKey(meal.meal_type, meal.meal_name));
+    const pendingId = `pending-${meal.id}`;
     setHeartBusyId(meal.id);
     setFavoriteNotice(null);
+    // The heart changes on tap; the request confirms it, and a failure puts it back.
+    if (existing) {
+      setFavorites((current) => current.filter((favorite) => favorite.id !== existing.id));
+      setHeartAnim({ id: meal.id, kind: 'unpop' });
+    } else {
+      setFavorites((current) => [{
+        id: pendingId,
+        name: meal.meal_name,
+        meal_type: meal.meal_type,
+        calories: meal.item_calories,
+        proteins_g: meal.proteins_g ?? 0,
+        carbs_g: meal.carbs_g ?? 0,
+        fats_g: meal.fats_g ?? 0,
+        quantity_g: Number(meal.weight_g) || 100,
+        ingredients: meal.ingredients ?? [],
+      }, ...current]);
+      setHeartAnim({ id: meal.id, kind: 'pop' });
+    }
     try {
       if (existing) {
         await deleteFavoriteMeal(existing.id);
-        setFavorites((current) => current.filter((favorite) => favorite.id !== existing.id));
       } else {
         const saved = await addFavoriteMeal(meal.id);
-        setFavorites((current) => [saved, ...current.filter((favorite) => favorite.id !== saved.id)]);
+        setFavorites((current) => [saved, ...current.filter((favorite) => favorite.id !== pendingId && favorite.id !== saved.id)]);
       }
     } catch (error) {
+      setFavorites((current) => (existing
+        ? [existing, ...current.filter((favorite) => favorite.id !== existing.id)]
+        : current.filter((favorite) => favorite.id !== pendingId)));
       setFavoriteNotice(error instanceof Error ? error.message : "We couldn't update your favorites.");
     } finally {
       setHeartBusyId(null);
@@ -231,6 +253,7 @@ export default function Nutrition() {
     };
   }, [editingMeal, editFoodName, isFoodSearchOpen]);
 
+  const consumedKcal = meals.reduce((total, meal) => total + meal.item_calories, 0);
   const today = new Date();
   const oldestDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() - MAX_DAYS_BACK);
   const canGoBack = !sameDay(selectedDate, oldestDay) && selectedDate > oldestDay;
@@ -433,7 +456,7 @@ export default function Nutrition() {
 
   return (
     <div
-      className="screen meals-screen"
+      className="screen hifi-screen hifi-theme meals-screen"
       // Swipe left or right anywhere on the page to change day.
       onPointerDown={(event) => { daySwipeRef.current = { x: event.clientX, y: event.clientY, swiped: false }; }}
       onPointerUp={(event) => {
@@ -450,6 +473,11 @@ export default function Nutrition() {
         daySwipeRef.current = null;
       }}
     >
+      <header className="hifi-page-header">
+        <h1 className="hifi-page-title">Meals</h1>
+        <button className="hifi-pill" type="button" onClick={() => navigate('/log-meals')}>Add meal</button>
+      </header>
+
       <nav className="meal-day-nav" aria-label="Day">
         <button className="subpage-button" type="button" onClick={() => moveDay(-1)} disabled={!canGoBack} aria-label="Previous day">
           <ChevronLeft size={20} aria-hidden="true" />
@@ -475,12 +503,10 @@ export default function Nutrition() {
         />
       )}
 
-      <h1 className="meals-title">Meals</h1>
-      <h2 className="meals-subtitle">Daily intake</h2>
-
       {/* Always drawn, so it never pops in late: it shows its shape while the day loads. */}
-      <DailyIntake
-        consumed={meals.reduce((total, meal) => total + meal.item_calories, 0)}
+      <IntakeCard
+        label="Daily intake"
+        consumed={consumedKcal}
         goal={targets?.daily_goal ?? 0}
         pending={!targets}
         macros={[
@@ -488,6 +514,9 @@ export default function Nutrition() {
           { label: 'Carbs', current: meals.reduce((total, meal) => total + (meal.carbs_g ?? 0), 0), target: targets?.target_carbs_g ?? 0 },
           { label: 'Fat', current: meals.reduce((total, meal) => total + (meal.fats_g ?? 0), 0), target: targets?.target_fats_g ?? 0 },
         ]}
+        footer={<p className="hifi-caption meals-remaining">
+          {targets ? `${Math.abs(Math.round(targets.daily_goal - consumedKcal)).toLocaleString('en-US')} ${consumedKcal > targets.daily_goal ? 'over' : 'remaining'}` : ' '}
+        </p>}
       />
 
       <div className="action-row">
@@ -506,57 +535,44 @@ export default function Nutrition() {
       </div>
       {favoriteNotice && <p className="form-error" role="alert">{favoriteNotice}</p>}
 
-      <h2 className="meals-subtitle meal-list-title" id="nutrition-hydration">Hydration today</h2>
-      <section className="meal-hydration" aria-labelledby="nutrition-hydration">
-        <HydrationCard />
+      <section className="meals-panel" aria-labelledby="meals-list-title">
+        <h2 className="hifi-section-title" id="meals-list-title">{sameDay(selectedDate, today) ? "Today's meals" : 'Meals this day'}</h2>
+        <div className="meals-panel-list">
+          {isLoading ? (
+            <p className="visually-hidden" role="status">Loading your meals...</p>
+          ) : meals.length === 0 ? (
+            <p className="hifi-muted">No meals recorded for this day.</p>
+          ) : (
+            meals.map((meal) => {
+              const isFavorite = favoritesByKey.has(favoriteKey(meal.meal_type, meal.meal_name));
+              return (
+                <article className="meals-card" key={meal.id}>
+                  <button className="meals-card-main" type="button" onClick={() => openEditModal(meal)} aria-label={`${meal.meal_type}: ${meal.meal_name}, ${meal.item_calories} kcal. Edit`}>
+                    <span className="meals-card-type">{meal.meal_type}</span>
+                    <span className="meals-card-name">{meal.meal_name}</span>
+                  </button>
+                  <span className="meals-card-side">
+                    <button
+                      className={`meals-card-heart${heartAnim?.id === meal.id ? ` is-${heartAnim.kind}` : ''}`}
+                      onAnimationEnd={() => setHeartAnim(null)}
+                      type="button"
+                      onClick={() => toggleFavorite(meal)}
+                      disabled={heartBusyId === meal.id}
+                      aria-pressed={isFavorite}
+                      aria-label={isFavorite ? `Remove ${meal.meal_name} from favorites` : `Save ${meal.meal_name} as a favorite`}
+                    >
+                      <Heart size={18} aria-hidden="true" fill={isFavorite ? 'currentColor' : 'none'} />
+                    </button>
+                    <span className="meals-card-kcal">{meal.item_calories}kcal</span>
+                  </span>
+                </article>
+              );
+            })
+          )}
+        </div>
       </section>
 
-      <h2 className="meals-subtitle meal-list-title">{sameDay(selectedDate, today) ? "Today's meals" : 'Meals this day'}</h2>
-
-      <div className="meal-list">
-        {isLoading ? (
-          <p className="visually-hidden" role="status">Loading your meals...</p>
-        ) : meals.length === 0 ? (
-          <p className="state-line">No meals recorded for this day.</p>
-        ) : (
-          meals.map((meal) => (
-            <div className="meal-row-wrap" key={meal.id}>
-              <button className="meal-row" type="button" onClick={() => openEditModal(meal)} aria-label={`${meal.meal_type}: ${meal.meal_name}, ${meal.item_calories} kcal. Edit`}>
-              <span className="meal-row-text">
-                <strong>{meal.meal_type}</strong>
-                <small>{meal.meal_name}</small>
-              </span>
-              <span className="meal-row-kcal">{meal.item_calories}kcal</span>
-            </button>
-              <button
-                className="icon-button ghost"
-                type="button"
-                onClick={() => toggleFavorite(meal)}
-                disabled={heartBusyId === meal.id}
-                aria-pressed={favoritesByKey.has(favoriteKey(meal.meal_type, meal.meal_name))}
-                aria-label={favoritesByKey.has(favoriteKey(meal.meal_type, meal.meal_name)) ? `Remove ${meal.meal_name} from favorites` : `Save ${meal.meal_name} as a favorite`}
-              >
-                <Heart size={18} aria-hidden="true" fill={favoritesByKey.has(favoriteKey(meal.meal_type, meal.meal_name)) ? 'currentColor' : 'none'} />
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="meal-add">
-        {/* Always rendered so it can slide in and out; inert while closed so it can't be tabbed to. */}
-        <div className={`meal-add-options${isAddOpen ? ' is-open' : ''}`} id="meal-add-options" inert={!isAddOpen}>
-            <button className="action-button" type="button" onClick={() => navigate('/log-meals')}>
-              <PenLine size={17} aria-hidden="true" /> Manual entry
-            </button>
-            <button className="action-button" type="button" onClick={() => navigate(scanTarget)}>
-              <Camera size={17} aria-hidden="true" /> Scan meal {!isPremiumActive() && <span className="pro-badge">Pro</span>}
-            </button>
-        </div>
-        <button className="primary-button meal-add-button" type="button" aria-expanded={isAddOpen} aria-controls="meal-add-options" onClick={() => setIsAddOpen((open) => !open)}>
-          <Plus className="meal-add-icon" size={18} aria-hidden="true" /> Add food
-        </button>
-      </div>
+      <HydrationSummary detailed />
 
       {editingMeal && (
         <div className="modal-backdrop" onClick={() => !isSavingEdit && closeEditor()}>

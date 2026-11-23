@@ -62,7 +62,7 @@ function ExerciseGuide() {
   }
 
   return (
-    <div className="screen exercise-guide-screen">
+    <div className="screen hifi-theme exercise-guide-screen">
       <header className="picker-header">
         <button className="icon-button" type="button" onClick={() => navigate(-1)} aria-label="Back">
           <ArrowLeft size={21} />

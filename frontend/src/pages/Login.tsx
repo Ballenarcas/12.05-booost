@@ -39,7 +39,7 @@ function Login() {
 
   if (profile) {
     return (
-      <main className="onboarding-container login-container">
+      <main className="onboarding-container hifi-theme login-container">
         <div className="completion-overlay">
           <div className="completion-icon-wrapper"><Check size={34} aria-hidden="true" /></div>
           <h1 className="onboarding-title">Welcome, {profile.name}!</h1>
@@ -50,7 +50,7 @@ function Login() {
   }
 
   return (
-    <main className="onboarding-container login-container">
+    <main className="onboarding-container hifi-theme login-container">
       <div className="onboarding-content login-content">
         <div className="login-mark">SET&amp;PLATE</div>
         <header className="onboarding-header login-header">

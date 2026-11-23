@@ -71,7 +71,7 @@ function ExercisePicker() {
   }
 
   return (
-    <div className="screen exercise-picker-screen">
+    <div className="screen hifi-theme exercise-picker-screen">
       <header className="picker-header">
         <button className="icon-button" type="button" onClick={() => navigate('/workouts/active')} aria-label="Back to active workout">
           <ArrowLeft size={21} />

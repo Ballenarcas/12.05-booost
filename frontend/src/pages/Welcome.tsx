@@ -9,7 +9,7 @@ const PREVIEW_DAYS = [
 
 function Welcome() {
   return (
-    <main className="welcome-screen">
+    <main className="welcome-screen hifi-theme">
       <p className="welcome-mark">SET&amp;PLATE</p>
 
       {/* A still of the Home screen with sample numbers, so people see the app before signing up. */}

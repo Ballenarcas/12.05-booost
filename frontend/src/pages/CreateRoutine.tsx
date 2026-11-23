@@ -149,7 +149,7 @@ function CreateRoutine() {
   const canSave = selectedExercises.length > 0 && !isSaving
 
   return (
-    <div className="screen routine-builder-screen">
+    <div className="screen hifi-theme routine-builder-screen">
       <header className="routine-builder-header">
         <button className="icon-button" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts">
           <ArrowLeft size={20} aria-hidden="true" />

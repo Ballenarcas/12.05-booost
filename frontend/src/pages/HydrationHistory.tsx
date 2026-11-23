@@ -222,7 +222,7 @@ export default function HydrationHistory() {
   const goalChanged = data ? data.days.some((day) => day.goal_ml !== data.days[0].goal_ml) : false
 
   return (
-    <div className="screen hydration-history-screen" aria-busy={isLoading}>
+    <div className="screen hifi-theme hydration-history-screen" aria-busy={isLoading}>
       <header className="hydration-history-header">
         <button
           className="icon-button hydration-history-back"

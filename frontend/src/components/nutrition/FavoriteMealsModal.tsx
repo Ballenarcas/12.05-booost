@@ -26,8 +26,8 @@ interface FavoriteMealsModalProps {
   onDelete: (favorite: FavoriteMeal) => Promise<void>;
 }
 
-const rowStyle = { backgroundColor: '#1c1c1e', borderRadius: '16px', padding: '14px 16px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '12px' } as const;
-const iconButton = { background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: '6px', display: 'flex' } as const;
+const rowStyle = { backgroundColor: 'var(--surface)', borderRadius: '16px', padding: '14px 16px', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: '12px' } as const;
+const iconButton = { background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '6px', display: 'flex' } as const;
 
 export default function FavoriteMealsModal({ favorites, isLoading, loadError, onClose, onLog, onEdit, onDelete }: FavoriteMealsModalProps) {
   const [query, setQuery] = useState('');
@@ -91,7 +91,7 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {logging && (
-              <button type="button" style={{ ...iconButton, color: '#f3f3f5', padding: 0 }} onClick={() => setLogging(null)} aria-label="Back to favorites" disabled={!!busyId}>
+              <button type="button" style={{ ...iconButton, color: 'var(--text)', padding: 0 }} onClick={() => setLogging(null)} aria-label="Back to favorites" disabled={!!busyId}>
                 <ArrowLeft size={20} />
               </button>
             )}
@@ -119,9 +119,9 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
                   onClick={() => setDay(option)}
                   style={{
                     flex: 1, minHeight: '48px', borderRadius: '14px', cursor: 'pointer', fontSize: '14px', fontWeight: 700,
-                    border: `1px solid ${day === option ? '#f3f3f5' : '#333'}`,
-                    color: day === option ? '#121212' : '#f3f3f5',
-                    backgroundColor: day === option ? '#f3f3f5' : '#1c1c1e',
+                    border: `1px solid ${day === option ? 'var(--primary)' : 'var(--line)'}`,
+                    color: 'var(--text)',
+                    backgroundColor: day === option ? 'var(--hifi-fill, #cee2fd)' : 'var(--surface)',
                   }}
                 >
                   {option === 'today' ? 'Today' : 'Another day'}
@@ -212,10 +212,10 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
                 shown.map((favorite) => (
                   <div key={favorite.id} style={rowStyle}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#ffffff', overflowWrap: 'anywhere' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', overflowWrap: 'anywhere' }}>
                         {favorite.meal_type.toUpperCase()}: {favorite.name.toUpperCase()}
                       </div>
-                      <div style={{ marginTop: '4px', color: '#8e8e93', fontSize: '12.5px', display: 'flex', flexWrap: 'wrap', columnGap: '8px' }}>
+                      <div style={{ marginTop: '4px', color: 'var(--text-muted)', fontSize: '12.5px', display: 'flex', flexWrap: 'wrap', columnGap: '8px' }}>
                         {[`${favorite.calories} kcal`, `P ${favorite.proteins_g}g`, `C ${favorite.carbs_g}g`, `F ${favorite.fats_g}g`].map((part) => (
                           <span key={part} style={{ whiteSpace: 'nowrap' }}>{part}</span>
                         ))}
@@ -224,7 +224,7 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
                     <button type="button" style={iconButton} onClick={() => onEdit(favorite)} disabled={!!busyId} aria-label={`Edit ${favorite.name}`}>
                       <Pencil size={17} />
                     </button>
-                    <button type="button" style={{ ...iconButton, color: '#ff4d4d' }} onClick={() => remove(favorite)} disabled={!!busyId} aria-label={`Remove ${favorite.name} from favorites`}>
+                    <button type="button" style={{ ...iconButton, color: 'var(--negative)' }} onClick={() => remove(favorite)} disabled={!!busyId} aria-label={`Remove ${favorite.name} from favorites`}>
                       {busyId === favorite.id ? <Loader2 size={17} className="animate-spin" /> : <Trash2 size={17} />}
                     </button>
                     <button
@@ -232,7 +232,7 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
                       onClick={() => startLogging(favorite)}
                       disabled={!!busyId}
                       aria-label={`Add ${favorite.name} to your log`}
-                      style={{ display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid #333', borderRadius: '12px', color: '#f3f3f5', backgroundColor: '#262628', cursor: 'pointer', fontSize: '13px', fontWeight: 700, padding: '8px 12px' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid var(--line)', borderRadius: '12px', color: 'var(--text)', backgroundColor: 'var(--surface-raised)', cursor: 'pointer', fontSize: '13px', fontWeight: 700, padding: '8px 12px' }}
                     >
                       <Plus size={15} aria-hidden="true" /> Add
                     </button>

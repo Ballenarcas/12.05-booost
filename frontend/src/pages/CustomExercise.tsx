@@ -63,7 +63,7 @@ export default function CustomExercise() {
 
   if (!isPremium && !isEditing) {
     return (
-      <div className="screen">
+      <div className="screen hifi-theme">
         <header className="active-workout-header">
           <button className="icon-button" type="button" onClick={() => navigate(-1)} aria-label="Back">
             <ChevronLeft size={22} />
@@ -74,11 +74,11 @@ export default function CustomExercise() {
         </header>
 
         <div className="card" style={{ margin: '24px 16px', padding: '24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(176, 132, 233, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#b084e9' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(21, 99, 166, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
             <Sparkles size={24} />
           </div>
           <h2 style={{ margin: 0, fontSize: '20px' }}>Upgrade to Premium</h2>
-          <p style={{ margin: 0, color: '#a1a1a6', fontSize: '14px', lineHeight: 1.5 }}>
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.5 }}>
             Custom exercise creation is a Premium feature. Upgrade your account to create private exercises, add them to your routines, and track your stats.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '10px', marginTop: '8px' }}>
@@ -157,11 +157,11 @@ export default function CustomExercise() {
   }
 
   if (isLoading) {
-    return <div className="screen state-card"><Loader2 className="animate-spin" /></div>
+    return <div className="screen hifi-theme state-card"><Loader2 className="animate-spin" /></div>
   }
 
   return (
-    <div className="screen">
+    <div className="screen hifi-theme">
       <header className="active-workout-header">
         <button
           className="icon-button"
@@ -181,7 +181,7 @@ export default function CustomExercise() {
 
       <form onSubmit={handleSave} style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div>
-          <label style={{ fontSize: '12px', color: '#8e8e93', fontWeight: 600, display: 'block', marginBottom: '8px' }}>EXERCISE NAME</label>
+          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>EXERCISE NAME</label>
           <input 
             type="text" 
             value={name} 
@@ -190,7 +190,7 @@ export default function CustomExercise() {
                 setError(null)
             }}
             placeholder="e.g. Belt Squat Machine"
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: '#1c1c1e', border: '1px solid #333', color: '#fff', fontSize: '16px', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)', fontSize: '16px', boxSizing: 'border-box' }}
           />
           {error && (
             <div role="alert" style={{ color: '#ff4d4d', fontSize: '13px', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -200,11 +200,11 @@ export default function CustomExercise() {
         </div>
 
         <div>
-          <label style={{ fontSize: '12px', color: '#8e8e93', fontWeight: 600, display: 'block', marginBottom: '8px' }}>MAIN MUSCLE GROUP</label>
+          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>MAIN MUSCLE GROUP</label>
           <select 
             value={muscleGroup} 
             onChange={(e) => setMuscleGroup(e.target.value)}
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: '#1c1c1e', border: '1px solid #333', color: '#fff', fontSize: '16px', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)', fontSize: '16px', boxSizing: 'border-box' }}
           >
             {availableGroups.map(group => (
               <option key={group} value={group}>{group}</option>
@@ -213,35 +213,35 @@ export default function CustomExercise() {
         </div>
 
         <div>
-          <label style={{ fontSize: '12px', color: '#8e8e93', fontWeight: 600, display: 'block', marginBottom: '8px' }}>EQUIPMENT (OPTIONAL)</label>
+          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>EQUIPMENT (OPTIONAL)</label>
           <input 
             type="text" 
             value={equipment} 
             onChange={(e) => setEquipment(e.target.value)}
             placeholder="e.g. Machine, Cable..."
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: '#1c1c1e', border: '1px solid #333', color: '#fff', fontSize: '16px', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)', fontSize: '16px', boxSizing: 'border-box' }}
           />
         </div>
 
         <div>
-          <label style={{ fontSize: '12px', color: '#8e8e93', fontWeight: 600, display: 'block', marginBottom: '8px' }}>SECONDARY MUSCLES (OPTIONAL)</label>
+          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>SECONDARY MUSCLES (OPTIONAL)</label>
           <input 
             type="text" 
             value={secondaryMuscles} 
             onChange={(e) => setSecondaryMuscles(e.target.value)}
             placeholder="e.g. Glutes, Calves..."
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: '#1c1c1e', border: '1px solid #333', color: '#fff', fontSize: '16px', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)', fontSize: '16px', boxSizing: 'border-box' }}
           />
         </div>
 
         <div>
-          <label style={{ fontSize: '12px', color: '#8e8e93', fontWeight: 600, display: 'block', marginBottom: '8px' }}>NOTES (OPTIONAL)</label>
+          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>NOTES (OPTIONAL)</label>
           <textarea 
             value={notes} 
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Machine settings, seat height..."
             rows={3}
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: '#1c1c1e', border: '1px solid #333', color: '#fff', fontSize: '16px', boxSizing: 'border-box', resize: 'vertical' }}
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)', fontSize: '16px', boxSizing: 'border-box', resize: 'vertical' }}
           />
         </div>
 
