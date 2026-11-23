@@ -751,7 +751,7 @@ export default function Nutrition() {
             </div>
             <h3 id="quantity-warning-title">Is {highQuantityWarning.next.toLocaleString()}g correct?</h3>
             <p id="quantity-warning-description">
-              <strong>{highQuantityWarning.name}</strong> at {highQuantityWarning.next.toLocaleString()}g is over
+              <strong>{highQuantityWarning.name}</strong> at {highQuantityWarning.next.toLocaleString()}g is over{' '}
               {MAX_REASONABLE_QUANTITY_G.toLocaleString()}g. That may be too much for one meal. Please confirm
               the amount is right.
             </p>

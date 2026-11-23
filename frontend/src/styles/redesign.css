@@ -5,7 +5,8 @@
 @import '@fontsource/space-mono/400.css';
 @import '@fontsource-variable/roboto';
 
-.hifi-screen, .hifi-theme {
+.hifi-screen, .hifi-theme,
+.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet {
   --hifi-ink: #424242;
   --hifi-muted: #727272;
   --hifi-faint: #acacac;
@@ -24,7 +25,7 @@
 }
 .hifi-screen { display: grid; gap: 16px; }
 
-:root[data-theme="dark"] :is(.hifi-screen, .hifi-theme) {
+:root[data-theme="dark"] :is(.hifi-screen, .hifi-theme, .modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet) {
   --hifi-ink: #ececec;
   --hifi-muted: #b0b0b0;
   --hifi-faint: #8a8a8a;
@@ -86,7 +87,7 @@
    The app's shared classes read these colour variables, so pointing them at the redesign palette
    restyles cards, inputs, lists and modals without rewriting each page. Home and Workouts get the
    same mapping for the shared pieces they still use (modals, error cards). */
-:is(.hifi-screen, .hifi-theme) {
+:is(.hifi-screen, .hifi-theme, .modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet) {
   --background: #f6f8fd;
   --surface: #fff;
   --surface-raised: #f3f5fa;
@@ -101,7 +102,7 @@
   --data: #1563a6;
   --radius-card: 12px;
 }
-:root[data-theme="dark"] :is(.hifi-screen, .hifi-theme) {
+:root[data-theme="dark"] :is(.hifi-screen, .hifi-theme, .modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet) {
   --background: #0f1115;
   --surface: #1c1f24;
   --surface-raised: #24272d;
@@ -158,3 +159,89 @@
 
 /* Pop-up totals use the redesign blue; green stays for finished states only. */
 .hifi-theme .calc-cals-badge { color: var(--primary); }
+
+/* ---- Pop-ups ----
+   One look for every dialog and bottom sheet in the app, on every page: a dimmed, slightly blurred
+   backdrop, a white card, Roboto titles and the redesign's pill buttons. :root raises the
+   specificity above the older per-page rules (log-meals.css, global.css). */
+:root :is(.modal-backdrop, .ai-tip-backdrop, .quantity-warning-backdrop, .routine-save-backdrop) {
+  background: rgba(16, 32, 56, 0.32);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+:root :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal) {
+  border: 0;
+  border-radius: 20px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgba(16, 32, 56, 0.18);
+  font-family: var(--hifi-sans);
+}
+/* Bottom sheets keep the AI Insight sheet's large rounded top. */
+:root .date-sheet {
+  border-radius: 28px 28px 20px 20px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 -4px 24px rgba(16, 32, 56, 0.16);
+  font-family: var(--hifi-sans);
+}
+:root[data-theme="dark"] :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet) { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55); }
+:root :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet) :is(h2, h3, .modal-title) {
+  color: var(--text);
+  font-family: var(--hifi-sans);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+:root :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet) p { color: var(--text-muted); }
+:root .confirmation-modal .eyebrow { color: var(--hifi-faint); font-family: var(--hifi-mono); letter-spacing: 0; }
+
+/* Every button in a pop-up is the pill; the main action is tinted, a destructive one is red. */
+:root :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet)
+  :is(.primary-button, .secondary-action, .action-button, .danger-action, .btn-modal-submit, .btn-add-food, .tip-accept-btn, .tip-decline-btn, .quantity-warning-accept, .quantity-warning-rollback) {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 31px;
+  color: var(--hifi-ink);
+  background: var(--hifi-button);
+  box-shadow: inset 0 0 4px var(--hifi-shadow);
+  filter: none;
+  font-family: var(--hifi-mono);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+:root :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet)
+  :is(.primary-button, .btn-modal-submit, .tip-accept-btn, .quantity-warning-accept) {
+  background: var(--hifi-fill);
+  box-shadow: inset 0 0 4px rgba(15, 62, 133, 0.45);
+}
+:root :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet) .danger-action { color: var(--negative); }
+:root :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet)
+  :is(.primary-button, .secondary-action, .action-button, .danger-action, .btn-modal-submit, .btn-add-food, .tip-accept-btn, .tip-decline-btn, .quantity-warning-accept, .quantity-warning-rollback):disabled {
+  color: var(--hifi-faint);
+  background: var(--hifi-well);
+  box-shadow: none;
+}
+:root :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet)
+  :is(.primary-button, .secondary-action, .action-button, .danger-action, .btn-modal-submit, .btn-add-food, .tip-accept-btn, .tip-decline-btn, .quantity-warning-accept, .quantity-warning-rollback):focus-visible {
+  outline: 2px solid #0052b1;
+  outline-offset: 2px;
+}
+/* Close buttons: a plain grey icon in every pop-up. */
+:root :is(.btn-modal-close, .modal-close) {
+  border: 0;
+  color: var(--text-muted);
+  background: transparent;
+  box-shadow: none;
+}
+:root :is(.btn-modal-close, .modal-close):hover { color: var(--text); background: var(--surface-raised); }
+/* The date picker's chosen day uses the redesign's light-blue selection, like the meal-type chips. */
+:root .date-sheet .date-day[aria-pressed="true"] { color: var(--hifi-ink); background: var(--hifi-fill); box-shadow: inset 0 0 4px rgba(15, 62, 133, 0.45); }
+:root .date-sheet .icon-button { border: 0; background: transparent; }
