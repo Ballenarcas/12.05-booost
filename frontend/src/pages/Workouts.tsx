@@ -2,7 +2,7 @@ import { ChevronDown, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { activeWorkoutStorageKey, deleteRoutine, deleteWorkoutHistoryEntry, fetchDashboardSummary, fetchRoutines, fetchWorkoutHistory, getCachedDashboardSummary, getCurrentUser, overtrainingModPctStorageKey, readSavedCopy, type DashboardSummary } from '../services/api'
+import { activeWorkoutStorageKey, clearOvertrainingMods, deleteRoutine, deleteWorkoutHistoryEntry, fetchDashboardSummary, fetchRoutines, fetchWorkoutHistory, getActiveDeloadPct, getCachedDashboardSummary, getCurrentUser, overtrainingModPctStorageKey, readSavedCopy, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import { lastLifts, type LastLift } from '../utils/lastLifts'
 import { OvertrainingBanner } from '../components/workout/OvertrainingBanner'
@@ -65,15 +65,8 @@ function formatCardioSummary(sets: WorkoutHistoryEntry['exercises'][number]['set
   return parts.length > 0 ? parts.join(' · ') : 'Cardio'
 }
 
-function getOvertrainingModPct(userId?: string): number {
-  const key = overtrainingModPctStorageKey(userId)
-  if (!key) return 0
-  const modPct = Number(localStorage.getItem(key) || '0')
-  return Number.isFinite(modPct) && modPct > 0 ? modPct : 0
-}
-
 function applyOvertrainingVolumeReduction(targetSets: number, userId?: string): number {
-  const modPct = getOvertrainingModPct(userId)
+  const modPct = getActiveDeloadPct(userId)
   if (modPct > 0 && targetSets >= 2) {
     // At least one set fewer (or -15%) once there are 2 sets or more.
     return Math.max(1, Math.min(targetSets - 1, Math.round(targetSets * (1 - modPct / 100))))
@@ -82,7 +75,7 @@ function applyOvertrainingVolumeReduction(targetSets: number, userId?: string): 
 }
 
 function applyOvertrainingWeightReduction(weightKg: number, userId?: string): number {
-  const modPct = getOvertrainingModPct(userId)
+  const modPct = getActiveDeloadPct(userId)
   if (modPct > 0 && weightKg > 0) {
     // Lower the load by the deload percentage, rounded to 0.5 kg.
     const reduced = weightKg * (1 - modPct / 100)
@@ -94,7 +87,7 @@ function applyOvertrainingWeightReduction(weightKg: number, userId?: string): nu
 // Routines store no weight, so each exercise starts from the last weight the user lifted for it,
 // lowered while an overtraining deload is active.
 function createActiveExercises(routine: Routine, lifts: Map<string, LastLift>, userId?: string): ActiveExercise[] {
-  const modActive = getOvertrainingModPct(userId) > 0
+  const modActive = getActiveDeloadPct(userId) > 0
   return routine.exercises.map((exercise) => {
     const adjustedSets = applyOvertrainingVolumeReduction(exercise.target_sets ?? 1, userId)
     const lastWeight = lifts.get(exercise.exercise_id)?.weight_kg ?? null
@@ -165,10 +158,10 @@ function Workouts() {
   const [openRoutineId, setOpenRoutineId] = useState<string | null>(null)
   const [openWorkoutId, setOpenWorkoutId] = useState<string | null>(null)
   const [summary, setSummary] = useState<DashboardSummary | null>(() => getCachedDashboardSummary())
-  const [activeDeloadPct, setActiveDeloadPct] = useState<number>(() => getOvertrainingModPct(currentUserId))
+  const [activeDeloadPct, setActiveDeloadPct] = useState<number>(() => getActiveDeloadPct(currentUserId))
 
   useEffect(() => {
-    setActiveDeloadPct(getOvertrainingModPct(currentUserId))
+    setActiveDeloadPct(getActiveDeloadPct(currentUserId))
   }, [currentUserId])
 
   useEffect(() => {
@@ -212,7 +205,7 @@ function Workouts() {
   }, [currentUserId])
 
   function startWorkout(routine?: Routine) {
-    const modActive = getOvertrainingModPct(currentUserId) > 0
+    const modActive = getActiveDeloadPct(currentUserId) > 0
     const baseName = routine?.name ?? 'Empty workout'
     navigate('/workouts/active', {
       state: {
@@ -225,7 +218,7 @@ function Workouts() {
   }
 
   function repeatWorkout(workout: WorkoutHistoryEntry) {
-    const modActive = getOvertrainingModPct(currentUserId) > 0
+    const modActive = getActiveDeloadPct(currentUserId) > 0
     const exercises: ActiveExercise[] = workout.exercises.map((exercise) => {
       const isCardio = isCardioExercise(exercise)
       const previousSets = [...exercise.sets].sort((first, second) => first.set_number - second.set_number)
@@ -352,16 +345,16 @@ function Workouts() {
     startWorkout()
   }
 
-  function clearDeloadModification() {
+  async function clearDeloadModification() {
     const modKey = overtrainingModPctStorageKey(currentUserId)
     if (modKey) localStorage.removeItem(modKey)
-    if (currentUserId) {
-      localStorage.setItem(
-        `set_plate_overtraining_state_${currentUserId}`,
-        JSON.stringify({ modsApplied: false, dismissed: false, dismissedAt: null }),
-      )
-    }
     setActiveDeloadPct(0)
+    try {
+      const next = await clearOvertrainingMods()
+      setActiveDeloadPct(next.deload_active ? next.volume_reduction_pct : 0)
+    } catch {
+      // Keep local deload disabled if offline.
+    }
   }
 
   async function confirmDeleteRoutine() {
@@ -410,7 +403,10 @@ function Workouts() {
         </span>
       </header>
 
-      <OvertrainingBanner workouts={workoutHistory} />
+      <OvertrainingBanner
+        workouts={workoutHistory}
+        onStatusChange={(next) => setActiveDeloadPct(next.deload_active ? next.volume_reduction_pct : 0)}
+      />
 
       {activeDeloadPct > 0 && (
         <div className="hifi-card workouts-deload" role="status">
@@ -449,7 +445,7 @@ function Workouts() {
                       {planDuration ? <span>{planDuration} min</span> : null}
                       <span>{plan.exercises.length} exercises</span>
                     </p>
-                    <button className="hifi-pill" type="button" onClick={() => navigate('/workouts/active', { state: planWorkoutState(plan) })}>Start</button>
+                    <button className="hifi-pill" type="button" onClick={() => navigate('/workouts/active', { state: planWorkoutState(plan, activeDeloadPct) })}>Start</button>
                   </div>
                 </div>
               </div>

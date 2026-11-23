@@ -4,7 +4,7 @@ import AiTipCard from '../components/home/AiTipCard'
 import HydrationSummary from '../components/home/HydrationSummary'
 import IntakeCard, { percent } from '../components/nutrition/IntakeCard'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
+import { fetchDashboardSummary, getActiveDeloadPct, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import WorkoutPhoto from '../components/workout/WorkoutPhoto'
 import { planWorkoutState } from '../utils/workoutPlan'
@@ -166,7 +166,7 @@ function Home() {
                       {duration ? <span>{duration} min</span> : null}
                       <span>{plan.exercises.length} exercises</span>
                     </p>
-                    <button className="hifi-pill" type="button" onClick={() => navigate('/workouts/active', { state: planWorkoutState(plan) })}>Start</button>
+                    <button className="hifi-pill" type="button" onClick={() => navigate('/workouts/active', { state: planWorkoutState(plan, getActiveDeloadPct(userId)) })}>Start</button>
                   </div>
                 </div>
               </div>
