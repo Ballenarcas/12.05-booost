@@ -83,6 +83,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/workouts" element={<Workouts />} />
             <Route path="/workouts/statistics" element={<WorkoutStatistics />} />
+            <Route path="/statistics" element={<WorkoutStatistics />} />
             <Route path="/workouts/create" element={<CreateRoutine />} />
             <Route path="/workouts/active" element={<ActiveWorkout />} />
             <Route path="/workouts/active/exercises" element={<ExercisePicker />} />

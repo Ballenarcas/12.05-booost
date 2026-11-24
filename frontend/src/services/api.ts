@@ -15,9 +15,11 @@ const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
 const nutritionRequests = new Map<string, Promise<TodayNutritionData>>()
 const adjustmentRequests = new Map<string, Promise<CalorieAdjustmentData>>()
 const workoutStatisticsCache = new Map<string, { data: WorkoutStatistics; expiresAt: number }>()
+const nutritionStatisticsCache = new Map<string, { data: NutritionStatistics; expiresAt: number }>()
 const WORKOUT_STATISTICS_CACHE_TTL_MS = 30_000
 const NUTRITION_CACHE_PREFIX = 'set_plate_nutrition:'
 const NUTRITION_CACHE_TTL_MS = 60_000
+import type { NutritionStatistics, NutritionStatisticsRange } from '../types/nutrition'
 import type {
   LiveWorkoutAdjustmentRequest,
   LiveWorkoutAdjustmentResponse,
@@ -134,6 +136,7 @@ export function clearSession(): void {
   nutritionRequests.clear()
   adjustmentRequests.clear()
   workoutStatisticsCache.clear()
+  nutritionStatisticsCache.clear()
   routinesRequests.clear()
   exerciseListCache.clear()
   exerciseListInflight.clear()
@@ -227,6 +230,7 @@ function forgetCachedTip(): void {
 export function clearDashboardCache(): void {
   dashboardRequests.clear()
   shortCache.clear()
+  invalidateNutritionStatisticsCache()
   forgetSavedCopies('history:')
   forgetSavedCopies('nutrition:')
   forgetSavedCopies('overtraining:')
@@ -551,10 +555,20 @@ export async function deleteWorkoutHistoryEntry(userId: string, workoutId: strin
 // once while fresh ones load. Only today's copy is used; saving or deleting a workout, or signing
 // out, removes them.
 const SAVED_STATISTICS_PREFIX = 'set_plate_stats:'
+const SAVED_NUTRITION_STATISTICS_PREFIX = 'set_plate_nutrition_stats:'
 
 export function getSavedWorkoutStatistics(userId: string, range: WorkoutStatisticsRange): WorkoutStatistics | null {
   try {
     const saved = JSON.parse(localStorage.getItem(`${SAVED_STATISTICS_PREFIX}${userId}:${range}`) ?? 'null') as { data: WorkoutStatistics; day: string } | null
+    return saved?.day === new Date().toDateString() ? saved.data : null
+  } catch {
+    return null
+  }
+}
+
+export function getSavedNutritionStatistics(userId: string, range: NutritionStatisticsRange): NutritionStatistics | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(`${SAVED_NUTRITION_STATISTICS_PREFIX}${userId}:${range}`) ?? 'null') as { data: NutritionStatistics; day: string } | null
     return saved?.day === new Date().toDateString() ? saved.data : null
   } catch {
     return null
@@ -570,6 +584,15 @@ function forgetSavedStatistics(userId?: string): void {
   }
 }
 
+function forgetSavedNutritionStatistics(userId?: string): void {
+  try {
+    const prefix = `${SAVED_NUTRITION_STATISTICS_PREFIX}${userId ?? ''}`
+    Object.keys(localStorage).filter((key) => key.startsWith(prefix)).forEach((key) => localStorage.removeItem(key))
+  } catch {
+    // Nothing saved to forget when storage is unavailable.
+  }
+}
+
 function invalidateWorkoutStatisticsCache(userId: string): void {
   const prefix = `${userId}:`
   for (const key of workoutStatisticsCache.keys()) {
@@ -578,12 +601,25 @@ function invalidateWorkoutStatisticsCache(userId: string): void {
   forgetSavedStatistics(userId)
 }
 
+function invalidateNutritionStatisticsCache(userId?: string): void {
+  if (userId) {
+    const prefix = `${userId}:`
+    for (const key of nutritionStatisticsCache.keys()) {
+      if (key.startsWith(prefix)) nutritionStatisticsCache.delete(key)
+    }
+  } else {
+    nutritionStatisticsCache.clear()
+  }
+  forgetSavedNutritionStatistics(userId)
+}
+
 /** Loads what the main pages show in the background, so their first visit is instant too. */
 export function prefetchMainPages(): void {
   const userId = getCurrentUser()?.id
   if (!userId) return
   const quietly = (request: Promise<unknown>) => { void request.catch(() => undefined) }
   quietly(fetchWorkoutStatistics(userId, DEFAULT_STATISTICS_RANGE))
+  quietly(fetchNutritionStatistics(userId, DEFAULT_STATISTICS_RANGE))
   quietly(fetchRoutines())
   quietly(fetchWorkoutHistory(userId))
   quietly(fetchTodayNutrition(userId))
@@ -617,6 +653,39 @@ export async function fetchWorkoutStatistics(
   workoutStatisticsCache.set(cacheKey, { data, expiresAt: Date.now() + WORKOUT_STATISTICS_CACHE_TTL_MS })
   try {
     localStorage.setItem(`${SAVED_STATISTICS_PREFIX}${userId}:${range}`, JSON.stringify({ data, day: new Date().toDateString() }))
+  } catch {
+    // The fresh response is still shown when storage is unavailable or full.
+  }
+  return data
+}
+
+export async function fetchNutritionStatistics(
+  userId: string,
+  range: NutritionStatisticsRange,
+  signal?: AbortSignal,
+): Promise<NutritionStatistics> {
+  const timezoneOffsetMinutes = new Date().getTimezoneOffset()
+  const cacheKey = `${userId}:${range}:${timezoneOffsetMinutes}`
+  const cached = nutritionStatisticsCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.data
+  if (cached) nutritionStatisticsCache.delete(cacheKey)
+
+  const query = new URLSearchParams({
+    range,
+    timezone_offset_minutes: String(timezoneOffsetMinutes),
+  })
+  const timeout = AbortSignal.timeout(DASHBOARD_TIMEOUT_MS)
+  const response = await apiFetch(`${API_URL}/api/v1/nutrition/statistics?${query}`, {
+    cache: 'no-store',
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  })
+  if (!response.ok) {
+    throw new Error("We couldn't load your meal statistics. Please try again.")
+  }
+  const data = await response.json() as NutritionStatistics
+  nutritionStatisticsCache.set(cacheKey, { data, expiresAt: Date.now() + WORKOUT_STATISTICS_CACHE_TTL_MS })
+  try {
+    localStorage.setItem(`${SAVED_NUTRITION_STATISTICS_PREFIX}${userId}:${range}`, JSON.stringify({ data, day: new Date().toDateString() }))
   } catch {
     // The fresh response is still shown when storage is unavailable or full.
   }
@@ -1387,6 +1456,7 @@ export interface MealCreateRequest {
 }
 
 function clearNutritionCache(): void {
+  invalidateNutritionStatisticsCache()
   try {
     Object.keys(sessionStorage)
       .filter((key) => key.startsWith(NUTRITION_CACHE_PREFIX))
@@ -1609,6 +1679,7 @@ export async function addHydrationEntry(payload: { amount: number; unit: 'ml' | 
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
     throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't save this drink. Please try again.")
   }
+  invalidateNutritionStatisticsCache()
   return response.json()
 }
 
@@ -1621,6 +1692,7 @@ export async function removeHydrationEntry(entryId: string): Promise<HydrationTo
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
     throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't remove this drink. Please try again.")
   }
+  invalidateNutritionStatisticsCache()
   return response.json()
 }
 

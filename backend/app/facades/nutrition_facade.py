@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from app.schemas.meal_scan import MealScanResult
 from app.schemas.nutrition import (
@@ -10,8 +11,9 @@ from app.schemas.nutrition import (
     MealRecommendationsResponse,
     MealUpdateRequest,
 )
+from app.schemas.nutrition_statistics import NutritionStatisticsRange, NutritionStatisticsResponse
 from app.core.local_day import LocalDay
-from app.services import meal_recommendation_service, meal_scan_service, nutrition_service
+from app.services import meal_recommendation_service, meal_scan_service, nutrition_service, nutrition_statistics_service
 
 
 def _resolve_window(today_start: datetime | None, today_end: datetime | None) -> tuple[datetime, datetime]:
@@ -68,6 +70,16 @@ class NutritionFacade:
 
     def dismiss_recommendation(self, user_id: str, recommendation_id: str, day: LocalDay) -> None:
         meal_recommendation_service.dismiss_recommendation(user_id, recommendation_id, day)
+
+    def get_statistics(
+        self,
+        user_id: UUID,
+        range_key: NutritionStatisticsRange,
+        timezone_offset_minutes: int = 0,
+    ) -> NutritionStatisticsResponse:
+        return nutrition_statistics_service.get_nutrition_statistics(
+            user_id, range_key, timezone_offset_minutes
+        )
 
 
 nutrition_facade = NutritionFacade()

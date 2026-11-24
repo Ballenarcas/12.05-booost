@@ -131,6 +131,19 @@ export interface WorkoutStatisticsFatiguePoint {
   workout_count: number
 }
 
+export interface WorkoutCalendarItem {
+  label: string
+  duration_seconds: number
+  volume_kg: number
+}
+
+export interface WorkoutCalendarDay {
+  date: string
+  workout_count: number
+  total_duration_seconds: number
+  items: WorkoutCalendarItem[]
+}
+
 export interface WorkoutStatistics {
   range: WorkoutStatisticsRange
   start_date: string
@@ -145,6 +158,7 @@ export interface WorkoutStatistics {
   muscle_group_distribution: WorkoutStatisticsMuscleGroup[]
   classified_volume_kg: number
   unclassified_volume_kg: number
+  calendar_days?: WorkoutCalendarDay[]
   fatigue_history: WorkoutStatisticsFatiguePoint[]
   fatigue_workouts: number
   fatigue_days: number
