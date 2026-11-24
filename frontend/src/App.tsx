@@ -18,6 +18,8 @@ const pages = {
   Onboarding: () => import('./pages/Onboarding'),
   Premium: () => import('./pages/Premium'),
   Profile: () => import('./pages/Profile'),
+  ProfileFriends: () => import('./pages/ProfileFriends'),
+  BodyMeasurements: () => import('./pages/BodyMeasurements'),
   ExerciseGuide: () => import('./pages/ExerciseGuide'),
   OvertrainingAlerts: () => import('./pages/OvertrainingAlerts'),
   ScanMeal: () => import('./pages/ScanMeal'),
@@ -56,6 +58,8 @@ const Nutrition = lazy(pages.Nutrition)
 const Onboarding = lazy(pages.Onboarding)
 const Premium = lazy(pages.Premium)
 const Profile = lazy(pages.Profile)
+const ProfileFriends = lazy(pages.ProfileFriends)
+const BodyMeasurements = lazy(pages.BodyMeasurements)
 const ExerciseGuide = lazy(pages.ExerciseGuide)
 const OvertrainingAlerts = lazy(pages.OvertrainingAlerts)
 const ScanMeal = lazy(pages.ScanMeal)
@@ -96,6 +100,8 @@ function App() {
             <Route path="/hydration/history" element={<HydrationHistory />} />
             <Route path="/premium" element={<Premium />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/profile/friends" element={<ProfileFriends />} />
+            <Route path="/profile/body-measurements" element={<BodyMeasurements />} />
             <Route path="/settings" element={<Navigate to="/profile" replace />} />
             <Route path="/faq" element={<Faq />} />
             <Route path="*" element={<Navigate to="/" replace />} />
