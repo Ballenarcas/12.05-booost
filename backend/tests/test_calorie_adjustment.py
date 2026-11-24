@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -173,6 +174,99 @@ def test_muscle_gain_holds_when_volume_flat_or_unknown():
     assert flat["has_change"] is False
     assert first_week["has_change"] is False
     assert "not rising" in flat["reason"]
+
+
+def test_high_fatigue_raises_the_goal_in_proportion():
+    result = propose_adjustment(_metrics(objective="maintain", goal=2200, fatigue_latest=8))
+
+    assert result["has_change"] is True
+    assert result["proposed_goal"] == 2320  # (8 - 5) x 40 kcal
+    assert "8.0/10" in result["reason"]
+
+
+def test_fatigue_bump_is_capped():
+    result = propose_adjustment(_metrics(objective="hypertrophy", goal=2200, fatigue_latest=10))
+
+    assert result["proposed_goal"] == 2400  # 5 x 40 = 200, the cap
+    assert "training quality" in result["reason"]
+
+
+def test_fatigue_during_a_cut_never_goes_past_maintenance():
+    raised = propose_adjustment(_metrics(goal=2000, maintenance=2100, fatigue_latest=9))
+    at_maintenance = propose_adjustment(_metrics(goal=2100, maintenance=2100, fatigue_latest=9))
+
+    assert raised["proposed_goal"] == 2100
+    assert "keeping a deficit" in raised["reason"]
+    assert at_maintenance["has_change"] is False
+    assert "already at maintenance" in at_maintenance["reason"]
+
+
+def test_fatigue_at_the_ceiling_keeps_the_goal():
+    result = propose_adjustment(_metrics(objective="maintain", goal=5000, fatigue_latest=9))
+
+    assert result["has_change"] is False
+    assert "5000 kcal ceiling" in result["reason"]
+
+
+def test_fatigue_at_or_below_the_threshold_changes_nothing():
+    for level in (5, "tired"):
+        assert not propose_adjustment(_metrics(fatigue_latest=level))["reason"].startswith("Your latest workout fatigue")
+
+
+def test_metrics_set_a_deficit_floor_500_kcal_under_maintenance():
+    from app.services.calorie_adjustment_service import MAX_DAILY_DEFICIT, collect_metrics
+
+    supabase = _supabase([])
+    supabase._users.select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
+        data=[{"calorie_goal": 2200, "objective": "lose weight", "weight": 70, "height": 170, "age": 30,
+               "gender": "Male"}]
+    )
+    with patch("app.services.calorie_adjustment_service.get_activity_summary", return_value=None):
+        metrics = collect_metrics(supabase, USER_ID, today="2026-10-14")
+
+    maintenance = calculate_calorie_goal(70, 170, 30, "Male", None)
+    assert metrics["maintenance"] == maintenance
+    assert metrics["deficit_floor"] == maintenance - MAX_DAILY_DEFICIT
+    assert metrics["days_logged"] == 7
+    assert metrics["days_within"] == 7
+
+
+def test_metrics_without_a_body_profile_have_no_deficit_floor():
+    from app.services.calorie_adjustment_service import collect_metrics
+
+    with patch("app.services.calorie_adjustment_service.get_activity_summary", return_value=None):
+        metrics = collect_metrics(_supabase([]), USER_ID, today="2026-10-14")
+
+    assert metrics["maintenance"] == 0
+    assert metrics["deficit_floor"] == 0
+
+
+def test_metrics_split_volume_by_week_and_keep_the_latest_fatigue():
+    from app.services.calorie_adjustment_service import collect_metrics
+
+    supabase = _supabase([])
+    sets = [{"exercise_id": "", "weight": 100, "reps": 5, "is_done": True},
+            {"exercise_id": "", "weight": 100, "reps": 5, "is_done": False}]
+    supabase.table.side_effect = None
+    workouts = MagicMock()
+    workouts.select.return_value.eq.return_value.gte.return_value.execute.return_value = MagicMock(data=[
+        {"start_time": "2026-10-13T10:00:00Z", "fatigue_level": 7, "workout_sets": sets},
+        {"start_time": "2026-10-10T10:00:00Z", "fatigue_level": "bad", "workout_sets": sets},
+        {"start_time": "2026-10-02T10:00:00Z", "fatigue_level": None, "workout_sets": sets},
+        {"start_time": None},
+        {"start_time": "not a date"},
+    ])
+    tables = {"users": supabase._users, "meals": _supabase([]).table("meals"), "workouts": workouts}
+    supabase.table.side_effect = lambda name: tables[name]
+    with patch("app.services.calorie_adjustment_service.get_activity_summary", return_value=None), \
+         patch("app.services.calorie_adjustment_service._utc_now",
+               return_value=datetime(2026, 10, 14, 12, tzinfo=timezone.utc)):
+        metrics = collect_metrics(supabase, USER_ID, today="2026-10-14")
+
+    assert metrics["volume_this_week"] == 1000  # undone sets are not counted
+    assert metrics["volume_prev_week"] == 500
+    assert metrics["fatigue_latest"] == 7
+    assert metrics["fatigue_workouts"] == 1
 
 
 def _supabase(pending: list[dict], metrics_overrides: dict | None = None) -> MagicMock:

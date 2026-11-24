@@ -81,9 +81,9 @@ jobs:
           pip install -r requirements-dev.txt
           pip check
 
-      - name: Run Pytest
+      - name: Run Pytest with branch coverage
         working-directory: backend
-        run: pytest -q
+        run: pytest -q --cov=app --cov-branch --cov-report=term
 
   containers:
     name: Containers (compose, images, nginx)
