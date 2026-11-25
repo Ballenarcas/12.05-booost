@@ -59,7 +59,7 @@ function ExercisePicker() {
     .filter((pageNumber) => pageNumber >= 1 && pageNumber <= pageCount)))
 
   function selectExercise(exercise: Exercise) {
-    sessionStorage.setItem('set_plate_pending_exercise', JSON.stringify({
+    sessionStorage.setItem('booost_pending_exercise', JSON.stringify({
       id: exercise.id,
       name: exercise.name,
       images: exercise.images?.slice(0, 1) || [],

@@ -137,7 +137,7 @@ function Premium() {
       </button>
 
       <header className="premium-heading">
-        <p className="premium-kicker"><Crown size={13} aria-hidden="true" /> SET&PLATE Premium</p>
+        <p className="premium-kicker"><Crown size={13} aria-hidden="true" /> BOOOST Premium</p>
         <h1>Unlock your<br />maximum potential</h1>
         <p className="premium-mock-note">Mock checkout — no payment is processed.</p>
       </header>

@@ -32,7 +32,7 @@ class AIFacade:
             else:
                 reply = f"I processed your message. {summary}\nHow would you like to schedule or log these items?"
             return reply, intent, matched
-        prompt = ("You are SET&PLATE's intelligent AI coach assisting the user with setting up routines and logging meals. "
+        prompt = ("You are BOOOST's intelligent AI coach assisting the user with setting up routines and logging meals. "
             "Ground your concise, encouraging response in the verified database objects below. Prompt for missing quantities, sets, or reps.\n\n"
             f"Verified DB Objects:\n{summary}\nDetected Intent: {intent}")
         messages = [{"role": "system", "content": prompt}]

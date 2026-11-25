@@ -86,7 +86,7 @@ Ordered by priority. P1 items are quick and frontend-only.
 ### P2: "Apply deload" only works on one device
 
 - **Problem:**
-  - "Apply deload" only sets `set_plate_overtraining_mod_pct` in `localStorage`, and that key is shared by every account on the device.
+  - "Apply deload" only sets `booost_overtraining_mod_pct` in `localStorage`, and that key is shared by every account on the device.
   - `apply_overtraining_mods` in the backend rewrites `ai_reasoning` on **all** of the user's plans without lowering any numbers.
 - **Fix:**
   - Store `deload_applied_at` on the server.

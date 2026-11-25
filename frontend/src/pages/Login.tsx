@@ -52,7 +52,7 @@ function Login() {
   return (
     <main className="onboarding-container hifi-theme login-container">
       <div className="onboarding-content login-content">
-        <div className="login-mark">SET&amp;PLATE</div>
+        <div className="login-mark">BOOOST</div>
         <header className="onboarding-header login-header">
           <h1 className="onboarding-title">Welcome back</h1>
           <p className="onboarding-subtitle">Sign in to continue your training and nutrition journey.</p>
@@ -114,7 +114,7 @@ function Login() {
       </div>
 
       <p className="login-create-prompt">
-        New to SET&PLATE? <Link to="/onboarding">Create your profile</Link>
+        New to BOOOST? <Link to="/onboarding">Create your profile</Link>
       </p>
     </main>
   )

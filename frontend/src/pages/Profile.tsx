@@ -655,7 +655,7 @@ function Profile() {
         <div className="modal-backdrop">
           <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="logout-title" tabIndex={-1} ref={logoutDialogRef}>
             <p className="eyebrow">Your session</p>
-            <h2 id="logout-title">Log out of SET&PLATE?</h2>
+            <h2 id="logout-title">Log out of BOOOST?</h2>
             <p>Your meals and workouts stay in your account. You can sign back in any time.</p>
             <div className="modal-actions">
               <button className="secondary-action" type="button" onClick={() => setIsLogoutOpen(false)}>

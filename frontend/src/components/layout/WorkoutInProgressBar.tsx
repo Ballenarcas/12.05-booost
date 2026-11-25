@@ -53,7 +53,7 @@ export default function WorkoutInProgressBar() {
   function discardWorkout() {
     const key = activeWorkoutStorageKey()
     if (key) localStorage.removeItem(key)
-    sessionStorage.removeItem('set_plate_pending_exercise')
+    sessionStorage.removeItem('booost_pending_exercise')
     setWorkout(null)
     setIsDiscardOpen(false)
   }

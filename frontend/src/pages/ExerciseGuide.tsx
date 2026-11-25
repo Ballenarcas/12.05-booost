@@ -49,7 +49,7 @@ function ExerciseGuide() {
 
   function addToWorkout() {
     if (!exercise) return
-    sessionStorage.setItem('set_plate_pending_exercise', JSON.stringify({
+    sessionStorage.setItem('booost_pending_exercise', JSON.stringify({
       id: exercise.id,
       name: exercise.name,
       category: exercise.category,

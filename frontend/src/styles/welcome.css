@@ -1,11 +1,41 @@
-.welcome-screen { display: flex; width: min(100%, 28rem); min-height: 100svh; margin: 0 auto; flex-direction: column; gap: 1.5rem; padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem max(1.25rem, env(safe-area-inset-bottom)); color: var(--text); background: var(--background); }
-.welcome-mark { margin: 0; font-size: 1rem; font-weight: 700; letter-spacing: 0.08em; }
-/* The preview fades out at the bottom so it reads as a glimpse, not as live data. */
-.welcome-preview { display: grid; margin-block: auto; gap: 0.75rem; pointer-events: none; user-select: none; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
-.welcome-hero h1 { margin: 0 0 0.75rem; font-size: clamp(2rem, 9vw, 2.5rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; }
-.welcome-hero p { max-width: 22rem; margin: 0; color: var(--text-muted); font-size: 1rem; line-height: 1.5; }
-.welcome-actions { display: grid; justify-items: center; gap: 0.25rem; }
-.welcome-actions .primary-button { margin-top: 0; min-height: 3.25rem; }
-.welcome-login { margin: 0; color: var(--text-muted); font-size: 0.9375rem; }
-.welcome-login a { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--text); font-weight: 600; text-underline-offset: 0.2em; }
-@media (min-width: 700px) { .welcome-screen { border-inline: 1px solid var(--line); padding-inline: 1.5rem; } }
+/* Welcome: the first screen, where people choose to sign up or log in. Uses the redesign pieces. */
+.welcome-screen {
+  display: flex;
+  width: min(100%, 28rem);
+  min-height: 100svh;
+  margin: 0 auto;
+  flex-direction: column;
+  gap: 24px;
+  padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem max(1.5rem, env(safe-area-inset-bottom));
+  color: var(--hifi-ink);
+  font-family: var(--hifi-sans);
+}
+.welcome-mark { margin: 0; color: var(--hifi-ink); font-family: var(--hifi-mono); font-size: 14px; letter-spacing: 0.12em; text-align: center; }
+
+/* A glimpse of Home that fades out at the bottom, so it reads as a preview and not live data. */
+.welcome-preview {
+  display: grid;
+  gap: 12px;
+  margin-block: auto;
+  pointer-events: none;
+  user-select: none;
+  -webkit-mask-image: linear-gradient(#000 62%, transparent);
+  mask-image: linear-gradient(#000 62%, transparent);
+}
+.welcome-workout { gap: 12px; }
+.welcome-workout-row { display: flex; align-items: center; gap: 12px; }
+.welcome-workout-row .hifi-photo { border-radius: 6px; }
+.welcome-workout-copy { display: grid; gap: 6px; }
+.welcome-workout-copy strong { font-size: 20px; font-weight: 400; line-height: 1.2; }
+
+.welcome-hero h1 { margin: 0 0 10px; color: var(--hifi-ink); font-size: clamp(30px, 8.5vw, 36px); font-weight: 500; letter-spacing: -0.01em; line-height: 1.1; }
+.welcome-hero p { max-width: 22rem; margin: 0; color: var(--hifi-muted); font-size: 16px; line-height: 1.5; }
+
+/* Two clear choices: the main one filled in the selected blue, the other a plain pill. */
+.welcome-actions { display: grid; gap: 12px; }
+.welcome-actions .hifi-pill { display: flex; min-height: 52px; align-items: center; justify-content: center; text-decoration: none; }
+.welcome-actions .welcome-start { color: var(--hifi-on-selected); background: var(--hifi-selected); }
+.welcome-actions .welcome-login { background: var(--hifi-button); font-size: 15px; }
+.welcome-actions .hifi-pill:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+
+@media (min-width: 700px) { .welcome-screen { padding-inline: 1.5rem; } }

@@ -75,7 +75,8 @@ function SwipeToDeleteRow({ children, label, className, actionWidth = DEFAULT_AC
     const target = event.target
     if (
       disabled || isCollapsing || event.button !== 0 || gestureRef.current ||
-      (target instanceof Element && target.closest('button, a, [contenteditable="true"]'))
+      // Buttons marked data-swipe-through (a whole collapsed row) can still start a swipe.
+      (target instanceof Element && target.closest('button:not([data-swipe-through]), a, [contenteditable="true"]'))
     ) return
 
     gestureRef.current = {

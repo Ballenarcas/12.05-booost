@@ -175,7 +175,7 @@ def test_email_goes_out_through_resend_with_the_link(monkeypatch) -> None:
 
     settings = get_settings()
     monkeypatch.setattr(settings, "resend_api_key", FAKE_API_KEY)
-    monkeypatch.setattr(settings, "email_from", "SET&PLATE <no-reply@example.com>")
+    monkeypatch.setattr(settings, "email_from", "BOOOST <no-reply@example.com>")
     calls = []
 
     def fake_post(url, headers, json, timeout):

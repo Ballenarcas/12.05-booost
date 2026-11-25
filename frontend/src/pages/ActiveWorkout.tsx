@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Crown, Dumbbell, Flame, Info, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronUp, Clock3, Crown, Dumbbell, Flame, Info, Minus, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { usePageNavigate } from '../utils/usePageNavigate'
@@ -25,6 +25,8 @@ import SwipeToDeleteRow from '../components/workout/SwipeToDeleteRow'
 import MediaCredit from '../components/workout/MediaCredit'
 import WheelPickerSheet, { type WheelOption } from '../components/workout/WheelPickerSheet'
 import RpeSheet from '../components/workout/RpeSheet'
+import backIcon from '../assets/scan/back.svg'
+import '../styles/active-workout.css'
 
 const EXTREME_WEIGHT_WARNING_KG = 600
 const DEFAULT_REST_SECONDS = 90
@@ -112,6 +114,11 @@ function formatClock(seconds: number): string {
   const minutes = Math.floor(seconds / 60).toString().padStart(2, '0')
   const remaining = (seconds % 60).toString().padStart(2, '0')
   return `${minutes}:${remaining}`
+}
+
+function formatRestLong(seconds: number): string {
+  if (seconds < 120) return `${seconds} sec`
+  return `${formatRest(seconds)} min`
 }
 
 function formatRest(seconds: number): string {
@@ -454,6 +461,15 @@ function ActiveWorkout() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [rpeValues, setRpeValues] = useState<Record<string, number>>(() => session?.rpeValues ?? {})
   const [missingReps, setMissingReps] = useState<string | null>(null)
+  // Which exercise and set are open. null follows the workout: the first unfinished exercise and
+  // its first unfinished set. setIndex null keeps the exercise open with every set closed.
+  const [focus, setFocus] = useState<{ exerciseIndex: number; setIndex?: number | null } | null>(null)
+  // The reps input only exists once its set is open, so focus it after the render that opens it.
+  useEffect(() => {
+    if (!missingReps) return
+    const [exerciseIndex, setNumber] = missingReps.split(':').map(Number)
+    document.getElementById(repsInputId(exerciseIndex, setNumber))?.focus()
+  }, [missingReps])
   const [restRemaining, setRestRemaining] = useState<Record<number, number>>({})
   const [restPickerIndex, setRestPickerIndex] = useState<number | null>(null)
   const [rpePicker, setRpePicker] = useState<{ exerciseIndex: number; setIndex: number } | null>(null)
@@ -466,8 +482,8 @@ function ActiveWorkout() {
   const [selectedWarmupSteps, setSelectedWarmupSteps] = useState<number[]>([])
 
   const [isSelectModalOpen, setIsSelectModalOpen] = useState(() => {
-    if (sessionStorage.getItem('set_plate_reopen_exercise_modal') === 'true') {
-      sessionStorage.removeItem('set_plate_reopen_exercise_modal')
+    if (sessionStorage.getItem('booost_reopen_exercise_modal') === 'true') {
+      sessionStorage.removeItem('booost_reopen_exercise_modal')
       return true
     }
     return false
@@ -574,7 +590,7 @@ function ActiveWorkout() {
   }, [session])
 
   useEffect(() => {
-    const pending = sessionStorage.getItem('set_plate_pending_exercise')
+    const pending = sessionStorage.getItem('booost_pending_exercise')
     if (!pending) return
     try {
       const selection = JSON.parse(pending) as Exercise & { replaceExerciseIndex?: number }
@@ -615,7 +631,7 @@ function ActiveWorkout() {
         }
       })
     } finally {
-      sessionStorage.removeItem('set_plate_pending_exercise')
+      sessionStorage.removeItem('booost_pending_exercise')
     }
   }, [])
 
@@ -630,6 +646,7 @@ function ActiveWorkout() {
   if (!session) return <div className="screen state-card" role="alert">No active workout selected.</div>
 
   function handleSelectExercise(selected: any) {
+    setFocus(null)
     const isCardio = !!selected.category?.toLowerCase().includes('cardio');
     const replacement = {
       exercise_id: selected.id,
@@ -751,6 +768,7 @@ function ActiveWorkout() {
 
   function scheduleSetRemoval(removal: PendingSetRemoval) {
     if (removeSetTimer.current !== null) return
+    setFocus(null)
     setPendingSetRemoval({ ...removal, removed: true })
     removeSet(removal.exerciseIndex, removal.setIndex)
     removeSetTimer.current = window.setTimeout(() => {
@@ -760,6 +778,7 @@ function ActiveWorkout() {
   }
 
   function undoSetRemoval() {
+    setFocus(null)
     if (removeSetTimer.current !== null) window.clearTimeout(removeSetTimer.current)
     removeSetTimer.current = null
     if (pendingSetRemoval?.removed) {
@@ -779,6 +798,7 @@ function ActiveWorkout() {
   }
 
   function removeExercise(exerciseIndex: number) {
+    setFocus(null)
     if (removeSetTimer.current !== null) undoSetRemoval()
     setMenuOpen(null)
     setSession((current) => current ? ({
@@ -799,6 +819,7 @@ function ActiveWorkout() {
   function moveExercise(exerciseIndex: number, direction: -1 | 1) {
     const targetIndex = exerciseIndex + direction
     if (!session || targetIndex < 0 || targetIndex >= session.exercises.length) return
+    setFocus(null)
     if (removeSetTimer.current !== null) undoSetRemoval()
     setMenuOpen(null)
     setSession((current) => {
@@ -870,7 +891,7 @@ function ActiveWorkout() {
     if (!exercise || !set) return
     if (isCompleted && !set.reps) {
       setMissingReps(`${exerciseIndex}:${set.set_number}`)
-      document.getElementById(repsInputId(exerciseIndex, set.set_number))?.focus()
+      setFocus({ exerciseIndex, setIndex })
       return
     }
     setMissingReps(null)
@@ -880,6 +901,8 @@ function ActiveWorkout() {
       return
     }
     navigator.vibrate?.(15)
+    const setsLeft = exercise.sets.some((other, index) => index !== setIndex && !other.is_completed)
+    setFocus(setsLeft ? { exerciseIndex } : null)
     if (exercise.rest_enabled) {
       setRestRemaining((current) => ({ ...current, [exerciseIndex]: exercise.rest_seconds ?? DEFAULT_REST_SECONDS }))
     }
@@ -1187,54 +1210,68 @@ function ActiveWorkout() {
     navigate('/workouts')
   }
 
-  const volumeLabel = `${Math.round(volumeKg).toLocaleString()} kg`
   const nextExerciseIndex = session.exercises.findIndex((exercise) => !exercise.is_cardio && exercise.sets.some((set) => !set.is_completed))
   const nextSetIndex = session.exercises[nextExerciseIndex]?.sets.findIndex((set) => !set.is_completed) ?? -1
+  const isExerciseFinished = (exercise: ActiveExercise) => (exercise.is_cardio
+    ? Boolean(exercise.sets[0]?.is_completed)
+    : exercise.sets.length > 0 && exercise.sets.every((set) => set.is_completed))
+  const firstUnfinished = session.exercises.findIndex((exercise) => !isExerciseFinished(exercise))
+  // Editing a past workout: everything is done, so open the first exercise instead of none.
+  const openExerciseIndex = focus ? focus.exerciseIndex : (firstUnfinished === -1 && isEditingWorkout ? 0 : firstUnfinished)
+  const openSetIndex = focus && focus.setIndex !== undefined
+    ? focus.setIndex ?? -1
+    : session.exercises[openExerciseIndex]?.sets.findIndex((set) => !set.is_completed) ?? -1
   const runningRests = Object.entries(restRemaining).sort(([, first], [, second]) => first - second)
   const runningRestIndex = runningRests.length ? Number(runningRests[0][0]) : null
 
   return (
-    <div className={`screen active-workout-screen${runningRestIndex !== null ? ' is-resting' : ''}`}>
-      <header className={`active-workout-header${isEditingWorkout ? ' is-editing' : ''}`}>
-        <button className="icon-button" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts"><ChevronLeft size={22} /></button>
-        <div className="workout-title">
-          <h1>{isEditingWorkout ? 'Edit Workout' : session.name}</h1>
-          {!isEditingWorkout && <span className="header-clock" aria-label="Elapsed time"><ElapsedTime startedAt={session.startedAt} format={formatClock} /></span>}
+    <div className={`screen active-workout-screen hifi-screen hifi-theme${runningRestIndex !== null ? ' is-resting' : ''}`}>
+      <header className={`aw-header${isEditingWorkout ? ' is-editing' : ''}`}>
+        <div className="aw-header-row">
+          <button className="scan-back" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts">
+            <img src={backIcon} alt="" width={36} height={37} />
+          </button>
+          <div className="aw-title">
+            <h1>
+              {isEditingWorkout ? 'Edit Workout' : session.name}
+              {!isEditingWorkout && <span className="aw-clock" aria-label="Elapsed time"><ElapsedTime startedAt={session.startedAt} format={formatClock} /></span>}
+            </h1>
+            <p className="hifi-caption aw-subtitle">
+              <span>{completedSets}/{totalSets} sets</span>
+              <span>{Math.round(volumeKg).toLocaleString('en-US')}kg lift</span>
+            </p>
+          </div>
+          <button className="hifi-pill aw-finish" type="button" onClick={() => setShowFinish(true)}>{isEditingWorkout ? 'Save' : 'Finish'}</button>
+        </div>
+        <div className="hifi-bar aw-progress" role="progressbar" aria-label="Completed sets" aria-valuemin={0} aria-valuemax={totalSets} aria-valuenow={completedSets}>
+          <span style={{ width: `${totalSets ? (completedSets / totalSets) * 100 : 0}%` }} />
         </div>
         {!isEditingWorkout && (
-          <div className="header-actions">
+          <div className="aw-tools">
             <button
-              className="ai-adjust-trigger warmup-trigger"
+              className="hifi-link-button aw-tool"
               type="button"
               onClick={openWarmup}
               disabled={isSaving || session.warmupAdded}
               aria-label={session.warmupAdded ? 'Warm-up already added' : 'Recommend a warm-up'}
               title={session.warmupAdded ? 'Warm-up already added' : 'Recommend a warm-up'}
             >
-              <Flame size={16} aria-hidden="true" />
+              <Flame size={15} aria-hidden="true" />
               <span>Warm-up</span>
             </button>
             <button
-              className="ai-adjust-trigger"
+              className="hifi-link-button aw-tool"
               type="button"
               onClick={openAiAdjustment}
               disabled={isSaving}
               aria-label="Ask AI for adjustments"
               title="Ask AI for adjustments"
             >
-              <Sparkles size={16} aria-hidden="true" />
-              <span className="ai-adjust-label">AI</span>
+              <Sparkles size={15} aria-hidden="true" />
+              <span>AI adjust</span>
             </button>
           </div>
         )}
-        <button className="finish-button" type="button" onClick={() => setShowFinish(true)}>{isEditingWorkout ? 'Save' : 'Finish'}</button>
-        <div className="session-progress" aria-label="Workout progress">
-          <div className="session-progress-track" role="progressbar" aria-label="Completed sets" aria-valuemin={0} aria-valuemax={totalSets} aria-valuenow={completedSets}>
-            <div className="session-progress-value" style={{ width: `${totalSets ? (completedSets / totalSets) * 100 : 0}%` }} />
-          </div>
-          <strong>{completedSets}/{totalSets} sets</strong>
-          <span>{volumeLabel}</span>
-        </div>
       </header>
 
       {session.warmupSteps?.length ? (
@@ -1252,65 +1289,82 @@ function ActiveWorkout() {
         </section>
       ) : null}
 
-      <div className="active-exercise-list">
+      <div className="aw-exercise-list">
         {session.exercises.map((exercise, exerciseIndex) => {
           const doneSets = exercise.sets.filter((set) => set.is_completed).length
-          const isExerciseDone = exercise.is_cardio ? (exercise.sets[0]?.is_completed) : (exercise.sets.length > 0 && doneSets === exercise.sets.length)
+          const isExerciseDone = isExerciseFinished(exercise)
           const restSeconds = exercise.rest_seconds ?? DEFAULT_REST_SECONDS
-          
-          return <article className={`card exercise-card${isExerciseDone ? ' is-complete' : ''}`} key={`${exercise.exercise_id}-${exerciseIndex}`}>
-            <button className="icon-button ghost exercise-menu-trigger" type="button" aria-label={`Exercise options for ${exercise.name}`} aria-expanded={menuOpen === exerciseIndex} onClick={() => setMenuOpen(menuOpen === exerciseIndex ? null : exerciseIndex)}>
-              <MoreVertical size={19} aria-hidden="true" />
-            </button>
-            {menuOpen === exerciseIndex && <div className="exercise-menu">
-              <button type="button" onClick={() => navigate(`/exercises/${encodeURIComponent(exercise.exercise_id)}/guide`, { state: { fromWorkout: true } })}><Info size={15} aria-hidden="true" />How to do it</button>
-              <button className="exercise-order-action" type="button" onClick={() => moveExercise(exerciseIndex, -1)} disabled={exerciseIndex === 0}><ArrowUp size={15} aria-hidden="true" />Move up</button>
-              <button className="exercise-order-action" type="button" onClick={() => moveExercise(exerciseIndex, 1)} disabled={exerciseIndex === session.exercises.length - 1}><ArrowDown size={15} aria-hidden="true" />Move down</button>
-              <button className="replace-exercise-action" type="button" onClick={() => replaceExercise(exerciseIndex)}><Repeat2 size={15} aria-hidden="true" />Replace exercise</button>
-              <button type="button" onClick={() => removeExercise(exerciseIndex)}><Trash2 size={15} aria-hidden="true" />Remove exercise</button>
-            </div>}
-            
-            <div className="exercise-card-header">
-              <ExerciseArtwork name={exercise.name} images={exercise.images} />
-              <div className="exercise-heading-copy">
-                <h2>{exercise.name}</h2>
-                {exercise.is_cardio && <span className="cardio-badge">Cardio</span>}
-                
-                <div className="exercise-meta">
-                  {!exercise.is_cardio && (
-                    <span className="exercise-progress">{isExerciseDone && <Check size={13} aria-hidden="true" />}{doneSets}/{exercise.sets.length}</span>
-                  )}
-                  
-                  {!exercise.is_cardio && (
-                    <button className={`rest-toggle${exercise.rest_enabled ? ' is-on' : ''}`} type="button" aria-haspopup="dialog" aria-label={`Rest timer for ${exercise.name}: ${exercise.rest_enabled ? formatRest(restSeconds) : 'off'}`} onClick={() => setRestPickerIndex(exerciseIndex)}>
-                      <Clock3 size={14} aria-hidden="true" />
-                      {exercise.rest_enabled ? formatRest(restSeconds) : 'Rest off'}
-                    </button>
-                  )}
-                  
-                </div>
-              </div>
+          const isOpen = exerciseIndex === openExerciseIndex
+          const bodyId = `aw-exercise-${exerciseIndex}`
+          const countLabel = exercise.is_cardio
+            ? 'Cardio'
+            : doneSets > 0 ? `${doneSets}/${exercise.sets.length} sets` : `${exercise.sets.length} ${exercise.sets.length === 1 ? 'set' : 'sets'}`
+
+          return <article className={`hifi-card aw-exercise${isExerciseDone ? ' is-complete' : ''}`} data-open={isOpen} key={`${exercise.exercise_id}-${exerciseIndex}`}>
+            <div className="aw-exercise-head">
+              <button
+                className="aw-exercise-toggle"
+                type="button"
+                aria-expanded={isOpen}
+                aria-controls={bodyId}
+                onClick={() => setFocus(isOpen ? { exerciseIndex: -1 } : { exerciseIndex })}
+              >
+                <span className="aw-exercise-name">{exercise.name}</span>
+                <span className="aw-exercise-count">
+                  {isExerciseDone && <Check size={14} aria-hidden="true" />}
+                  {countLabel}
+                </span>
+              </button>
+              <button className="icon-button ghost exercise-menu-trigger" type="button" aria-label={`Exercise options for ${exercise.name}`} aria-expanded={menuOpen === exerciseIndex} onClick={() => setMenuOpen(menuOpen === exerciseIndex ? null : exerciseIndex)}>
+                <MoreVertical size={19} aria-hidden="true" />
+              </button>
+              {menuOpen === exerciseIndex && <div className="exercise-menu">
+                <button type="button" onClick={() => navigate(`/exercises/${encodeURIComponent(exercise.exercise_id)}/guide`, { state: { fromWorkout: true } })}><Info size={15} aria-hidden="true" />How to do it</button>
+                <button className="exercise-order-action" type="button" onClick={() => moveExercise(exerciseIndex, -1)} disabled={exerciseIndex === 0}><ArrowUp size={15} aria-hidden="true" />Move up</button>
+                <button className="exercise-order-action" type="button" onClick={() => moveExercise(exerciseIndex, 1)} disabled={exerciseIndex === session.exercises.length - 1}><ArrowDown size={15} aria-hidden="true" />Move down</button>
+                <button className="replace-exercise-action" type="button" onClick={() => replaceExercise(exerciseIndex)}><Repeat2 size={15} aria-hidden="true" />Replace exercise</button>
+                <button type="button" onClick={() => removeExercise(exerciseIndex)}><Trash2 size={15} aria-hidden="true" />Remove exercise</button>
+              </div>}
             </div>
 
-            {exercise.is_cardio ? (
+            {isOpen && <div className="aw-exercise-body" id={bodyId}>
+              <div className="aw-exercise-art">
+                <ExerciseArtwork name={exercise.name} images={exercise.images} />
+                {!exercise.is_cardio && (
+                  <div className="aw-rest-row">
+                    <span className="aw-rest-label">Rest time</span>
+                    <button className="aw-step" type="button" aria-label={`Rest 15 seconds less for ${exercise.name}`} onClick={() => chooseRest(exerciseIndex, Math.max(15, (exercise.rest_enabled ? restSeconds : DEFAULT_REST_SECONDS) - REST_STEP_SECONDS))}>
+                      <Minus size={18} aria-hidden="true" />
+                    </button>
+                    <button className={`aw-rest-value${exercise.rest_enabled ? '' : ' is-off'}`} type="button" aria-haspopup="dialog" aria-label={`Rest timer for ${exercise.name}: ${exercise.rest_enabled ? formatRestLong(restSeconds) : 'off'}`} onClick={() => setRestPickerIndex(exerciseIndex)}>
+                      {exercise.rest_enabled ? formatRestLong(restSeconds) : 'Off'}
+                    </button>
+                    <button className="aw-step" type="button" aria-label={`Rest 15 seconds more for ${exercise.name}`} onClick={() => chooseRest(exerciseIndex, Math.min(600, (exercise.rest_enabled ? restSeconds : DEFAULT_REST_SECONDS - REST_STEP_SECONDS) + REST_STEP_SECONDS))}>
+                      <Plus size={18} aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {exercise.is_cardio ? (
               <div className="cardio-container">
                 {(() => {
                   const set = exercise.sets[0] || createSet(1);
                   let status = set.cardio_status || 'idle';
-                  
+
                   if (isEditingWorkout && status === 'idle') {
                      status = set.duration_seconds ? 'finished' : 'manual';
                   }
 
                   if (status === 'manual') {
                     const initialMins = set.duration_seconds ? Math.max(1, Math.round(set.duration_seconds / 60)) : undefined;
-                    return <CardioManualForm 
+                    return <CardioManualForm
                       initialMins={initialMins}
                       initialDist={set.distance_km || undefined}
-                      onSave={(m, d) => saveManualCardio(exerciseIndex, m, d)} 
+                      onSave={(m, d) => saveManualCardio(exerciseIndex, m, d)}
                       onCancel={() => {
                         updateSet(exerciseIndex, 0, { cardio_status: set.duration_seconds ? 'finished' : 'idle' })
-                      }} 
+                      }}
                     />
                   }
 
@@ -1351,9 +1405,9 @@ function ActiveWorkout() {
                         {status === 'idle' ? (
                           <span className="cardio-clock">00:00</span>
                         ) : (
-                          <CardioTimerDisplay 
-                            startedAt={status === 'running' ? set.cardio_started_at! : null} 
-                            accumulated={set.cardio_accumulated || 0} 
+                          <CardioTimerDisplay
+                            startedAt={status === 'running' ? set.cardio_started_at! : null}
+                            accumulated={set.cardio_accumulated || 0}
                           />
                         )}
                       </div>
@@ -1396,14 +1450,21 @@ function ActiveWorkout() {
                   )
                 })()}
               </div>
-            ) : (
-              <div className="set-table">
-                <div className="set-row set-heading" aria-hidden="true"><span>Set</span><span>Last</span><span>Kg</span><span>Reps</span><span>RPE</span><span /></div>
+              ) : (
+              <div className="aw-sets">
                 {exercise.sets.map((set, setIndex) => {
                   const setKey = `${exerciseIndex}:${set.set_number}`
                   const kind = session.setKinds[setKey] ?? 'normal'
+                  const rpe = rpeValues[setKey] ?? set.rpe ?? null
                   const hasHighWeightWarning = set.weight_kg > EXTREME_WEIGHT_WARNING_KG
                   const isNextSet = exerciseIndex === nextExerciseIndex && setIndex === nextSetIndex
+                  const isSetOpen = setIndex === openSetIndex
+                  const doneButton = (
+                    <button className={`done-button aw-done${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => toggleSetComplete(exerciseIndex, setIndex, !set.is_completed)} aria-label={`Toggle set ${set.set_number}`} aria-pressed={set.is_completed}>
+                      <Check size={isSetOpen ? 22 : 16} strokeWidth={3} aria-hidden="true" />
+                    </button>
+                  )
+                  const kindBadge = kind !== 'normal' && <span className={`aw-kind set-kind-${kind}`} aria-hidden="true">{kind[0].toUpperCase()}</span>
                   return <div className="set-row-entry" key={set.set_number}>
                     <SwipeToDeleteRow
                       className="swipe-row--set"
@@ -1412,64 +1473,101 @@ function ActiveWorkout() {
                       disabled={pendingSetRemoval !== null}
                       onDelete={() => scheduleSetRemoval({ exerciseIndex, setIndex, setNumber: set.set_number, key: setKey, set: { ...set }, kind: session.setKinds[setKey], rpe: rpeValues[setKey], removed: false })}
                     >
-                      <div className={`set-row${set.is_completed ? ' set-row-complete' : ''}${isNextSet ? ' set-row-next' : ''}`}>
-                        <span className={`set-kind-cell set-kind-${kind}`}>
-                          {kind === 'normal' ? set.set_number : kind[0].toUpperCase()}
-                          <select className="set-kind-select" value={kind} onChange={(event) => {
-                            updateSetKind(exerciseIndex, set.set_number, event.target.value as SetKind)
-                          }} aria-label={`Set ${set.set_number} type`} title="Set type">
-                            <option value="normal">{set.set_number} — Normal set</option>
-                            <option value="warmup">W — Warm-up: prepare for heavier sets</option>
-                            <option value="drop">D — Drop set: lower weight, keep going</option>
-                            <option value="failure">F — Failure: no more good-form reps</option>
-                          </select>
-                        </span>
-                        <span className="previous-cell">{formatPrevious(exercise)}</span>
-                        {exercise.is_bodyweight
-                          ? <span className="set-bodyweight" aria-label="Bodyweight, no weight to enter">BW</span>
-                          : <SetNumberInput label={`${exercise.name} set ${set.set_number} weight`} decimal value={set.weight_kg} onChange={(weight_kg) => updateSet(exerciseIndex, setIndex, { weight_kg })} />}
-                        <SetNumberInput id={repsInputId(exerciseIndex, set.set_number)} label={`${exercise.name} set ${set.set_number} reps`} value={set.reps} invalid={missingReps === setKey} onChange={(reps) => {
-                          updateSet(exerciseIndex, setIndex, { reps })
-                          setMissingReps(null)
-                        }} />
-                        <button className="rpe-select" type="button" aria-haspopup="dialog" aria-label={`Set ${set.set_number} RPE: ${rpeValues[setKey] ?? set.rpe ?? 'none'}`} onClick={() => setRpePicker({ exerciseIndex, setIndex })}>
-                          {rpeValues[setKey] ?? set.rpe ?? '—'}
-                        </button>
-                        <button className={`done-button${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => toggleSetComplete(exerciseIndex, setIndex, !set.is_completed)} aria-label={`Toggle set ${set.set_number}`} aria-pressed={set.is_completed}><Check size={18} strokeWidth={3} /></button>
-                      </div>
+                      {isSetOpen ? (
+                        <div className={`aw-set is-open${set.is_completed ? ' is-done' : ''}${isNextSet ? ' is-next' : ''}`}>
+                          <div className="aw-set-top">
+                            <span className={`aw-set-title set-kind-${kind}`}>
+                              Set {set.set_number}
+                              {kindBadge}
+                              <select className="set-kind-select" value={kind} onChange={(event) => {
+                                updateSetKind(exerciseIndex, set.set_number, event.target.value as SetKind)
+                              }} aria-label={`Set ${set.set_number} type`} title="Set type">
+                                <option value="normal">{set.set_number} — Normal set</option>
+                                <option value="warmup">W — Warm-up: prepare for heavier sets</option>
+                                <option value="drop">D — Drop set: lower weight, keep going</option>
+                                <option value="failure">F — Failure: no more good-form reps</option>
+                              </select>
+                            </span>
+                            <button className="aw-set-close" type="button" aria-expanded="true" aria-label={`Close set ${set.set_number}`} onClick={() => setFocus({ exerciseIndex, setIndex: null })}>
+                              <ChevronUp size={18} aria-hidden="true" />
+                            </button>
+                            {doneButton}
+                          </div>
+                          <div className="aw-fields">
+                            <span aria-hidden="true" />
+                            <span className="aw-field-label" aria-hidden="true">Kg</span>
+                            <span className="aw-field-label" aria-hidden="true">Reps</span>
+                            <span className="aw-field-label" aria-hidden="true">RPE</span>
+
+                            <span aria-hidden="true" />
+                            {exercise.is_bodyweight
+                              ? <span className="set-bodyweight aw-field-value" aria-label="Bodyweight, no weight to enter">BW</span>
+                              : <SetNumberInput label={`${exercise.name} set ${set.set_number} weight`} decimal value={set.weight_kg} onChange={(weight_kg) => updateSet(exerciseIndex, setIndex, { weight_kg })} />}
+                            <SetNumberInput id={repsInputId(exerciseIndex, set.set_number)} label={`${exercise.name} set ${set.set_number} reps`} value={set.reps} invalid={missingReps === setKey} onChange={(reps) => {
+                              updateSet(exerciseIndex, setIndex, { reps })
+                              setMissingReps(null)
+                            }} />
+                            <button className="rpe-select aw-field-value" type="button" aria-haspopup="dialog" aria-label={`Set ${set.set_number} RPE: ${rpe ?? 'none'}`} onClick={() => setRpePicker({ exerciseIndex, setIndex })}>
+                              {rpe ?? '—'}
+                            </button>
+
+                            <span className="aw-last-label">Last</span>
+                            <span className="aw-last" aria-hidden="true">{exercise.is_bodyweight ? 'BW' : exercise.previous_weight_kg ?? '—'}</span>
+                            <span className="aw-last" aria-hidden="true">{exercise.previous_reps ?? '—'}</span>
+                            <span className="aw-last" aria-hidden="true">—</span>
+                            <span className="visually-hidden">Last time: {formatPrevious(exercise)}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className={`aw-set${set.is_completed ? ' is-done' : ''}${isNextSet ? ' is-next' : ''}`}>
+                          <button className="aw-set-open" type="button" data-swipe-through aria-expanded="false" aria-label={`Edit set ${set.set_number}`} onClick={() => setFocus({ exerciseIndex, setIndex })}>
+                            <span className="aw-set-name">Set {set.set_number}{kindBadge}</span>
+                            <span className="aw-set-values">
+                              <span>{exercise.is_bodyweight ? 'BW' : set.weight_kg ? `${set.weight_kg}kg` : '—kg'}</span>
+                              <span>{set.reps ? `${set.reps}reps` : '—reps'}</span>
+                              {rpe !== null && <span>{rpe}RPE</span>}
+                            </span>
+                          </button>
+                          {doneButton}
+                        </div>
+                      )}
                     </SwipeToDeleteRow>
                     {missingReps === setKey && <p className="set-row-hint" role="status">Enter your reps to complete this set.</p>}
                     {hasHighWeightWarning && <p className="high-weight-warning" role="status">This weight is extremely high. Check that you entered it correctly.</p>}
                   </div>
                 })}
               </div>
-            )}
-            
-            {pendingSetRemoval?.exerciseIndex === exerciseIndex && <div className="set-removal-undo" role="status">
+              )}
+
+              {pendingSetRemoval?.exerciseIndex === exerciseIndex && <div className="set-removal-undo" role="status">
+                <span>Set {pendingSetRemoval.setNumber} deleted</span>
+                <button type="button" onClick={undoSetRemoval}>Undo</button>
+              </div>}
+
+              {!exercise.is_cardio && (
+                <button className="hifi-link-button aw-add" type="button" onClick={() => addSet(exerciseIndex)}>Add set</button>
+              )}
+            </div>}
+
+            {!isOpen && pendingSetRemoval?.exerciseIndex === exerciseIndex && <div className="set-removal-undo" role="status">
               <span>Set {pendingSetRemoval.setNumber} deleted</span>
               <button type="button" onClick={undoSetRemoval}>Undo</button>
             </div>}
-            
-            {!exercise.is_cardio && (
-              <button className="secondary-action" type="button" onClick={() => addSet(exerciseIndex)}><Plus size={16} /> Add Set</button>
-            )}
           </article>
         })}
       </div>
-      <MediaCredit />
 
-      <section className="add-exercise-section">
-        <button 
-          className="secondary-action add-exercise-button" 
-          type="button" 
-          onClick={() => {
-            setReplaceIndex(null)
-            setIsSelectModalOpen(true)
-          }}
-        >
-          <Plus size={17} /> Add Exercise
-        </button>
-      </section>
+      <button
+        className="hifi-link-button aw-add aw-add-exercise"
+        type="button"
+        onClick={() => {
+          setReplaceIndex(null)
+          setIsSelectModalOpen(true)
+        }}
+      >
+        Add exercise
+      </button>
+      <MediaCredit />
 
       {restPickerIndex !== null && session.exercises[restPickerIndex] && (() => {
         const exercise = session.exercises[restPickerIndex]
@@ -1498,17 +1596,32 @@ function ActiveWorkout() {
           />
         )
       })()}
-      {runningRestIndex !== null && (
-        <section className="rest-bar" aria-label="Rest timer">
-          <div className="rest-bar-copy">
-            <strong role="timer">{formatRest(restRemaining[runningRestIndex])}</strong>
-            <span>{session.exercises[runningRestIndex]?.name}</span>
-          </div>
-          <button type="button" aria-label="Rest 15 seconds less" onClick={() => changeRunningRest(runningRestIndex, -REST_STEP_SECONDS)}>−15</button>
-          <button type="button" aria-label="Rest 15 seconds more" onClick={() => changeRunningRest(runningRestIndex, REST_STEP_SECONDS)}>+15</button>
-          <button className="rest-bar-skip" type="button" onClick={() => stopRest(runningRestIndex)}>Skip</button>
-        </section>
-      )}
+      {runningRestIndex !== null && (() => {
+        const nextExercise = session.exercises[nextExerciseIndex]
+        const nextLabel = nextExercise && nextSetIndex >= 0
+          ? `Next: ${nextExercise.name} Set ${nextExercise.sets[nextSetIndex].set_number}`
+          : session.exercises[runningRestIndex]?.name
+        return (
+          <section className="aw-rest-sheet" aria-label="Rest timer">
+            <div className="aw-rest-top">
+              <span className="aw-rest-next">{nextLabel}</span>
+              <button className="aw-rest-close" type="button" aria-label="Dismiss rest timer" onClick={() => stopRest(runningRestIndex)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="aw-rest-controls">
+              <button className="aw-step" type="button" aria-label="Rest 15 seconds less" onClick={() => changeRunningRest(runningRestIndex, -REST_STEP_SECONDS)}>
+                <Minus size={20} aria-hidden="true" />
+              </button>
+              <strong className="aw-rest-time" role="timer">{formatRestLong(restRemaining[runningRestIndex])}</strong>
+              <button className="aw-step" type="button" aria-label="Rest 15 seconds more" onClick={() => changeRunningRest(runningRestIndex, REST_STEP_SECONDS)}>
+                <Plus size={20} aria-hidden="true" />
+              </button>
+              <button className="hifi-pill aw-rest-skip" type="button" onClick={() => stopRest(runningRestIndex)}>Skip</button>
+            </div>
+          </section>
+        )
+      })()}
 
       {showAiAdjustment && (
         <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowAiAdjustment(false) }}>

@@ -1,4 +1,4 @@
-# SET&PLATE — Agent Instructions
+# BOOOST — Agent Instructions
 
 ## Project
 - Backend: FastAPI, Python 3.10+, and Supabase (`backend/`).

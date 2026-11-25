@@ -134,7 +134,7 @@ export default function CustomExercise() {
       } else {
         await createCustomExercise(user.id, payload)
       }
-      sessionStorage.setItem('set_plate_reopen_exercise_modal', 'true')
+      sessionStorage.setItem('booost_reopen_exercise_modal', 'true')
       navigate(-1)
     } catch (err: any) {
       setError(err.message || "An error occurred while saving.")
@@ -147,7 +147,7 @@ export default function CustomExercise() {
     setIsSaving(true)
     try {
       await deleteCustomExercise(user.id, id)
-      sessionStorage.setItem('set_plate_reopen_exercise_modal', 'true')
+      sessionStorage.setItem('booost_reopen_exercise_modal', 'true')
       navigate(-1)
     } catch (err: any) {
       setError(err.message || "An error occurred while deleting.")
@@ -167,7 +167,7 @@ export default function CustomExercise() {
           className="icon-button"
           type="button"
           onClick={() => {
-            sessionStorage.setItem('set_plate_reopen_exercise_modal', 'true')
+            sessionStorage.setItem('booost_reopen_exercise_modal', 'true')
             navigate(-1)
           }}
           aria-label="Back"

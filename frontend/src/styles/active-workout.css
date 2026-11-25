@@ -1,0 +1,296 @@
+/* Active Workout from the Figma mockup ("3/WORKOUT", components "Exercise", "SET" and "REST TIME").
+   Shared pieces live in redesign.css; everything here is scoped to this page. */
+
+.active-workout-screen {
+  --aw-band: #cee2fd;
+  --aw-body: #f9f9f9;
+  --aw-rest-bg: #e3f0f8;
+  gap: 12px;
+  padding-bottom: 24px;
+}
+:root[data-theme="dark"] .active-workout-screen {
+  --aw-band: #1f3a5c;
+  --aw-body: #1c1f24;
+  --aw-rest-bg: #1a2a3a;
+}
+.app-shell:has(.active-workout-screen) { background: #f9f9f9; }
+:root[data-theme="dark"] .app-shell:has(.active-workout-screen) { background: #0f1115; }
+/* Room for the rest sheet so the last set is never hidden behind it. */
+.active-workout-screen.is-resting { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+
+/* ---- Header: back, name + clock, sets and volume, FINISH, progress ---- */
+.aw-header {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  display: grid;
+  gap: 10px;
+  margin: -1.25rem -1.25rem 4px;
+  padding: max(10px, env(safe-area-inset-top)) 1.25rem 10px;
+  background: color-mix(in srgb, #f9f9f9 92%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+:root[data-theme="dark"] .aw-header { background: color-mix(in srgb, #0f1115 92%, transparent); }
+.aw-header-row { display: flex; align-items: center; gap: 8px; }
+.aw-header .scan-back { flex: none; }
+.aw-title { flex: 1; min-width: 0; }
+.aw-title h1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  margin: 0;
+  color: var(--hifi-ink);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+.aw-clock { color: var(--hifi-muted); font-family: var(--hifi-mono); font-size: 14px; font-variant-numeric: tabular-nums; }
+.aw-subtitle { display: flex; flex-wrap: wrap; gap: 0 10px; margin-top: 2px; color: var(--hifi-muted); }
+.aw-finish { flex: none; }
+.aw-progress { height: 8px; margin-left: 44px; }
+.aw-tools { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-left: 44px; }
+.aw-tool { display: inline-flex; min-height: 32px; align-items: center; gap: 6px; color: var(--hifi-muted); font-size: 13px; }
+.aw-tool:disabled { cursor: default; opacity: 0.45; }
+
+/* ---- Exercise cards: pale blue band on top, light grey body (Figma "Exercise") ---- */
+.aw-exercise-list { display: grid; gap: 8px; }
+.hifi-card.aw-exercise {
+  position: relative;
+  gap: 0;
+  padding: 0;
+  border-radius: 12px;
+  background: linear-gradient(181deg, var(--aw-band) 0, var(--hifi-card) 46px);
+  box-shadow: inset -1px -1px 5px #ececec;
+}
+.hifi-card.aw-exercise[data-open="true"] { background: linear-gradient(181deg, var(--aw-band) 0, var(--aw-body) 60px); }
+:root[data-theme="dark"] .hifi-card.aw-exercise { box-shadow: none; }
+.aw-exercise-head { position: relative; display: flex; align-items: center; }
+.aw-exercise-toggle {
+  display: flex;
+  min-width: 0;
+  min-height: 64px;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 4px 12px 12px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--hifi-ink);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.aw-exercise-toggle:focus-visible { outline: 2px solid #0052b1; outline-offset: -2px; }
+.aw-exercise-name { min-width: 0; font-size: 20px; line-height: 1.2; overflow-wrap: anywhere; }
+.aw-exercise[data-open="true"] .aw-exercise-name { font-size: 24px; }
+.aw-exercise-count {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  color: var(--hifi-muted);
+  font-family: var(--hifi-mono);
+  font-size: 14px;
+  text-transform: uppercase;
+}
+.aw-exercise.is-complete .aw-exercise-count { color: var(--green); }
+.active-workout-screen .exercise-menu-trigger { position: static; flex: none; margin-right: 4px; color: var(--hifi-faint); }
+.active-workout-screen .exercise-menu { top: 52px; right: 8px; }
+
+.aw-exercise-body { display: grid; gap: 12px; padding: 0 8px 14px; animation: content-in var(--motion) var(--ease-out); }
+.aw-exercise-art { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+.aw-exercise-art .active-exercise-artwork,
+.aw-exercise-art .active-exercise-artwork-fallback { width: 44px; height: 44px; flex: none; border-radius: 8px; }
+.aw-rest-row { display: flex; flex: 1; align-items: center; gap: 4px; }
+.aw-rest-label { flex: 1; color: var(--hifi-muted); font-size: 16px; }
+.aw-step {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--hifi-ink);
+  background: transparent;
+  cursor: pointer;
+}
+.aw-step:hover { background: var(--hifi-well); }
+.aw-rest-value {
+  min-width: 64px;
+  min-height: 36px;
+  padding: 0 4px;
+  border: 0;
+  color: var(--hifi-ink);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--hifi-mono);
+  font-size: 16px;
+  white-space: nowrap;
+}
+.aw-rest-value.is-off { color: var(--hifi-faint); }
+
+/* ---- Sets (Figma "SET"): one white row each; the open one shows big fields ---- */
+.aw-sets { display: grid; gap: 8px; }
+.active-workout-screen .swipe-row--set { border-radius: 8px; }
+.aw-set {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 0;
+  border-radius: 6px;
+  background: var(--hifi-card);
+  box-shadow: inset -1px -1px 5px var(--aw-body);
+}
+.aw-set.is-next:not(.is-open) { box-shadow: inset 0 0 0 1.5px var(--hifi-selected); }
+.aw-set-open {
+  display: flex;
+  min-width: 0;
+  min-height: 48px;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 4px 8px 16px;
+  border: 0;
+  color: var(--hifi-ink);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--hifi-mono);
+  font-size: 16px;
+  text-align: left;
+}
+.aw-set-open:focus-visible { outline: 2px solid #0052b1; outline-offset: -2px; }
+.aw-set-name { display: inline-flex; flex: none; align-items: center; gap: 6px; }
+.aw-set-values { display: flex; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 0 12px; color: var(--hifi-muted); }
+.aw-set.is-done .aw-set-values { color: var(--hifi-faint); }
+.aw-kind {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: var(--hifi-well);
+  font-family: var(--hifi-mono);
+  font-size: 12px;
+}
+.aw-kind.set-kind-failure { color: var(--negative); }
+
+/* Round done button: an empty ring until the set is done, then filled with the selected blue. */
+.active-workout-screen .aw-done {
+  display: grid;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 1.5px solid var(--hifi-faint);
+  border-radius: 50%;
+  color: transparent;
+  background: transparent;
+}
+.active-workout-screen .aw-done.is-done { border-color: transparent; color: var(--hifi-on-selected); background: var(--hifi-selected); }
+.active-workout-screen .aw-done::before { content: ""; position: absolute; inset: -8px; }
+.active-workout-screen .aw-done { position: relative; }
+
+.aw-set.is-open { display: grid; gap: 18px; padding: 12px 16px; border-radius: 8px; }
+.aw-set.is-open .aw-done { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
+.aw-set-top { display: flex; align-items: center; gap: 8px; }
+.aw-set-title {
+  position: relative;
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  color: var(--hifi-ink);
+  font-family: var(--hifi-mono);
+  font-size: 24px;
+  line-height: 1.1;
+}
+.aw-set-title:focus-within { outline: 2px solid #0052b1; outline-offset: 2px; border-radius: 4px; }
+.aw-set-close { display: grid; width: 36px; height: 36px; place-items: center; padding: 0; border: 0; border-radius: 50%; color: var(--hifi-faint); background: transparent; cursor: pointer; }
+
+.aw-fields {
+  display: grid;
+  grid-template-columns: auto repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 6px 16px;
+}
+.aw-field-label { color: var(--hifi-ink); font-family: var(--hifi-mono); font-size: 14px; text-align: center; text-transform: uppercase; }
+.aw-fields input,
+.aw-fields .aw-field-value {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 0 2px;
+  border: 0;
+  border-bottom: 1px solid var(--hifi-ink);
+  border-radius: 0;
+  outline: none;
+  color: var(--hifi-ink);
+  background: transparent;
+  font-family: var(--hifi-mono);
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1;
+  text-align: center;
+}
+.aw-fields input:focus { border-bottom: 2px solid #0052b1; }
+.aw-fields input.is-missing { border-bottom: 2px solid var(--negative); }
+.aw-fields .set-bodyweight { display: grid; place-items: center; color: var(--hifi-muted); font-size: 24px; letter-spacing: 0; }
+.aw-fields .rpe-select { cursor: pointer; }
+.aw-fields .rpe-select:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+.aw-last-label, .aw-last { color: var(--hifi-faint); font-family: var(--hifi-mono); font-size: 14px; }
+.aw-last { text-align: center; }
+
+.active-workout-screen .set-row-hint { margin: 4px 4px 0; color: var(--negative); font-size: 13px; }
+.active-workout-screen .high-weight-warning { border-color: rgba(168, 107, 0, 0.3); color: var(--warning); background: rgba(168, 107, 0, 0.08); }
+.active-workout-screen .set-removal-undo { margin: 0; border: 0; border-radius: 8px; background: var(--hifi-card); font-size: 14px; }
+
+.aw-add { justify-self: center; min-height: 40px; }
+.aw-add-exercise { margin-top: 4px; }
+.active-workout-screen .media-credit { margin-top: 0; text-align: center; }
+
+/* ---- Rest timer sheet (Figma "REST TIME") ---- */
+.aw-rest-sheet {
+  position: fixed;
+  z-index: 12;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  width: min(100%, 28rem);
+  gap: 8px;
+  margin: 0 auto;
+  padding: 16px 24px calc(20px + env(safe-area-inset-bottom));
+  border-radius: 28px 28px 0 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--aw-rest-bg) 70%, #fff) 0%, var(--aw-rest-bg) 100%);
+  box-shadow: 0 -2px 8px rgba(131, 131, 131, 0.25);
+  animation: sheet-in var(--motion) var(--ease-out);
+}
+:root[data-theme="dark"] .aw-rest-sheet { background: var(--aw-rest-bg); box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.5); }
+.aw-rest-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.aw-rest-next { min-width: 0; overflow: hidden; color: var(--hifi-muted); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.aw-rest-close { display: grid; width: 40px; height: 40px; margin-right: -10px; place-items: center; padding: 0; border: 0; border-radius: 50%; color: var(--hifi-faint); background: transparent; cursor: pointer; }
+.aw-rest-controls { display: flex; align-items: center; gap: 8px; }
+.aw-rest-time { min-width: 110px; color: var(--hifi-ink); font-family: var(--hifi-mono); font-size: 22px; font-weight: 400; text-align: center; font-variant-numeric: tabular-nums; }
+.aw-rest-skip { margin-left: auto; padding: 8px 22px; font-size: 16px; }
+.aw-rest-close:focus-visible, .aw-step:focus-visible, .aw-rest-value:focus-visible, .aw-set-close:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+
+@media (max-width: 360px) {
+  .aw-fields { gap: 6px 10px; }
+  .aw-fields input, .aw-fields .aw-field-value { font-size: 26px; }
+  .aw-set-values { gap: 0 8px; font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aw-exercise-body, .aw-rest-sheet { animation: none; }
+}

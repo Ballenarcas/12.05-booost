@@ -340,7 +340,7 @@ function Workouts() {
   function discardAndStartEmptyWorkout() {
     const workoutKey = activeWorkoutStorageKey(currentUserId)
     if (workoutKey) localStorage.removeItem(workoutKey)
-    sessionStorage.removeItem('set_plate_pending_exercise')
+    sessionStorage.removeItem('booost_pending_exercise')
     setShowDiscardActiveWorkout(false)
     startWorkout()
   }

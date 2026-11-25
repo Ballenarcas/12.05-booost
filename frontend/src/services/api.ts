@@ -9,7 +9,7 @@ const LOGIN_TIMEOUT_MS = 15000
 const DASHBOARD_TIMEOUT_MS = 15000
 const LLM_TIMEOUT_MS = 20000
 const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
-const DASHBOARD_CACHE_PREFIX = 'set_plate_dashboard:'
+const DASHBOARD_CACHE_PREFIX = 'booost_dashboard:'
 const DASHBOARD_CACHE_TTL_MS = 30_000
 const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
 const nutritionRequests = new Map<string, Promise<TodayNutritionData>>()
@@ -17,7 +17,7 @@ const adjustmentRequests = new Map<string, Promise<CalorieAdjustmentData>>()
 const workoutStatisticsCache = new Map<string, { data: WorkoutStatistics; expiresAt: number }>()
 const nutritionStatisticsCache = new Map<string, { data: NutritionStatistics; expiresAt: number }>()
 const WORKOUT_STATISTICS_CACHE_TTL_MS = 30_000
-const NUTRITION_CACHE_PREFIX = 'set_plate_nutrition:'
+const NUTRITION_CACHE_PREFIX = 'booost_nutrition:'
 const NUTRITION_CACHE_TTL_MS = 60_000
 import type { NutritionStatistics, NutritionStatisticsRange } from '../types/nutrition'
 import type {
@@ -89,8 +89,8 @@ export interface DashboardSummary {
   activity: HealthActivitySummary
 }
 
-const SESSION_KEY = 'set_plate_session'
-const STORAGE_PREFIX = 'set_plate_'
+const SESSION_KEY = 'booost_session'
+const STORAGE_PREFIX = 'booost_'
 
 export function activeWorkoutStorageKey(userId: string | undefined = getCurrentUser()?.id): string | null {
   return userId ? `${STORAGE_PREFIX}active_workout:${userId}` : null
@@ -180,7 +180,7 @@ function readDashboardCache(userId: string): { data: DashboardSummary; at: numbe
 
 // Last answers kept on the device, so pages show them at once on the next visit (even after the
 // app is reopened) while a fresh copy loads. Cleared when the data changes and on sign-out.
-const SAVED_COPY_PREFIX = 'set_plate_copy:'
+const SAVED_COPY_PREFIX = 'booost_copy:'
 
 export function readSavedCopy<T>(key: string): T | null {
   try {
@@ -554,8 +554,8 @@ export async function deleteWorkoutHistoryEntry(userId: string, workoutId: strin
 // The last statistics for each range are also kept on the device, so the page can show them at
 // once while fresh ones load. Only today's copy is used; saving or deleting a workout, or signing
 // out, removes them.
-const SAVED_STATISTICS_PREFIX = 'set_plate_stats:'
-const SAVED_NUTRITION_STATISTICS_PREFIX = 'set_plate_nutrition_stats:'
+const SAVED_STATISTICS_PREFIX = 'booost_stats:'
+const SAVED_NUTRITION_STATISTICS_PREFIX = 'booost_nutrition_stats:'
 
 export function getSavedWorkoutStatistics(userId: string, range: WorkoutStatisticsRange): WorkoutStatistics | null {
   try {
@@ -749,7 +749,7 @@ export async function loginUser(email: string, password: string): Promise<import
   clearSession()
   try {
     localStorage.setItem(SESSION_KEY, profile.access_token)
-    localStorage.setItem('set_plate_user', JSON.stringify(profile))
+    localStorage.setItem('booost_user', JSON.stringify(profile))
   } catch {
     throw new Error("We couldn't keep you signed in on this device. Please try again.")
   }
@@ -769,7 +769,7 @@ export interface TrainerInsightResponse {
 
 export async function getHealth(): Promise<{ status: string }> {
   const response = await apiFetch(`${API_URL}/api/v1/health`)
-  if (!response.ok) throw new Error("We couldn't reach SET&PLATE. Check your connection and try again.")
+  if (!response.ok) throw new Error("We couldn't reach BOOOST. Check your connection and try again.")
   return response.json() as Promise<{ status: string }>
 }
 
@@ -1065,7 +1065,7 @@ export async function submitUserOnboarding(formData: import('../types').UserOnbo
   clearSession()
   try {
     if (data.access_token) localStorage.setItem(SESSION_KEY, data.access_token)
-    localStorage.setItem('set_plate_user', JSON.stringify(localProfile))
+    localStorage.setItem('booost_user', JSON.stringify(localProfile))
   } catch {
     // Ignore
   }
@@ -1075,7 +1075,7 @@ export async function submitUserOnboarding(formData: import('../types').UserOnbo
 
 export function getCurrentUser(): import('../types').UserProfile | null {
   try {
-    const saved = localStorage.getItem('set_plate_user')
+    const saved = localStorage.getItem('booost_user')
     return saved ? JSON.parse(saved) : null
   } catch {
     return null
@@ -1090,7 +1090,7 @@ export interface PremiumStatus {
   expires_at: string
 }
 
-export const PREMIUM_UPDATED_EVENT = 'set_plate:premium-updated'
+export const PREMIUM_UPDATED_EVENT = 'booost:premium-updated'
 
 export function isPremiumActive(profile: UserProfile | null = getCurrentUser()): boolean {
   if (!profile?.is_premium) return false
@@ -1132,7 +1132,7 @@ export async function purchasePremium(plan: PremiumPlan): Promise<PremiumStatus>
   }
 
   try {
-    localStorage.setItem('set_plate_user', JSON.stringify(updatedProfile))
+    localStorage.setItem('booost_user', JSON.stringify(updatedProfile))
   } catch {
     // The server response is still authoritative when browser storage is unavailable.
   }
@@ -1155,7 +1155,7 @@ export async function cancelPremium(): Promise<void> {
   const user = getCurrentUser()
   if (user) {
     try {
-      localStorage.setItem('set_plate_user', JSON.stringify({
+      localStorage.setItem('booost_user', JSON.stringify({
         ...user,
         premium_expires_at: status.expires_at,
         premium_cancel_at_period_end: true,
@@ -1185,7 +1185,7 @@ export async function updateUserSettings(
   try {
     const user = getCurrentUser()
     if (user?.id === userId) {
-      localStorage.setItem('set_plate_user', JSON.stringify({ ...user, ...settings }))
+      localStorage.setItem('booost_user', JSON.stringify({ ...user, ...settings }))
     }
     localStorage.removeItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
   } catch {

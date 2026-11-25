@@ -1,6 +1,6 @@
-# SET&PLATE Frontend
+# BOOOST Frontend
 
-The SET&PLATE frontend is a mobile-first React application for connecting nutrition tracking, training plans, and AI-powered wellness guidance.
+The BOOOST frontend is a mobile-first React application for connecting nutrition tracking, training plans, and AI-powered wellness guidance.
 
 ## Development
 

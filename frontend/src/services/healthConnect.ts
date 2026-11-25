@@ -27,13 +27,13 @@ type NativeHealthConnect = {
 
 declare global {
   interface Window {
-    SETPLATEHealthConnect?: NativeHealthConnect
+    BOOOSTHealthConnect?: NativeHealthConnect
   }
 }
 
 function bridge(): NativeHealthConnect | null {
   if (typeof window === 'undefined') return null
-  return window.SETPLATEHealthConnect?.readActivity ? window.SETPLATEHealthConnect : null
+  return window.BOOOSTHealthConnect?.readActivity ? window.BOOOSTHealthConnect : null
 }
 
 export function isNativeHealthConnectAvailable(): boolean {

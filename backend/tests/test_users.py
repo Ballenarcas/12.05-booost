@@ -97,7 +97,7 @@ def test_login_rejects_the_fake_hash_phrase_on_an_account_without_a_password(mon
 
     response = client.post(
         "/api/v1/users/login",
-        json={"email": "user@example.com", "password": "set-and-plate-timing-equalizer"},
+        json={"email": "user@example.com", "password": "booost-timing-equalizer"},
     )
 
     assert response.status_code == 401

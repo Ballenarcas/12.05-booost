@@ -1,1 +1,1 @@
-"""Test suite for SET&PLATE backend."""
+"""Test suite for BOOOST backend."""

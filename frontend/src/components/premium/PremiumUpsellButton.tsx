@@ -31,7 +31,7 @@ function PremiumUpsellButton({ compact = false, className = '' }: PremiumUpsellB
       type="button"
       className={`premium-upsell-button${compact ? ' is-compact' : ''}${className ? ` ${className}` : ''}`}
       onClick={() => navigate('/premium', { state: { from: location.pathname } })}
-      aria-label="Unlock SET&PLATE Premium"
+      aria-label="Unlock BOOOST Premium"
       title="Unlock Premium"
     >
       <Crown size={15} aria-hidden="true" />

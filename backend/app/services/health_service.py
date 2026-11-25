@@ -1,7 +1,7 @@
 """Health Connect consent and daily activity persistence.
 
 The browser cannot call Health Connect directly. The Android host injects
-``window.SETPLATEHealthConnect``, the frontend syncs the returned days here, and
+``window.BOOOSTHealthConnect``, the frontend syncs the returned days here, and
 the AI trainer reads the stored aggregates instead of trusting query strings.
 """
 

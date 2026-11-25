@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "SET&PLATE API"
+    app_name: str = "BOOOST API"
     supabase_url: str = ""
     supabase_key: str = ""
     supabase_service_role_key: str = ""
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 
     # Password reset emails go through Resend. Without a key, no email is sent.
     resend_api_key: str = ""
-    # Sender on a domain verified in Resend, e.g. "SET&PLATE <no-reply@your-domain.com>".
+    # Sender on a domain verified in Resend, e.g. "BOOOST <no-reply@your-domain.com>".
     email_from: str = ""
     # Public address of the frontend, used to build the reset link.
     app_url: str = "http://localhost:5173"

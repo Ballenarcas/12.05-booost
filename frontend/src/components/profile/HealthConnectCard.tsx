@@ -129,7 +129,7 @@ export default function HealthConnectCard({ userId }: { userId: string | undefin
         ) : (
           <>
             <p className="health-meta">
-              Health Connect shares steps and active energy from your phone and wearables. SET&amp;PLATE reads only those two data types.
+              Health Connect shares steps and active energy from your phone and wearables. BOOOST reads only those two data types.
             </p>
             <button type="button" className="secondary-action health-connect-btn" onClick={() => setIsConnectOpen(true)} disabled={busy !== null}>
               {busy === 'connecting'
@@ -151,7 +151,7 @@ export default function HealthConnectCard({ userId }: { userId: string | undefin
         <div className="modal-backdrop" onClick={() => setIsConnectOpen(false)}>
           <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="health-connect-title" onClick={(event) => event.stopPropagation()}>
             <p className="eyebrow">Health Connect</p>
-            <h2 id="health-connect-title">Allow SET&amp;PLATE to read your activity?</h2>
+            <h2 id="health-connect-title">Allow BOOOST to read your activity?</h2>
             <p>Your AI trainer uses these daily totals to adapt calorie and training guidance. Nothing else from Health Connect is read.</p>
             <ul className="health-permission-list">
               <li><Footprints size={18} aria-hidden="true" /><div><strong>Steps</strong><span>Daily step count</span></div></li>

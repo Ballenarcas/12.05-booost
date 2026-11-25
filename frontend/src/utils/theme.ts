@@ -1,6 +1,6 @@
 export type Theme = 'light' | 'dark'
 
-const KEY = 'setplate-theme'
+const KEY = 'booost-theme'
 
 export function getTheme(): Theme {
   try {

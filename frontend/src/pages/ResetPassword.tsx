@@ -52,7 +52,7 @@ function ResetPassword() {
   return (
     <main className="onboarding-container hifi-theme login-container">
       <div className="onboarding-content login-content">
-        <div className="login-mark">SET&amp;PLATE</div>
+        <div className="login-mark">BOOOST</div>
         <header className="onboarding-header login-header">
           <h1 className="onboarding-title">Set a new password</h1>
           <p className="onboarding-subtitle">Use at least {MIN_PASSWORD_LENGTH} characters.</p>

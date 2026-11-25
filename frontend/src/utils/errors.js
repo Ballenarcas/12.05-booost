@@ -1,5 +1,5 @@
 const OFFLINE_MESSAGE = 'You are offline. Check your connection and try again.'
-const UNREACHABLE_MESSAGE = "We couldn't reach SET&PLATE. Check your connection and try again."
+const UNREACHABLE_MESSAGE = "We couldn't reach BOOOST. Check your connection and try again."
 const NETWORK_FAILURE = /failed to fetch|load failed|network ?error|networkrequestfailed|timed out|timeout|connection (refused|reset|aborted)/i
 const TECHNICAL_DETAIL = /failed to|\b(database|sql|table|supabase|postgrest|http|json|exception|traceback|undefined|null)\b|server error|status \d{3}/i
 
