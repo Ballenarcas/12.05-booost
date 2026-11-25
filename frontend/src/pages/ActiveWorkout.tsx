@@ -152,16 +152,15 @@ function ElapsedTime({ startedAt, format }: { startedAt: string; format: (second
 }
 
 function CardioTimerDisplay({ startedAt, accumulated }: { startedAt: string | null, accumulated: number }) {
-  const [seconds, setSeconds] = useState(() => {
+  const [runningSeconds, setSeconds] = useState(() => {
     if (!startedAt) return accumulated;
     return accumulated + Math.floor((Date.now() - Date.parse(startedAt)) / 1000);
   })
+  // A paused timer shows the stored total; only a running one ticks.
+  const seconds = startedAt ? runningSeconds : accumulated
 
   useEffect(() => {
-    if (!startedAt) {
-      setSeconds(accumulated);
-      return;
-    }
+    if (!startedAt) return;
     const timer = window.setInterval(() => {
       setSeconds(accumulated + Math.floor((Date.now() - Date.parse(startedAt)) / 1000));
     }, 1000)
@@ -274,7 +273,7 @@ function finalizeCardioSet(set: WorkoutSet): WorkoutSet {
 }
 
 // "Weighted" and "Assisted" variants are listed as their own equipment, so they still take a weight.
-export function isBodyweightOnly(equipment?: string[] | null): boolean {
+function isBodyweightOnly(equipment?: string[] | null): boolean {
   return !!equipment?.length && equipment.every((item) => item.trim().toLowerCase() === 'body weight')
 }
 
@@ -645,7 +644,7 @@ function ActiveWorkout() {
 
   if (!session) return <div className="screen hifi-theme state-card" role="alert">No active workout selected.</div>
 
-  function handleSelectExercise(selected: any) {
+  function handleSelectExercise(selected: Exercise) {
     setFocus(null)
     const isCardio = !!selected.category?.toLowerCase().includes('cardio');
     const replacement = {

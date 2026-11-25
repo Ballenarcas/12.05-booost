@@ -18,7 +18,7 @@ function GuideList({ id, title, items, ordered = false }: { id: string; title: s
 }
 
 // The catalog stores one paragraph; split it into numbered steps at sentence ends.
-export function toSteps(description?: string | null): string[] {
+function toSteps(description?: string | null): string[] {
   return (description ?? '')
     .split(/(?<=\.)\s+/)
     .map((step) => step.trim())

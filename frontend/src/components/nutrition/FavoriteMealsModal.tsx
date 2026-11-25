@@ -37,6 +37,8 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
   const [pastTime, setPastTime] = useState('12:00');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // "Now" for validating a past time in render; confirmLog checks against the real clock again.
+  const [openedAt, setOpenedAt] = useState(() => Date.now());
 
   const shown = useMemo(() => {
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -48,6 +50,7 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
 
   const startLogging = (favorite: FavoriteMeal) => {
     setLogging(favorite);
+    setOpenedAt(Date.now());
     setDay('today');
     setPastDate(toInputDate(daysAgo(1)));
     setPastTime('12:00');
@@ -56,11 +59,11 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
 
   const pastInstant = new Date(`${pastDate}T${pastTime || '12:00'}`);
   const pastIsValid = !Number.isNaN(pastInstant.getTime())
-    && pastInstant.getTime() <= Date.now()
+    && pastInstant.getTime() <= openedAt
     && pastDate >= toInputDate(daysAgo(MAX_DAYS_BACK));
 
   const confirmLog = async () => {
-    if (!logging || (day === 'past' && !pastIsValid)) return;
+    if (!logging || (day === 'past' && (!pastIsValid || pastInstant.getTime() > Date.now()))) return;
     setBusyId(logging.id);
     setError(null);
     try {

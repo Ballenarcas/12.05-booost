@@ -161,10 +161,6 @@ function Workouts() {
   const [activeDeloadPct, setActiveDeloadPct] = useState<number>(() => getActiveDeloadPct(currentUserId))
 
   useEffect(() => {
-    setActiveDeloadPct(getActiveDeloadPct(currentUserId))
-  }, [currentUserId])
-
-  useEffect(() => {
     let isMounted = true
     fetchDashboardSummary()
       .then((data) => { if (isMounted) setSummary(data) })
@@ -182,14 +178,10 @@ function Workouts() {
   }, [currentUserId])
 
   useEffect(() => {
-    if (!currentUserId) {
-      setIsHistoryLoading(false)
-      setHistoryError('Sign in to view your workout history.')
-      return
-    }
+    // Signed out: the initial state already shows the sign-in message.
+    if (!currentUserId) return
 
     let isMounted = true
-    setHistoryError(null)
     fetchWorkoutHistory(currentUserId)
       .then((items) => { if (isMounted) setWorkoutHistory(items) })
       .catch((requestError: Error) => {

@@ -19,8 +19,11 @@ function ExercisePicker() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // Loading and error belong to one search+page request, so a new request clears them without an extra render.
+  const requestKey = `${debouncedSearch}|${page}`
+  const [loaded, setLoaded] = useState<{ key: string; error: string | null } | null>(null)
+  const isLoading = loaded?.key !== requestKey
+  const error = isLoading ? null : loaded.error
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -32,27 +35,21 @@ function ExercisePicker() {
 
   useEffect(() => {
     let isCurrent = true
-    setIsLoading(true)
-    setError(null)
-    
     fetchExercises({ q: debouncedSearch || undefined, page, limit: PAGE_SIZE, compact: true })
-      .then((response: any) => {
-        if (isCurrent) {
-          setExercises(response.items || [])
-          setTotal(response.total || 0)
-        }
+      .then((response) => {
+        if (!isCurrent) return
+        setExercises(response.items || [])
+        setTotal(response.total || 0)
+        setLoaded({ key: requestKey, error: null })
       })
       .catch((requestError: Error) => {
-        if (isCurrent) setError(describeError(requestError, "We couldn't load exercises. Please try again."))
-      })
-      .finally(() => {
-        if (isCurrent) setIsLoading(false)
+        if (isCurrent) setLoaded({ key: requestKey, error: describeError(requestError, "We couldn't load exercises. Please try again.") })
       })
 
     return () => {
       isCurrent = false
     }
-  }, [debouncedSearch, page])
+  }, [debouncedSearch, page, requestKey])
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const pageNumbers = Array.from(new Set([1, page - 1, page, page + 1, pageCount]

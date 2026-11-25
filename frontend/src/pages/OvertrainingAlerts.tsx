@@ -111,8 +111,10 @@ export default function OvertrainingAlerts() {
   const userId = getCurrentUser()?.id
 
   const [status, setStatus] = useState<OvertrainingAlertStatus | null>(() => getSavedOvertrainingAlerts(userId))
-  const [loading, setLoading] = useState(() => !getSavedOvertrainingAlerts(userId))
-  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(() => Boolean(userId) && !getSavedOvertrainingAlerts(userId))
+  const [error, setError] = useState<string | null>(() => (
+    userId ? null : 'Sign in to review your recovery and readiness status.'
+  ))
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [busy, setBusy] = useState<'apply' | 'clear' | 'rest' | 'dismiss' | 'checkin' | string | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -126,13 +128,9 @@ export default function OvertrainingAlerts() {
   const [notes, setNotes] = useState('')
 
   useEffect(() => {
-    if (!userId) {
-      setLoading(false)
-      setError('Sign in to review your recovery and readiness status.')
-      return
-    }
+    // Signed out: the initial state already shows the sign-in message.
+    if (!userId) return
     let active = true
-    setError(null)
     fetchOvertrainingAlerts({ forceRefresh: true })
       .then((next) => {
         if (active) setStatus(next)

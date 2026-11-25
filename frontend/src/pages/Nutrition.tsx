@@ -71,7 +71,19 @@ export default function Nutrition() {
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const daySwipeRef = useRef<{ x: number; y: number; swiped: boolean } | null>(null);
   const [isLoading, setIsLoading] = useState(!cachedToday);
-  
+  // When the day changes, show its saved copy in the same render; the effect below refreshes it.
+  const [shownDate, setShownDate] = useState(selectedDate);
+  if (shownDate !== selectedDate) {
+    setShownDate(selectedDate);
+    const userId = getCurrentUser()?.id;
+    const saved = userId ? getSavedDayNutrition(userId, toInputDate(selectedDate)) : null;
+    if (saved) {
+      setMeals(saved.meals || []);
+      setTargets(saved);
+    }
+    setIsLoading(!saved);
+  }
+
   // États pour l'édition et la suppression
   const [editingMeal, setEditingMeal] = useState<MealLogItem | null>(null);
   const [editIngredients, setEditIngredients] = useState<MealIngredient[]>([]);
@@ -201,19 +213,13 @@ export default function Nutrition() {
     }
   };
 
-  // SE DÉCLENCHE À CHAQUE CHANGEMENT DE DATE DANS LE CALENDRIER
+  // Reloads the meals each time the selected day changes.
   useEffect(() => {
     const user = getCurrentUser();
     if (!user?.id) return;
 
     const formattedDate = toInputDate(selectedDate);
-    // Show a saved copy of this day straight away; the request below refreshes it.
     const cached = getSavedDayNutrition(user.id, formattedDate);
-    if (cached) {
-      setMeals(cached.meals || []);
-      setTargets(cached);
-    }
-    setIsLoading(!cached);
 
     // A slower answer for a day the user already left must not overwrite the current day.
     let isCurrent = true;

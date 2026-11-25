@@ -136,8 +136,8 @@ export default function CustomExercise() {
       }
       sessionStorage.setItem('booost_reopen_exercise_modal', 'true')
       navigate(-1)
-    } catch (err: any) {
-      setError(err.message || "An error occurred while saving.")
+    } catch (err: unknown) {
+      setError(err instanceof Error && err.message ? err.message : "An error occurred while saving.")
       setIsSaving(false)
     }
   }
@@ -149,8 +149,8 @@ export default function CustomExercise() {
       await deleteCustomExercise(user.id, id)
       sessionStorage.setItem('booost_reopen_exercise_modal', 'true')
       navigate(-1)
-    } catch (err: any) {
-      setError(err.message || "An error occurred while deleting.")
+    } catch (err: unknown) {
+      setError(err instanceof Error && err.message ? err.message : "An error occurred while deleting.")
       setIsSaving(false)
       setShowDeleteModal(false)
     }
