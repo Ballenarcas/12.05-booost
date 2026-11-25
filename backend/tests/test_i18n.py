@@ -150,9 +150,10 @@ def test_http_errors_follow_accept_language():
     assert en_res.json()["detail"] == "Invalid or expired session."
     assert es_res.json()["detail"] == "Sesión no válida o caducada."
 
+    # Signed out on purpose: a signed-in miss also looks up custom exercises in Supabase, which CI does not have.
     not_found = client.get(
         "/api/v1/workouts/exercises/nonexistent-exercise-id",
-        headers={**auth_headers(USER), "Accept-Language": "es"},
+        headers={"Accept-Language": "es"},
     )
     assert not_found.status_code == 404
     assert "No se encontró el ejercicio" in not_found.json()["detail"]
