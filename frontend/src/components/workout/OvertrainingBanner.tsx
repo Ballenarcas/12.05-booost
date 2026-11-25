@@ -33,15 +33,15 @@ function bannerSubtitle(status: OvertrainingAlertStatus): string {
 export function OvertrainingBanner({ workouts, onStatusChange }: OvertrainingBannerProps) {
   const navigate = usePageNavigate()
   const userId = getCurrentUser()?.id
-  const [status, setStatus] = useState<OvertrainingAlertStatus | null>(() => getSavedOvertrainingAlerts(userId))
+  const [savedStatus, setStatus] = useState<OvertrainingAlertStatus | null>(() => getSavedOvertrainingAlerts(userId))
+  const status = userId ? savedStatus : null
   const onStatusChangeRef = useRef(onStatusChange)
-  onStatusChangeRef.current = onStatusChange
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange
+  })
 
   useEffect(() => {
-    if (!userId) {
-      setStatus(null)
-      return
-    }
+    if (!userId) return
     let active = true
     fetchOvertrainingAlerts({ forceRefresh: workouts !== undefined })
       .then((next) => {

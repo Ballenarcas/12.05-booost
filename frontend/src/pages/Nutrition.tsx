@@ -215,18 +215,27 @@ export default function Nutrition() {
     }
     setIsLoading(!cached);
 
-    // On utilise ta nouvelle fonction API qui gère les dates
+    // A slower answer for a day the user already left must not overwrite the current day.
+    let isCurrent = true;
     fetchTodayNutrition(user.id, formattedDate)
       .then(data => {
+        if (!isCurrent) return;
         setMeals(data.meals || []);
         setTargets(data);
       })
       .catch(error => {
-        console.error("Erreur de chargement des repas:", error);
-        setMeals([]);
+        if (!isCurrent) return;
+        console.error("Could not load meals:", error);
+        if (!cached) setMeals([]);
       })
-      .finally(() => setIsLoading(false));
-  }, [selectedDate]); // L'ajout de selectedDate ici est la clé du fonctionnement !
+      .finally(() => {
+        if (isCurrent) setIsLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectedDate]);
 
   useEffect(() => {
     if (!editingMeal || !isFoodSearchOpen || !editFoodName.trim()) {

@@ -17,7 +17,7 @@ function formatSyncTime(value: string | null): string {
 /** Health Connect section of Profile (moved from the old Settings page). */
 export default function HealthConnectCard({ userId }: { userId: string | undefined }) {
   const [health, setHealth] = useState<HealthConnectStatus | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(Boolean(userId))
   const [busy, setBusy] = useState<'connecting' | 'syncing' | 'disconnecting' | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [isConnectOpen, setIsConnectOpen] = useState(false)
@@ -29,10 +29,7 @@ export default function HealthConnectCard({ userId }: { userId: string | undefin
   }, [notice])
 
   useEffect(() => {
-    if (!userId) {
-      setIsLoading(false)
-      return
-    }
+    if (!userId) return
     let isMounted = true
     fetchHealthConnectStatus()
       .then(async (initial) => {

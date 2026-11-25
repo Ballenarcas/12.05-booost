@@ -1,12 +1,12 @@
 import { useId, type ReactNode } from 'react'
 import '../../styles/intake-card.css'
+import { percent } from '../../utils/percent'
 
 type Macro = { label: string; current: number; target: number }
 
 const ORB_WAVE_FRONT_PATH = 'M 0 0 C 21 -8, 42 -8, 63 0 C 84 8, 105 8, 126 0 C 147 -8, 168 -8, 189 0 C 210 8, 231 8, 252 0 L 252 160 L 0 160 Z'
 const ORB_WAVE_BACK_PATH = 'M 0 0 C 21 6, 42 6, 63 0 C 84 -6, 105 -6, 126 0 C 147 6, 168 6, 189 0 C 210 -6, 231 -6, 252 0 L 252 160 L 0 160 Z'
 
-export const percent = (current: number, target: number) => (target > 0 ? Math.max(0, Math.min(1, current / target)) : 0)
 
 /**
  * The Figma "Nutrition card": a ball whose water level is the share of the calorie goal eaten,

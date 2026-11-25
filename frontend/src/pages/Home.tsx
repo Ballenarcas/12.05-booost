@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import AiTipCard from '../components/home/AiTipCard'
 import HydrationSummary from '../components/home/HydrationSummary'
-import IntakeCard, { percent } from '../components/nutrition/IntakeCard'
+import IntakeCard from '../components/nutrition/IntakeCard'
+import { percent } from '../utils/percent'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchDashboardSummary, getActiveDeloadPct, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
@@ -69,7 +70,7 @@ function Home() {
     }
   }, [userId])
 
-  if (error) return <div className="screen state-card" role="alert">{error}</div>
+  if (error) return <div className="screen hifi-theme state-card" role="alert">{error}</div>
 
   // The page is drawn straight away; only the parts that need the dashboard wait for it, and the
   // tip and hydration load at the same time instead of after it.

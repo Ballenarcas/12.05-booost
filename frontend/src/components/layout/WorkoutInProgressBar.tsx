@@ -48,7 +48,8 @@ export default function WorkoutInProgressBar() {
     return () => window.clearInterval(timer)
   }, [])
 
-  if (!workout || pathname.startsWith('/workouts/active')) return null
+  // The exercise guide is read mid-workout; the bar would cover its instructions.
+  if (!workout || pathname.startsWith('/workouts/active') || pathname.endsWith('/guide')) return null
 
   function discardWorkout() {
     const key = activeWorkoutStorageKey()

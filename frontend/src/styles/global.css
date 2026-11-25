@@ -349,18 +349,6 @@ a.hydration-goal-edit { text-decoration: none; white-space: nowrap; }
 .exercise-picker-item:active { background: var(--surface-raised); }
 .exercise-picker-item img, .exercise-image-placeholder { width: 3.3rem; height: 3.3rem; border-radius: var(--radius-control); object-fit: cover; background: var(--surface-raised); }
 .exercise-picker-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0.25rem; }
-.exercise-guide-media { position: relative; overflow: hidden; border-radius: var(--radius-card); background: #fff; aspect-ratio: 4 / 3; }
-.exercise-guide-media img { width: 100%; height: 100%; object-fit: contain; }
-.exercise-guide-play { position: absolute; top: 0.6rem; right: 0.6rem; display: inline-flex; align-items: center; gap: 0.35rem; min-height: 2.5rem; padding: 0 0.9rem; border: 0; border-radius: var(--radius-pill); color: var(--text); background: rgb(0 0 0 / 0.65); font: inherit; font-size: 0.85rem; cursor: pointer; }
-.exercise-guide-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.9rem 0; padding: 0; list-style: none; }
-.exercise-guide-chips li { padding: 0.4rem 0.8rem; border-radius: var(--radius-chip); background: var(--surface-raised); font-size: 0.85rem; }
-.exercise-guide-steps { display: grid; gap: 0.5rem; margin: 0.5rem 0 0; padding-left: 1.3rem; line-height: 1.45; }
-.exercise-guide-empty { color: var(--text-muted); }
-.exercise-guide-section { margin-top: 1.1rem; }
-.exercise-guide-section p { margin: 0.4rem 0 0; line-height: 1.45; }
-.exercise-guide-safety { margin-top: 0.8rem; color: var(--text-muted); font-size: 0.8rem; line-height: 1.4; }
-.exercise-guide-tip { display: flex; gap: 0.6rem; margin-top: 1rem; padding: 0.8rem 0.9rem; border-radius: var(--radius-control); background: var(--surface-raised); font-size: 0.88rem; line-height: 1.4; }
-.exercise-guide-tip svg { flex: none; color: var(--primary); }
 .section-links { display: flex; gap: 1rem; }
 .meal-row-wrap { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0.25rem; }
 .exercise-image-placeholder { display: grid; place-items: center; color: var(--text-muted); font-size: 1.5rem; }

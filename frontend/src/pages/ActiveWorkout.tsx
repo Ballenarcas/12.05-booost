@@ -643,7 +643,7 @@ function ActiveWorkout() {
   ), 0) ?? 0
   const isEditingWorkout = Boolean(session?.editWorkoutId)
 
-  if (!session) return <div className="screen state-card" role="alert">No active workout selected.</div>
+  if (!session) return <div className="screen hifi-theme state-card" role="alert">No active workout selected.</div>
 
   function handleSelectExercise(selected: any) {
     setFocus(null)

@@ -117,7 +117,9 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
   };
 
   return createPortal(
+    // Portaled outside the page, so it needs the theme class itself to get the redesign tokens.
     <div
+      className="hifi-theme"
       style={{
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999,
         backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
@@ -257,4 +259,4 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
   );
 };
 
-export default SelectExerciseModal;;
+export default SelectExerciseModal;

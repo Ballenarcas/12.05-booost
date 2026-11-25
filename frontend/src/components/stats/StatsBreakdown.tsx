@@ -38,19 +38,14 @@ export default function StatsBreakdown({
   const positiveItems = items.filter((item) => item.share > 0)
   const totalShare = positiveItems.reduce((sum, item) => sum + item.share, 0)
 
-  let offset = 0
-  const segments = positiveItems.map((item, index) => {
-    const normalized = totalShare > 0 ? item.share / totalShare : 0
-    const length = normalized * CIRCUMFERENCE
-    const segment = {
-      ...item,
-      color: RING_SHADES[index % RING_SHADES.length],
-      length,
-      dashOffset: -offset,
-    }
-    offset += length
-    return segment
-  })
+  const lengths = positiveItems.map((item) => (totalShare > 0 ? item.share / totalShare : 0) * CIRCUMFERENCE)
+  const segments = positiveItems.map((item, index) => ({
+    ...item,
+    color: RING_SHADES[index % RING_SHADES.length],
+    length: lengths[index],
+    // Each segment starts where the previous ones end.
+    dashOffset: -lengths.slice(0, index).reduce((sum, length) => sum + length, 0),
+  }))
 
   const selectedItem = items.find((item) => item.id === selectedId) ?? null
   const centerValue = selectedItem ? `${Math.round(selectedItem.share)}` : totalValue

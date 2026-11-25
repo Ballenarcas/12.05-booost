@@ -1718,7 +1718,7 @@ export async function createCustomExercise(userId: string, payload: import('../t
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(body?.detail || "We couldn't create this exercise.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't create this exercise.")
   }
   exerciseListCache.clear()
   return response.json()
@@ -1732,7 +1732,7 @@ export async function updateCustomExercise(userId: string, exerciseId: string, p
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(body?.detail || "We couldn't update this exercise.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update this exercise.")
   }
   exerciseListCache.clear()
   return response.json()
@@ -1744,7 +1744,7 @@ export async function deleteCustomExercise(userId: string, exerciseId: string): 
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(body?.detail || "We couldn't delete this exercise.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't delete this exercise.")
   }
   exerciseListCache.clear()
 }

@@ -10,6 +10,10 @@
 .home-water-value { position: relative; display: grid; margin: 0; padding: 16px; font-family: var(--hifi-mono); }
 .home-water-value strong { color: #424242; font-size: 24px; font-weight: 400; line-height: 1.1; }
 .home-water-value span { color: #727272; font-size: 14px; line-height: 1.12; }
+/* Dark mode: the well is dark, so the text goes light and the fill darkens to keep it readable at any level. */
+:root[data-theme="dark"] .home-water-fill { background: linear-gradient(90deg, #1f2a3a 8%, #23446b 45%, #2f5f94 75%, #4b78b8 100%); }
+:root[data-theme="dark"] .home-water-value strong { color: var(--hifi-ink); }
+:root[data-theme="dark"] .home-water-value span { color: var(--hifi-muted); }
 
 /* Extra tools on Meals: shown under the card when opened. */
 .hydration-more { display: grid; gap: 12px; padding-top: 4px; border-top: 1px solid var(--line); }

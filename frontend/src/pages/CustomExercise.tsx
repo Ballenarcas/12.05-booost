@@ -193,7 +193,7 @@ export default function CustomExercise() {
             style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)', fontSize: '16px', boxSizing: 'border-box' }}
           />
           {error && (
-            <div role="alert" style={{ color: '#ff4d4d', fontSize: '13px', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div role="alert" style={{ color: 'var(--negative)', fontSize: '13px', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <AlertCircle size={14} /> {error}
             </div>
           )}
@@ -256,7 +256,7 @@ export default function CustomExercise() {
               className="danger-action" 
               type="button" 
               onClick={() => setShowDeleteModal(true)}
-              style={{ padding: '14px', borderRadius: '8px', border: '1px solid #EF4444', backgroundColor: 'transparent', color: '#EF4444', fontWeight: 600, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+              style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--negative)', backgroundColor: 'transparent', color: 'var(--negative)', fontWeight: 600, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
             >
               <Trash2 size={18} /> Remove Exercise
             </button>

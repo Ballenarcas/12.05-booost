@@ -94,8 +94,8 @@ function buildFallbackRangeBounds(range: WorkoutStatisticsRange): { start: strin
 function WorkoutStatisticsPage() {
   const userId = getCurrentUser()?.id
   const [searchParams, setSearchParams] = useSearchParams()
-  const initialTab: StatsTab = searchParams.get('tab') === 'meals' ? 'meals' : 'workouts'
-  const [tab, setTab] = useState<StatsTab>(initialTab)
+  // The URL is the one source of the tab, so back/forward and links switch it too.
+  const tab: StatsTab = searchParams.get('tab') === 'meals' ? 'meals' : 'workouts'
   const [switchDir, setSwitchDir] = useState<'left' | 'right' | null>(null)
   const [range, setRange] = useState<WorkoutStatisticsRange>(DEFAULT_STATISTICS_RANGE)
 
@@ -121,11 +121,6 @@ function WorkoutStatisticsPage() {
   const mealReqId = useRef(0)
   const workoutTabRef = useRef<HTMLButtonElement | null>(null)
   const mealsTabRef = useRef<HTMLButtonElement | null>(null)
-
-  useEffect(() => {
-    const paramTab = searchParams.get('tab') === 'meals' ? 'meals' : 'workouts'
-    setTab((current) => (current === paramTab ? current : paramTab))
-  }, [searchParams])
 
   useEffect(() => {
     if (!userId) return
@@ -176,7 +171,6 @@ function WorkoutStatisticsPage() {
   function selectTab(nextTab: StatsTab) {
     if (nextTab === tab) return
     setSwitchDir(nextTab === 'meals' ? 'right' : 'left')
-    setTab(nextTab)
     const nextParams = new URLSearchParams(searchParams)
     if (nextTab === 'meals') nextParams.set('tab', 'meals')
     else nextParams.delete('tab')

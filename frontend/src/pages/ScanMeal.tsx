@@ -110,19 +110,16 @@ export default function ScanMeal() {
   const [error, setError] = useState<string | null>(null)
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const [camera, setCamera] = useState<'starting' | 'live' | 'unavailable'>('starting')
+  const [camera, setCamera] = useState<'starting' | 'live' | 'unavailable'>(() =>
+    typeof navigator.mediaDevices?.getUserMedia === 'function' ? 'starting' : 'unavailable')
 
   // Live viewfinder while choosing a photo. Without camera access (refused, no camera, an old
   // WebView) the shutter falls back to the phone's own camera through the file input.
   useEffect(() => {
     if (phase !== 'idle') return
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCamera('unavailable')
-      return
-    }
+    if (typeof navigator.mediaDevices?.getUserMedia !== 'function') return
     let stream: MediaStream | null = null
     let cancelled = false
-    setCamera('starting')
     navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
       .then((next) => {
         if (cancelled) {
@@ -130,6 +127,12 @@ export default function ScanMeal() {
           return
         }
         stream = next
+        // The device's background blur follows faces and smears the food; turn it off where the camera lets us.
+        const [track] = next.getVideoTracks()
+        const blurOptions = (track?.getCapabilities?.() as { backgroundBlur?: boolean[] } | undefined)?.backgroundBlur
+        if (blurOptions?.includes(false)) {
+          track.applyConstraints({ advanced: [{ backgroundBlur: false } as MediaTrackConstraintSet] }).catch(() => {})
+        }
         if (videoRef.current) videoRef.current.srcObject = next
         setCamera('live')
       })
@@ -137,6 +140,8 @@ export default function ScanMeal() {
     return () => {
       cancelled = true
       stream?.getTracks().forEach((track) => track.stop())
+      // Back to idle later starts the camera again.
+      setCamera('starting')
     }
   }, [phase])
 
