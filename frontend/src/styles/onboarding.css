@@ -127,19 +127,18 @@
   font-size: 0.95rem;
   box-sizing: border-box;
   font-family: inherit;
-  color-scheme: dark;
-  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .form-input::placeholder {
   color: var(--text-faint);
 }
 
+/* Same focus mark as the rest of the redesign: a thin blue ring, the field keeps its colour. */
 .form-input:focus {
   outline: none;
-  background-color: var(--surface-raised);
-  border-color: var(--text);
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.14);
+  border-color: #0052b1;
+  box-shadow: inset 0 0 0 0.5px #0052b1;
 }
 
 .form-input.has-error {

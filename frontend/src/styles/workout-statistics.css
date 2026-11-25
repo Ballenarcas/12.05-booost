@@ -60,9 +60,11 @@
   inset: 0;
   overflow: visible;
 }
+/* Light mode sits on the near-white part of the page wash, so the dial uses the ink tokens;
+   dark mode keeps it white. */
 .stats-range-arc path {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.85);
+  stroke: var(--hifi-faint);
   stroke-width: 1.25;
 }
 .stats-range-dot {
@@ -71,9 +73,9 @@
   left: 0;
   width: 9px;
   height: 9px;
-  border: 1.5px solid #fff;
+  border: 1.5px solid var(--hifi-ink);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--hifi-card);
   offset-rotate: 0deg;
   transition: offset-distance 380ms var(--ease-out);
 }
@@ -83,7 +85,7 @@
   min-height: 44px;
   padding: 0 4px;
   border: 0;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--hifi-muted);
   background: transparent;
   cursor: pointer;
   font-family: var(--hifi-sans);
@@ -94,14 +96,19 @@
   transition: color var(--motion) var(--ease-out);
 }
 .stats-range-button[aria-pressed="true"] {
-  color: #fff;
+  color: var(--hifi-ink);
   font-weight: 600;
 }
 .stats-range-button:focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid #0052b1;
   outline-offset: 2px;
   border-radius: 12px;
 }
+:root[data-theme="dark"] .stats-range-arc path { stroke: rgba(255, 255, 255, 0.85); }
+:root[data-theme="dark"] .stats-range-dot { border-color: #fff; background: rgba(255, 255, 255, 0.25); }
+:root[data-theme="dark"] .stats-range-button { color: rgba(255, 255, 255, 0.82); }
+:root[data-theme="dark"] .stats-range-button[aria-pressed="true"] { color: #fff; }
+:root[data-theme="dark"] .stats-range-button:focus-visible { outline-color: #fff; }
 
 /* Segmented tab switcher (WORKOUTS / MEALS) — spring-animated sliding pill & forced-colors-safe underline without layout shift. */
 .stats-switcher-wrap {
