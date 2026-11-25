@@ -2,6 +2,10 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+# Body weight a profile accepts, in kg. The frontend mirrors it in src/utils/bodyLimits.ts.
+MIN_BODY_WEIGHT_KG = 20.0
+MAX_BODY_WEIGHT_KG = 450.0
+
 
 class UserOnboardingRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=15, description="First name")
@@ -10,7 +14,7 @@ class UserOnboardingRequest(BaseModel):
     password: str = Field(..., min_length=12, max_length=128)
     age: int | None = Field(default=None, ge=12, le=120)
     gender: str | None = None
-    weight: float | None = Field(default=None, ge=20.0, le=350.0)
+    weight: float | None = Field(default=None, ge=MIN_BODY_WEIGHT_KG, le=MAX_BODY_WEIGHT_KG)
     height: int | None = Field(default=None, ge=80, le=250)
     objective: str | None = None
 

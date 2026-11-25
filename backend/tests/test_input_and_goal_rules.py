@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.schemas.settings import UserSettingsUpdate
+from app.schemas.user import UserOnboardingRequest
 from app.schemas.workout_log import WorkoutLogCreate
 from app.services import calorie_adjustment_service, nutrition_service, settings_service, workout_service
 from main import app
@@ -95,6 +96,15 @@ def test_changing_body_data_recalculates_the_goal():
 def test_profile_values_have_the_same_limits_as_sign_up(change):
     with pytest.raises(ValidationError):
         UserSettingsUpdate(**{**PROFILE, **change})
+
+
+def test_body_weight_limit_is_450_kg_for_profile_and_sign_up():
+    assert UserSettingsUpdate(**{**PROFILE, "weight": 450}).weight == 450
+    assert UserOnboardingRequest(name="A", surname="B", email="a@b.co", password="x" * 12, weight=450).weight == 450
+    with pytest.raises(ValidationError):
+        UserSettingsUpdate(**{**PROFILE, "weight": 450.1})
+    with pytest.raises(ValidationError):
+        UserOnboardingRequest(name="A", surname="B", email="a@b.co", password="x" * 12, weight=450.1)
 
 
 @pytest.mark.parametrize("change", [

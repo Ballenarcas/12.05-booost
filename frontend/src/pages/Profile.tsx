@@ -11,6 +11,7 @@ import {
   updateUserSettings,
 } from '../services/api'
 import { describeError } from '../utils/errors.js'
+import { MAX_BODY_WEIGHT_KG, MIN_BODY_WEIGHT_KG } from '../utils/bodyLimits'
 import { useDialogBehavior } from '../utils/useDialogBehavior'
 import { applyTheme, getTheme } from '../utils/theme'
 import type { WorkoutStatistics } from '../types/workout'
@@ -143,8 +144,8 @@ function Profile() {
       reportError('Age must be a whole number between 12 and 120.')
       return
     }
-    if (!Number.isFinite(weightValue) || weightValue < 20 || weightValue > 350) {
-      reportError('Weight must be between 20 and 350 kg.')
+    if (!Number.isFinite(weightValue) || weightValue < MIN_BODY_WEIGHT_KG || weightValue > MAX_BODY_WEIGHT_KG) {
+      reportError(`Weight must be between ${MIN_BODY_WEIGHT_KG} and ${MAX_BODY_WEIGHT_KG} kg.`)
       return
     }
     if (!Number.isInteger(heightValue) || heightValue < 80 || heightValue > 250) {
@@ -191,8 +192,15 @@ function Profile() {
     setIsEditingWeight(true)
   }
 
+  // The input's max does not stop typing, so keep the number inside the limits when editing ends;
+  // anything that is not a number goes back to the value before editing.
   const finishWeightEdit = () => {
-    setWeight((current) => current.trim())
+    setWeight((current) => {
+      const value = Number(current.trim())
+      if (!current.trim() || !Number.isFinite(value)) return weightBeforeEditRef.current
+      const clamped = Math.min(MAX_BODY_WEIGHT_KG, Math.max(MIN_BODY_WEIGHT_KG, value))
+      return clamped === value ? current.trim() : String(clamped)
+    })
     setIsEditingWeight(false)
   }
 
@@ -204,8 +212,8 @@ function Profile() {
   const stepWeight = (delta: number) => {
     setIsEditingWeight(false)
     const base = Number(weight)
-    const current = Number.isFinite(base) && base >= 20 && base <= 350 ? base : 70
-    const next = Math.min(350, Math.max(20, Math.round((current + delta) * 10) / 10))
+    const current = Number.isFinite(base) && base >= MIN_BODY_WEIGHT_KG && base <= MAX_BODY_WEIGHT_KG ? base : 70
+    const next = Math.min(MAX_BODY_WEIGHT_KG, Math.max(MIN_BODY_WEIGHT_KG, Math.round((current + delta) * 10) / 10))
     setWeight(next.toFixed(1))
   }
 
@@ -281,8 +289,8 @@ function Profile() {
                 type="number"
                 inputMode="decimal"
                 step="0.1"
-                min="20"
-                max="350"
+                min={MIN_BODY_WEIGHT_KG}
+                max={MAX_BODY_WEIGHT_KG}
                 aria-label="Weight in kg"
                 value={weight}
                 onChange={(e) => setWeight(e.target.value)}

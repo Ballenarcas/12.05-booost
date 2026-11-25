@@ -3,6 +3,7 @@ import { usePageNavigate } from '../utils/usePageNavigate'
 import { Check, Eye, EyeOff } from 'lucide-react'
 import { submitUserOnboarding } from '../services/api'
 import { describeError } from '../utils/errors.js'
+import { MAX_BODY_WEIGHT_KG, MIN_BODY_WEIGHT_KG } from '../utils/bodyLimits'
 import type { FitnessGoal, UserOnboardingFormData } from '../types'
 import '../styles/onboarding.css'
 
@@ -121,8 +122,8 @@ function Onboarding() {
       const parsedWeight = parseFloat(trimmedWeight)
       if (isNaN(parsedWeight) || !/^\d+(\.\d+)?$/.test(trimmedWeight)) {
         newErrors.weight = 'Weight must be a valid number'
-      } else if (parsedWeight < 20 || parsedWeight > 350) {
-        newErrors.weight = 'Weight must be between 20 and 350 kg'
+      } else if (parsedWeight < MIN_BODY_WEIGHT_KG || parsedWeight > MAX_BODY_WEIGHT_KG) {
+        newErrors.weight = `Weight must be between ${MIN_BODY_WEIGHT_KG} and ${MAX_BODY_WEIGHT_KG} kg`
       }
     }
 

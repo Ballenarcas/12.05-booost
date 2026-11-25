@@ -1,9 +1,11 @@
 from pydantic import BaseModel, Field
 
+from app.schemas.user import MAX_BODY_WEIGHT_KG, MIN_BODY_WEIGHT_KG
+
 class UserSettingsUpdate(BaseModel):
     # Personal Info 
     age: int = Field(..., ge=12, le=120, description="Age must not be empty and greater than 0")
-    weight: float = Field(..., ge=20.0, le=350.0, description="Weight must not be empty and greater than 0")
+    weight: float = Field(..., ge=MIN_BODY_WEIGHT_KG, le=MAX_BODY_WEIGHT_KG, description="Body weight in kg")
     height: int = Field(..., ge=80, le=250, description="Height must not be empty and greater than 0")
     gender: str = Field(
         ..., 
