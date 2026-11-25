@@ -26,38 +26,39 @@ import MediaCredit from '../components/workout/MediaCredit'
 import WheelPickerSheet, { type WheelOption } from '../components/workout/WheelPickerSheet'
 import RpeSheet from '../components/workout/RpeSheet'
 import backIcon from '../assets/scan/back.svg'
+import { locale, t as tr, useT, type MessageKey } from '../i18n'
 import '../styles/active-workout.css'
 
 const EXTREME_WEIGHT_WARNING_KG = 600
 const DEFAULT_REST_SECONDS = 90
 const REST_STEP_SECONDS = 15
 // "off", then every 5 seconds up to 10 minutes.
-const REST_OPTIONS: WheelOption<number | null>[] = [
-  { value: null, label: 'off' },
+const restOptions = (): WheelOption<number | null>[] => [
+  { value: null, label: tr('aw.restOff') },
   ...Array.from({ length: 120 }, (_, index) => {
     const seconds = (index + 1) * 5
     const minutes = Math.floor(seconds / 60)
     return { value: seconds, label: minutes ? `${minutes}min ${seconds % 60}s` : `${seconds}s` }
   }),
 ]
-const ADJUSTMENT_ACTION_LABELS: Record<LiveWorkoutAdjustmentAction, string> = {
-  reduce_load: 'Reduce the load',
-  reduce_reps: 'Reduce the reps',
-  drop_set: 'Turn the next set into a drop set',
-  stop_exercise: 'Skip the remaining sets',
+const ADJUSTMENT_ACTION_LABELS: Record<LiveWorkoutAdjustmentAction, MessageKey> = {
+  reduce_load: 'aw.adjustReduceLoad',
+  reduce_reps: 'aw.adjustReduceReps',
+  drop_set: 'aw.adjustDropSet',
+  stop_exercise: 'aw.adjustStop',
 }
-const FATIGUE_LABELS = [
-  'Fresh', 'Easy', 'Light', 'Moderate', 'Solid',
-  'Tired', 'Very tired', 'Drained', 'Exhausted', 'Maxed out',
+const FATIGUE_LABELS: MessageKey[] = [
+  'fatigue.1', 'fatigue.2', 'fatigue.3', 'fatigue.4', 'fatigue.5',
+  'fatigue.6', 'fatigue.7', 'fatigue.8', 'fatigue.9', 'fatigue.10',
 ]
 
 function describeAdjustment(suggestion: LiveWorkoutAdjustmentSuggestion): string {
-  const base = ADJUSTMENT_ACTION_LABELS[suggestion.action]
+  const base = tr(ADJUSTMENT_ACTION_LABELS[suggestion.action])
   if (suggestion.action === 'reduce_load' && typeof suggestion.new_weight_kg === 'number') {
-    return `${base} to ${suggestion.new_weight_kg} kg`
+    return tr('aw.adjustToKg', { base, value: suggestion.new_weight_kg })
   }
   if (suggestion.action === 'reduce_reps' && typeof suggestion.new_reps === 'number') {
-    return `${base} to ${suggestion.new_reps}`
+    return tr('aw.adjustTo', { base, value: suggestion.new_reps })
   }
   return base
 }
@@ -95,12 +96,12 @@ function ExerciseArtwork({ name, images }: { name: string; images?: string[] }) 
   const image = images?.find(Boolean)
 
   if (!image || imageFailed) {
-    return <div className="active-exercise-artwork active-exercise-artwork-fallback" role="img" aria-label={`${name} image unavailable`}>
+    return <div className="active-exercise-artwork active-exercise-artwork-fallback" role="img" aria-label={tr('aw.imageUnavailable', { name })}>
       <Dumbbell size={25} aria-hidden="true" />
     </div>
   }
 
-  return <img className="active-exercise-artwork" src={image} alt={`${name} demonstration`} onError={() => setImageFailed(true)} />
+  return <img className="active-exercise-artwork" src={image} alt={tr('aw.imageAlt', { name })} onError={() => setImageFailed(true)} />
 }
 
 function formatDuration(seconds: number): string {
@@ -117,8 +118,8 @@ function formatClock(seconds: number): string {
 }
 
 function formatRestLong(seconds: number): string {
-  if (seconds < 120) return `${seconds} sec`
-  return `${formatRest(seconds)} min`
+  if (seconds < 120) return tr('aw.seconds', { s: seconds })
+  return tr('time.minutes', { m: formatRest(seconds) })
 }
 
 function formatRest(seconds: number): string {
@@ -127,7 +128,7 @@ function formatRest(seconds: number): string {
 
 function formatWarmupDuration(seconds: number): string {
   const minutes = Math.max(1, Math.round(seconds / 60))
-  return `${minutes} min`
+  return tr('time.minutes', { m: minutes })
 }
 
 function formatPace(seconds: number, km: number | null | undefined): string {
@@ -190,11 +191,11 @@ function CardioManualForm({
     const d = dist ? Number(dist) : null;
     
     if (!mins || isNaN(m) || m < 1 || m > 1440) {
-      setError('Duration must be between 1 and 1440 minutes.');
+      setError(tr('aw.errorDuration'));
       return;
     }
     if (d !== null && (isNaN(d) || d < 0)) {
-      setError('Distance cannot be negative.');
+      setError(tr('aw.errorDistance'));
       return;
     }
     
@@ -206,7 +207,7 @@ function CardioManualForm({
     <div className="cardio-panel">
       <div className="cardio-fields">
         <div>
-          <label className="cardio-label" htmlFor="cardio-minutes">Duration (min)</label>
+          <label className="cardio-label" htmlFor="cardio-minutes">{tr('aw.durationMin')}</label>
           <input 
             id="cardio-minutes"
             className="cardio-input"
@@ -214,11 +215,11 @@ function CardioManualForm({
             inputMode="numeric"
             value={mins} 
             onChange={(e) => setMins(e.target.value)} 
-            placeholder="e.g. 30"
+            placeholder={tr('aw.durationPlaceholder')}
           />
         </div>
         <div>
-          <label className="cardio-label" htmlFor="cardio-distance">Distance (km)</label>
+          <label className="cardio-label" htmlFor="cardio-distance">{tr('aw.distanceKm')}</label>
           <input 
             id="cardio-distance"
             className="cardio-input"
@@ -226,7 +227,7 @@ function CardioManualForm({
             inputMode="decimal"
             value={dist} 
             onChange={(e) => setDist(e.target.value)} 
-            placeholder="Optional"
+            placeholder={tr('common.optional')}
           />
         </div>
       </div>
@@ -234,8 +235,8 @@ function CardioManualForm({
       {error && <p className="form-error" role="alert">{error}</p>}
       
       <div className="cardio-actions">
-        <button className="secondary-action" type="button" onClick={onCancel}>Cancel</button>
-        <button className="primary-button" type="button" onClick={handleSave}>Save cardio</button>
+        <button className="secondary-action" type="button" onClick={onCancel}>{tr('common.cancel')}</button>
+        <button className="primary-button" type="button" onClick={handleSave}>{tr('aw.saveCardio')}</button>
       </div>
     </div>
   )
@@ -278,7 +279,7 @@ function isBodyweightOnly(equipment?: string[] | null): boolean {
 }
 
 function formatPrevious({ previous_weight_kg: weight, previous_reps: reps, is_bodyweight }: ActiveExercise): string {
-  if (is_bodyweight) return reps ? `${reps} reps` : '–'
+  if (is_bodyweight) return reps ? tr('workouts.reps', { reps }) : '–'
   if (weight === null || weight === undefined) return '–'
   return reps ? `${weight}×${reps}` : `${weight}`
 }
@@ -389,7 +390,7 @@ function getSession(state: unknown): ActiveSession | null {
 
 function buildWarmupRequest(session: ActiveSession, userGoal?: string | null): WarmupRecommendationRequest {
   return {
-    name: session.name.trim() || 'Workout',
+    name: session.name.trim() || tr('aw.workout'),
     user_goal: userGoal ?? null,
     exercises: session.exercises.map((exercise) => {
       const positiveWeights = exercise.sets
@@ -446,6 +447,7 @@ function readSavedSession(): ActiveSession | null {
 }
 
 function ActiveWorkout() {
+  const t = useT()
   const navigate = usePageNavigate()
   const location = useLocation()
   useScreenAwake()
@@ -642,7 +644,7 @@ function ActiveWorkout() {
   ), 0) ?? 0
   const isEditingWorkout = Boolean(session?.editWorkoutId)
 
-  if (!session) return <div className="screen hifi-theme state-card" role="alert">No active workout selected.</div>
+  if (!session) return <div className="screen hifi-theme state-card" role="alert">{t('aw.noSession')}</div>
 
   function handleSelectExercise(selected: Exercise) {
     setFocus(null)
@@ -934,11 +936,11 @@ function ActiveWorkout() {
     const currentSession = session
     if (!currentSession) return
     if (!user?.id) {
-      setSaveError('Sign in again to save this workout.')
+      setSaveError(t('aw.errorSignIn'))
       return
     }
     if (fatigueLevel === null) {
-      setSaveError('Choose how fatigued you feel to save this workout.')
+      setSaveError(t('aw.errorFatigue'))
       return
     }
     setIsSaving(true)
@@ -989,7 +991,7 @@ function ActiveWorkout() {
       if (key) localStorage.removeItem(key)
       navigate('/workouts')
     } catch (error) {
-      setSaveError(describeError(error, "We couldn't save your workout. Please try again."))
+      setSaveError(describeError(error, t('aw.errorSave')))
       setIsSaving(false)
     }
   }
@@ -999,7 +1001,7 @@ function ActiveWorkout() {
     const user = getCurrentUser()
     if (!currentSession || aiAdjustment.status === 'loading') return
     if (!user?.id) {
-      setAiAdjustment({ status: 'error', message: 'Sign in to ask the AI trainer for adjustments' })
+      setAiAdjustment({ status: 'error', message: t('aw.errorAdjustSignIn') })
       return
     }
     const completedAtRequest = completedSets
@@ -1034,13 +1036,13 @@ function ActiveWorkout() {
       }
     }).filter((exercise) => exercise.exercise_id && !exercise.is_cardio)
     if (!exercises.length) {
-      setAiAdjustment({ status: 'error', message: 'Add at least one exercise before asking the AI for adjustments.' })
+      setAiAdjustment({ status: 'error', message: t('aw.errorAdjustEmpty') })
       return
     }
     setAiAdjustment({ status: 'loading' })
     const durationSeconds = elapsedSeconds(currentSession.startedAt)
     const payload: LiveWorkoutAdjustmentRequest = {
-      name: typeof currentSession.name === 'string' && currentSession.name.trim() ? currentSession.name : 'Workout',
+      name: typeof currentSession.name === 'string' && currentSession.name.trim() ? currentSession.name : t('aw.workout'),
       duration_seconds: Number.isFinite(durationSeconds) ? durationSeconds : 0,
       user_goal: typeof user.objective === 'string' ? user.objective : null,
       exercises,
@@ -1051,7 +1053,7 @@ function ActiveWorkout() {
       setAdjustmentUndo(null)
       setAiAdjustment({ status: 'ready', suggestions: result.suggestions, applied: [] })
     } catch (error) {
-      setAiAdjustment({ status: 'error', message: error instanceof Error ? error.message : 'Unable to get AI adjustments' })
+      setAiAdjustment({ status: 'error', message: error instanceof Error ? error.message : t('aw.errorAdjust') })
     }
   }
 
@@ -1067,7 +1069,7 @@ function ActiveWorkout() {
     const user = getCurrentUser()
     if (!currentSession || warmup.status === 'loading') return
     if (!user?.id) {
-      setWarmup({ status: 'error', message: 'Sign in to get a warm-up.' })
+      setWarmup({ status: 'error', message: t('aw.errorWarmupSignIn') })
       return
     }
     setWarmup({ status: 'loading' })
@@ -1085,7 +1087,7 @@ function ActiveWorkout() {
       }
       setWarmup({
         status: 'error',
-        message: error instanceof Error ? error.message : 'Unable to build your warm-up. Please try again.',
+        message: error instanceof Error ? error.message : t('aw.errorWarmup'),
       })
     }
   }
@@ -1227,22 +1229,22 @@ function ActiveWorkout() {
     <div className={`screen active-workout-screen hifi-screen hifi-theme${runningRestIndex !== null ? ' is-resting' : ''}`}>
       <header className={`aw-header${isEditingWorkout ? ' is-editing' : ''}`}>
         <div className="aw-header-row">
-          <button className="scan-back" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts">
+          <button className="scan-back" type="button" onClick={() => navigate('/workouts')} aria-label={t('aw.backToWorkouts')}>
             <img src={backIcon} alt="" width={36} height={37} />
           </button>
           <div className="aw-title">
             <h1>
-              {isEditingWorkout ? 'Edit Workout' : session.name}
-              {!isEditingWorkout && <span className="aw-clock" aria-label="Elapsed time"><ElapsedTime startedAt={session.startedAt} format={formatClock} /></span>}
+              {isEditingWorkout ? t('aw.editWorkout') : session.name}
+              {!isEditingWorkout && <span className="aw-clock" aria-label={t('aw.elapsed')}><ElapsedTime startedAt={session.startedAt} format={formatClock} /></span>}
             </h1>
             <p className="hifi-caption aw-subtitle">
-              <span>{completedSets}/{totalSets} sets</span>
-              <span>{Math.round(volumeKg).toLocaleString('en-US')}kg lift</span>
+              <span>{t('aw.setsProgress', { done: completedSets, total: totalSets })}</span>
+              <span>{t('aw.volume', { kg: Math.round(volumeKg).toLocaleString(locale()) })}</span>
             </p>
           </div>
-          <button className="hifi-pill aw-finish" type="button" onClick={() => setShowFinish(true)}>{isEditingWorkout ? 'Save' : 'Finish'}</button>
+          <button className="hifi-pill aw-finish" type="button" onClick={() => setShowFinish(true)}>{isEditingWorkout ? t('common.save') : t('aw.finish')}</button>
         </div>
-        <div className="hifi-bar aw-progress" role="progressbar" aria-label="Completed sets" aria-valuemin={0} aria-valuemax={totalSets} aria-valuenow={completedSets}>
+        <div className="hifi-bar aw-progress" role="progressbar" aria-label={t('aw.completedSets')} aria-valuemin={0} aria-valuemax={totalSets} aria-valuenow={completedSets}>
           <span style={{ width: `${totalSets ? (completedSets / totalSets) * 100 : 0}%` }} />
         </div>
         {!isEditingWorkout && (
@@ -1252,30 +1254,30 @@ function ActiveWorkout() {
               type="button"
               onClick={openWarmup}
               disabled={isSaving || session.warmupAdded}
-              aria-label={session.warmupAdded ? 'Warm-up already added' : 'Recommend a warm-up'}
-              title={session.warmupAdded ? 'Warm-up already added' : 'Recommend a warm-up'}
+              aria-label={session.warmupAdded ? t('aw.warmupAdded') : t('aw.recommendWarmup')}
+              title={session.warmupAdded ? t('aw.warmupAdded') : t('aw.recommendWarmup')}
             >
               <Flame size={15} aria-hidden="true" />
-              <span>Warm-up</span>
+              <span>{t('aw.warmup')}</span>
             </button>
             <button
               className="hifi-link-button aw-tool"
               type="button"
               onClick={openAiAdjustment}
               disabled={isSaving}
-              aria-label="Ask AI for adjustments"
-              title="Ask AI for adjustments"
+              aria-label={t('aw.askAi')}
+              title={t('aw.askAi')}
             >
               <Sparkles size={15} aria-hidden="true" />
-              <span>AI adjust</span>
+              <span>{t('aw.aiAdjust')}</span>
             </button>
           </div>
         )}
       </header>
 
       {session.warmupSteps?.length ? (
-        <section className="card active-warmup-card" aria-label="Added warm-up activities">
-          <h2>Warm-up activities</h2>
+        <section className="card active-warmup-card" aria-label={t('aw.addedWarmup')}>
+          <h2>{t('aw.warmupActivities')}</h2>
           <ul>
             {session.warmupSteps.map((step, index) => <li className="warmup-step" key={`${step.title}-${index}`}>
               <div className="warmup-step-heading">
@@ -1296,8 +1298,8 @@ function ActiveWorkout() {
           const isOpen = exerciseIndex === openExerciseIndex
           const bodyId = `aw-exercise-${exerciseIndex}`
           const countLabel = exercise.is_cardio
-            ? 'Cardio'
-            : doneSets > 0 ? `${doneSets}/${exercise.sets.length} sets` : `${exercise.sets.length} ${exercise.sets.length === 1 ? 'set' : 'sets'}`
+            ? t('workouts.cardio')
+            : doneSets > 0 ? t('aw.setsProgress', { done: doneSets, total: exercise.sets.length }) : t(exercise.sets.length === 1 ? 'workouts.setOne' : 'workouts.setMany', { count: exercise.sets.length })
 
           return <article className={`hifi-card aw-exercise${isExerciseDone ? ' is-complete' : ''}`} data-open={isOpen} key={`${exercise.exercise_id}-${exerciseIndex}`}>
             <div className="aw-exercise-head">
@@ -1314,15 +1316,15 @@ function ActiveWorkout() {
                   {countLabel}
                 </span>
               </button>
-              <button className="icon-button ghost exercise-menu-trigger" type="button" aria-label={`Exercise options for ${exercise.name}`} aria-expanded={menuOpen === exerciseIndex} onClick={() => setMenuOpen(menuOpen === exerciseIndex ? null : exerciseIndex)}>
+              <button className="icon-button ghost exercise-menu-trigger" type="button" aria-label={t('aw.exerciseOptions', { name: exercise.name })} aria-expanded={menuOpen === exerciseIndex} onClick={() => setMenuOpen(menuOpen === exerciseIndex ? null : exerciseIndex)}>
                 <MoreVertical size={19} aria-hidden="true" />
               </button>
               {menuOpen === exerciseIndex && <div className="exercise-menu">
-                <button type="button" onClick={() => navigate(`/exercises/${encodeURIComponent(exercise.exercise_id)}/guide`, { state: { fromWorkout: true } })}><Info size={15} aria-hidden="true" />How to do it</button>
-                <button className="exercise-order-action" type="button" onClick={() => moveExercise(exerciseIndex, -1)} disabled={exerciseIndex === 0}><ArrowUp size={15} aria-hidden="true" />Move up</button>
-                <button className="exercise-order-action" type="button" onClick={() => moveExercise(exerciseIndex, 1)} disabled={exerciseIndex === session.exercises.length - 1}><ArrowDown size={15} aria-hidden="true" />Move down</button>
-                <button className="replace-exercise-action" type="button" onClick={() => replaceExercise(exerciseIndex)}><Repeat2 size={15} aria-hidden="true" />Replace exercise</button>
-                <button type="button" onClick={() => removeExercise(exerciseIndex)}><Trash2 size={15} aria-hidden="true" />Remove exercise</button>
+                <button type="button" onClick={() => navigate(`/exercises/${encodeURIComponent(exercise.exercise_id)}/guide`, { state: { fromWorkout: true } })}><Info size={15} aria-hidden="true" />{t('aw.howTo')}</button>
+                <button className="exercise-order-action" type="button" onClick={() => moveExercise(exerciseIndex, -1)} disabled={exerciseIndex === 0}><ArrowUp size={15} aria-hidden="true" />{t('aw.moveUp')}</button>
+                <button className="exercise-order-action" type="button" onClick={() => moveExercise(exerciseIndex, 1)} disabled={exerciseIndex === session.exercises.length - 1}><ArrowDown size={15} aria-hidden="true" />{t('aw.moveDown')}</button>
+                <button className="replace-exercise-action" type="button" onClick={() => replaceExercise(exerciseIndex)}><Repeat2 size={15} aria-hidden="true" />{t('aw.replaceExercise')}</button>
+                <button type="button" onClick={() => removeExercise(exerciseIndex)}><Trash2 size={15} aria-hidden="true" />{t('aw.removeExercise')}</button>
               </div>}
             </div>
 
@@ -1331,14 +1333,14 @@ function ActiveWorkout() {
                 <ExerciseArtwork name={exercise.name} images={exercise.images} />
                 {!exercise.is_cardio && (
                   <div className="aw-rest-row">
-                    <span className="aw-rest-label">Rest time</span>
-                    <button className="aw-step" type="button" aria-label={`Rest 15 seconds less for ${exercise.name}`} onClick={() => chooseRest(exerciseIndex, Math.max(15, (exercise.rest_enabled ? restSeconds : DEFAULT_REST_SECONDS) - REST_STEP_SECONDS))}>
+                    <span className="aw-rest-label">{t('aw.restTime')}</span>
+                    <button className="aw-step" type="button" aria-label={t('aw.restLessFor', { name: exercise.name })} onClick={() => chooseRest(exerciseIndex, Math.max(15, (exercise.rest_enabled ? restSeconds : DEFAULT_REST_SECONDS) - REST_STEP_SECONDS))}>
                       <Minus size={18} aria-hidden="true" />
                     </button>
-                    <button className={`aw-rest-value${exercise.rest_enabled ? '' : ' is-off'}`} type="button" aria-haspopup="dialog" aria-label={`Rest timer for ${exercise.name}: ${exercise.rest_enabled ? formatRestLong(restSeconds) : 'off'}`} onClick={() => setRestPickerIndex(exerciseIndex)}>
-                      {exercise.rest_enabled ? formatRestLong(restSeconds) : 'Off'}
+                    <button className={`aw-rest-value${exercise.rest_enabled ? '' : ' is-off'}`} type="button" aria-haspopup="dialog" aria-label={t('aw.restTimerFor', { name: exercise.name, value: exercise.rest_enabled ? formatRestLong(restSeconds) : t('aw.restOff') })} onClick={() => setRestPickerIndex(exerciseIndex)}>
+                      {exercise.rest_enabled ? formatRestLong(restSeconds) : t('aw.off')}
                     </button>
-                    <button className="aw-step" type="button" aria-label={`Rest 15 seconds more for ${exercise.name}`} onClick={() => chooseRest(exerciseIndex, Math.min(600, (exercise.rest_enabled ? restSeconds : DEFAULT_REST_SECONDS - REST_STEP_SECONDS) + REST_STEP_SECONDS))}>
+                    <button className="aw-step" type="button" aria-label={t('aw.restMoreFor', { name: exercise.name })} onClick={() => chooseRest(exerciseIndex, Math.min(600, (exercise.rest_enabled ? restSeconds : DEFAULT_REST_SECONDS - REST_STEP_SECONDS) + REST_STEP_SECONDS))}>
                       <Plus size={18} aria-hidden="true" />
                     </button>
                   </div>
@@ -1371,25 +1373,25 @@ function ActiveWorkout() {
                     return (
                       <div className="cardio-panel cardio-summary">
                         <div>
-                          <span className="cardio-label">Time</span>
+                          <span className="cardio-label">{t('profile.time')}</span>
                           <strong className="cardio-stat">{formatDuration(set.duration_seconds || 0)}</strong>
                         </div>
                         {set.distance_km != null && set.distance_km > 0 && (
                           <div>
-                            <span className="cardio-label">Distance</span>
+                            <span className="cardio-label">{t('aw.distance')}</span>
                             <strong className="cardio-stat">{set.distance_km} km</strong>
                           </div>
                         )}
                         {set.distance_km != null && set.distance_km > 0 && (set.duration_seconds ?? 0) > 0 && (
                           <div>
-                            <span className="cardio-label">Pace</span>
+                            <span className="cardio-label">{t('aw.pace')}</span>
                             <strong className="cardio-stat">{formatPace(set.duration_seconds || 0, set.distance_km)}</strong>
                           </div>
                         )}
                         <button
                           className="secondary-action cardio-edit-button"
                           type="button"
-                          aria-label={`Edit ${exercise.name} cardio`}
+                          aria-label={t('aw.editCardio', { name: exercise.name })}
                           onClick={() => updateSet(exerciseIndex, 0, { cardio_status: 'manual' })}
                         >
                           Edit
@@ -1417,8 +1419,8 @@ function ActiveWorkout() {
                             className="cardio-input"
                             type="number"
                             inputMode="decimal"
-                            aria-label="Distance in km, optional"
-                            placeholder="Distance (km, optional)"
+                            aria-label={t('aw.distanceAria')}
+                            placeholder={t('aw.distancePlaceholder')}
                             value={set.distance_km || ''}
                             onChange={e => updateSet(exerciseIndex, 0, { distance_km: e.target.value ? Number(e.target.value) : null })}
                           />
@@ -1428,20 +1430,20 @@ function ActiveWorkout() {
                       <div className="cardio-actions">
                         {status === 'idle' && (
                           <>
-                            <button className="primary-button" type="button" onClick={() => startCardioTimer(exerciseIndex)}>Start timer</button>
-                            <button className="secondary-action" type="button" onClick={() => updateSet(exerciseIndex, 0, { cardio_status: 'manual' })}>Enter manually</button>
+                            <button className="primary-button" type="button" onClick={() => startCardioTimer(exerciseIndex)}>{t('aw.startTimer')}</button>
+                            <button className="secondary-action" type="button" onClick={() => updateSet(exerciseIndex, 0, { cardio_status: 'manual' })}>{t('aw.enterManually')}</button>
                           </>
                         )}
                         {status === 'running' && (
                           <>
-                            <button className="secondary-action" type="button" onClick={() => pauseCardioTimer(exerciseIndex)}><Pause size={18} aria-hidden="true" /> Pause</button>
-                            <button className="primary-button" type="button" onClick={() => finishCardioTimer(exerciseIndex)}>Finish block</button>
+                            <button className="secondary-action" type="button" onClick={() => pauseCardioTimer(exerciseIndex)}><Pause size={18} aria-hidden="true" /> {t('aw.pause')}</button>
+                            <button className="primary-button" type="button" onClick={() => finishCardioTimer(exerciseIndex)}>{t('aw.finishBlock')}</button>
                           </>
                         )}
                         {status === 'paused' && (
                           <>
-                            <button className="secondary-action" type="button" onClick={() => resumeCardioTimer(exerciseIndex)}><Play size={18} aria-hidden="true" /> Resume</button>
-                            <button className="primary-button" type="button" onClick={() => finishCardioTimer(exerciseIndex)}>Finish block</button>
+                            <button className="secondary-action" type="button" onClick={() => resumeCardioTimer(exerciseIndex)}><Play size={18} aria-hidden="true" /> {t('aw.resume')}</button>
+                            <button className="primary-button" type="button" onClick={() => finishCardioTimer(exerciseIndex)}>{t('aw.finishBlock')}</button>
                           </>
                         )}
                       </div>
@@ -1459,7 +1461,7 @@ function ActiveWorkout() {
                   const isNextSet = exerciseIndex === nextExerciseIndex && setIndex === nextSetIndex
                   const isSetOpen = setIndex === openSetIndex
                   const doneButton = (
-                    <button className={`done-button aw-done${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => toggleSetComplete(exerciseIndex, setIndex, !set.is_completed)} aria-label={`Toggle set ${set.set_number}`} aria-pressed={set.is_completed}>
+                    <button className={`done-button aw-done${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => toggleSetComplete(exerciseIndex, setIndex, !set.is_completed)} aria-label={t('aw.toggleSet', { n: set.set_number })} aria-pressed={set.is_completed}>
                       <Check size={isSetOpen ? 22 : 16} strokeWidth={3} aria-hidden="true" />
                     </button>
                   )
@@ -1468,7 +1470,7 @@ function ActiveWorkout() {
                     <SwipeToDeleteRow
                       className="swipe-row--set"
                       actionWidth={64}
-                      label={`set ${set.set_number} of ${exercise.name}`}
+                      label={t('aw.setOf', { n: set.set_number, name: exercise.name })}
                       disabled={pendingSetRemoval !== null}
                       onDelete={() => scheduleSetRemoval({ exerciseIndex, setIndex, setNumber: set.set_number, key: setKey, set: { ...set }, kind: session.setKinds[setKey], rpe: rpeValues[setKey], removed: false })}
                     >
@@ -1480,14 +1482,14 @@ function ActiveWorkout() {
                               {kindBadge}
                               <select className="set-kind-select" value={kind} onChange={(event) => {
                                 updateSetKind(exerciseIndex, set.set_number, event.target.value as SetKind)
-                              }} aria-label={`Set ${set.set_number} type`} title="Set type">
-                                <option value="normal">{set.set_number} — Normal set</option>
-                                <option value="warmup">W — Warm-up: prepare for heavier sets</option>
-                                <option value="drop">D — Drop set: lower weight, keep going</option>
-                                <option value="failure">F — Failure: no more good-form reps</option>
+                              }} aria-label={t('aw.setType', { n: set.set_number })} title={t('aw.setTypeTitle')}>
+                                <option value="normal">{set.set_number} — {t('aw.kindNormal')}</option>
+                                <option value="warmup">{t('aw.kindWarmup')}</option>
+                                <option value="drop">{t('aw.kindDrop')}</option>
+                                <option value="failure">{t('aw.kindFailure')}</option>
                               </select>
                             </span>
-                            <button className="aw-set-close" type="button" aria-expanded="true" aria-label={`Close set ${set.set_number}`} onClick={() => setFocus({ exerciseIndex, setIndex: null })}>
+                            <button className="aw-set-close" type="button" aria-expanded="true" aria-label={t('aw.closeSet', { n: set.set_number })} onClick={() => setFocus({ exerciseIndex, setIndex: null })}>
                               <ChevronUp size={18} aria-hidden="true" />
                             </button>
                             {doneButton}
@@ -1495,34 +1497,34 @@ function ActiveWorkout() {
                           <div className="aw-fields">
                             <span aria-hidden="true" />
                             <span className="aw-field-label" aria-hidden="true">Kg</span>
-                            <span className="aw-field-label" aria-hidden="true">Reps</span>
+                            <span className="aw-field-label" aria-hidden="true">{t('aw.reps')}</span>
                             <span className="aw-field-label" aria-hidden="true">RPE</span>
 
                             <span aria-hidden="true" />
                             {exercise.is_bodyweight
-                              ? <span className="set-bodyweight aw-field-value" aria-label="Bodyweight, no weight to enter">BW</span>
-                              : <SetNumberInput label={`${exercise.name} set ${set.set_number} weight`} decimal value={set.weight_kg} onChange={(weight_kg) => updateSet(exerciseIndex, setIndex, { weight_kg })} />}
-                            <SetNumberInput id={repsInputId(exerciseIndex, set.set_number)} label={`${exercise.name} set ${set.set_number} reps`} value={set.reps} invalid={missingReps === setKey} onChange={(reps) => {
+                              ? <span className="set-bodyweight aw-field-value" aria-label={t('aw.bodyweightAria')}>{t('aw.bw')}</span>
+                              : <SetNumberInput label={t('aw.setWeight', { n: set.set_number, name: exercise.name })} decimal value={set.weight_kg} onChange={(weight_kg) => updateSet(exerciseIndex, setIndex, { weight_kg })} />}
+                            <SetNumberInput id={repsInputId(exerciseIndex, set.set_number)} label={t('aw.setReps', { n: set.set_number, name: exercise.name })} value={set.reps} invalid={missingReps === setKey} onChange={(reps) => {
                               updateSet(exerciseIndex, setIndex, { reps })
                               setMissingReps(null)
                             }} />
-                            <button className="rpe-select aw-field-value" type="button" aria-haspopup="dialog" aria-label={`Set ${set.set_number} RPE: ${rpe ?? 'none'}`} onClick={() => setRpePicker({ exerciseIndex, setIndex })}>
+                            <button className="rpe-select aw-field-value" type="button" aria-haspopup="dialog" aria-label={t('aw.setRpe', { n: set.set_number, value: rpe ?? t('aw.none') })} onClick={() => setRpePicker({ exerciseIndex, setIndex })}>
                               {rpe ?? '—'}
                             </button>
 
-                            <span className="aw-last-label">Last</span>
-                            <span className="aw-last" aria-hidden="true">{exercise.is_bodyweight ? 'BW' : exercise.previous_weight_kg ?? '—'}</span>
+                            <span className="aw-last-label">{t('aw.last')}</span>
+                            <span className="aw-last" aria-hidden="true">{exercise.is_bodyweight ? t('aw.bw') : exercise.previous_weight_kg ?? '—'}</span>
                             <span className="aw-last" aria-hidden="true">{exercise.previous_reps ?? '—'}</span>
                             <span className="aw-last" aria-hidden="true">—</span>
-                            <span className="visually-hidden">Last time: {formatPrevious(exercise)}</span>
+                            <span className="visually-hidden">{t('aw.lastTime', { value: formatPrevious(exercise) })}</span>
                           </div>
                         </div>
                       ) : (
                         <div className={`aw-set${set.is_completed ? ' is-done' : ''}${isNextSet ? ' is-next' : ''}`}>
-                          <button className="aw-set-open" type="button" data-swipe-through aria-expanded="false" aria-label={`Edit set ${set.set_number}`} onClick={() => setFocus({ exerciseIndex, setIndex })}>
+                          <button className="aw-set-open" type="button" data-swipe-through aria-expanded="false" aria-label={t('aw.editSet', { n: set.set_number })} onClick={() => setFocus({ exerciseIndex, setIndex })}>
                             <span className="aw-set-name">Set {set.set_number}{kindBadge}</span>
                             <span className="aw-set-values">
-                              <span>{exercise.is_bodyweight ? 'BW' : set.weight_kg ? `${set.weight_kg}kg` : '—kg'}</span>
+                              <span>{exercise.is_bodyweight ? t('aw.bw') : set.weight_kg ? `${set.weight_kg}kg` : '—kg'}</span>
                               <span>{set.reps ? `${set.reps}reps` : '—reps'}</span>
                               {rpe !== null && <span>{rpe}RPE</span>}
                             </span>
@@ -1531,26 +1533,26 @@ function ActiveWorkout() {
                         </div>
                       )}
                     </SwipeToDeleteRow>
-                    {missingReps === setKey && <p className="set-row-hint" role="status">Enter your reps to complete this set.</p>}
-                    {hasHighWeightWarning && <p className="high-weight-warning" role="status">This weight is extremely high. Check that you entered it correctly.</p>}
+                    {missingReps === setKey && <p className="set-row-hint" role="status">{t('aw.enterReps')}</p>}
+                    {hasHighWeightWarning && <p className="high-weight-warning" role="status">{t('aw.weightHigh')}</p>}
                   </div>
                 })}
               </div>
               )}
 
               {pendingSetRemoval?.exerciseIndex === exerciseIndex && <div className="set-removal-undo" role="status">
-                <span>Set {pendingSetRemoval.setNumber} deleted</span>
-                <button type="button" onClick={undoSetRemoval}>Undo</button>
+                <span>{t('aw.setDeleted', { n: pendingSetRemoval.setNumber })}</span>
+                <button type="button" onClick={undoSetRemoval}>{t('tip.undo')}</button>
               </div>}
 
               {!exercise.is_cardio && (
-                <button className="hifi-link-button aw-add" type="button" onClick={() => addSet(exerciseIndex)}>Add set</button>
+                <button className="hifi-link-button aw-add" type="button" onClick={() => addSet(exerciseIndex)}>{t('aw.addSet')}</button>
               )}
             </div>}
 
             {!isOpen && pendingSetRemoval?.exerciseIndex === exerciseIndex && <div className="set-removal-undo" role="status">
-              <span>Set {pendingSetRemoval.setNumber} deleted</span>
-              <button type="button" onClick={undoSetRemoval}>Undo</button>
+              <span>{t('aw.setDeleted', { n: pendingSetRemoval.setNumber })}</span>
+              <button type="button" onClick={undoSetRemoval}>{t('tip.undo')}</button>
             </div>}
           </article>
         })}
@@ -1564,7 +1566,7 @@ function ActiveWorkout() {
           setIsSelectModalOpen(true)
         }}
       >
-        Add exercise
+        {t('aw.addExercise')}
       </button>
       <MediaCredit />
 
@@ -1573,10 +1575,10 @@ function ActiveWorkout() {
         const seconds = exercise.rest_enabled ? exercise.rest_seconds ?? DEFAULT_REST_SECONDS : null
         return (
           <WheelPickerSheet
-            title="Rest Timer"
+            title={t('aw.restTimer')}
             subtitle={exercise.name}
-            options={REST_OPTIONS}
-            initialIndex={seconds === null ? 0 : Math.min(REST_OPTIONS.length - 1, Math.max(1, Math.round(seconds / 5)))}
+            options={restOptions()}
+            initialIndex={seconds === null ? 0 : Math.min(restOptions().length - 1, Math.max(1, Math.round(seconds / 5)))}
             onDone={(value) => chooseRest(restPickerIndex, value)}
             onClose={() => setRestPickerIndex(null)}
           />
@@ -1588,7 +1590,7 @@ function ActiveWorkout() {
         const rpe = rpeValues[`${rpePicker.exerciseIndex}:${set.set_number}`] ?? set.rpe ?? null
         return (
           <RpeSheet
-            subtitle={`${exercise.name} · Set ${set.set_number}${set.weight_kg ? `: ${set.weight_kg}kg` : ''}${set.reps ? ` × ${set.reps}` : ''}`}
+            subtitle={`${exercise.name} · ${t('aw.setN', { n: set.set_number })}${set.weight_kg ? `: ${set.weight_kg}kg` : ''}${set.reps ? ` × ${set.reps}` : ''}`}
             rpe={rpe}
             onDone={(value) => chooseRpe(rpePicker.exerciseIndex, rpePicker.setIndex, value)}
             onClose={() => setRpePicker(null)}
@@ -1598,25 +1600,25 @@ function ActiveWorkout() {
       {runningRestIndex !== null && (() => {
         const nextExercise = session.exercises[nextExerciseIndex]
         const nextLabel = nextExercise && nextSetIndex >= 0
-          ? `Next: ${nextExercise.name} Set ${nextExercise.sets[nextSetIndex].set_number}`
+          ? t('aw.next', { name: nextExercise.name, n: nextExercise.sets[nextSetIndex].set_number })
           : session.exercises[runningRestIndex]?.name
         return (
-          <section className="aw-rest-sheet" aria-label="Rest timer">
+          <section className="aw-rest-sheet" aria-label={t('aw.restTimer')}>
             <div className="aw-rest-top">
               <span className="aw-rest-next">{nextLabel}</span>
-              <button className="aw-rest-close" type="button" aria-label="Dismiss rest timer" onClick={() => stopRest(runningRestIndex)}>
+              <button className="aw-rest-close" type="button" aria-label={t('aw.dismissRest')} onClick={() => stopRest(runningRestIndex)}>
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
             <div className="aw-rest-controls">
-              <button className="aw-step" type="button" aria-label="Rest 15 seconds less" onClick={() => changeRunningRest(runningRestIndex, -REST_STEP_SECONDS)}>
+              <button className="aw-step" type="button" aria-label={t('aw.restLess')} onClick={() => changeRunningRest(runningRestIndex, -REST_STEP_SECONDS)}>
                 <Minus size={20} aria-hidden="true" />
               </button>
               <strong className="aw-rest-time" role="timer">{formatRestLong(restRemaining[runningRestIndex])}</strong>
-              <button className="aw-step" type="button" aria-label="Rest 15 seconds more" onClick={() => changeRunningRest(runningRestIndex, REST_STEP_SECONDS)}>
+              <button className="aw-step" type="button" aria-label={t('aw.restMore')} onClick={() => changeRunningRest(runningRestIndex, REST_STEP_SECONDS)}>
                 <Plus size={20} aria-hidden="true" />
               </button>
-              <button className="hifi-pill aw-rest-skip" type="button" onClick={() => stopRest(runningRestIndex)}>Skip</button>
+              <button className="hifi-pill aw-rest-skip" type="button" onClick={() => stopRest(runningRestIndex)}>{t('aw.skip')}</button>
             </div>
           </section>
         )
@@ -1625,40 +1627,40 @@ function ActiveWorkout() {
       {showAiAdjustment && (
         <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowAiAdjustment(false) }}>
           <div className="confirmation-modal ai-adjust-modal" role="dialog" aria-modal="true" aria-labelledby="ai-adjust-title" tabIndex={-1} ref={aiAdjustmentDialogRef}>
-            <button className="modal-close" type="button" onClick={() => setShowAiAdjustment(false)} aria-label="Close"><X size={20} /></button>
-            <p className="eyebrow">AI trainer</p>
-            <h2 id="ai-adjust-title">Workout adjustments</h2>
+            <button className="modal-close" type="button" onClick={() => setShowAiAdjustment(false)} aria-label={t('common.close')}><X size={20} /></button>
+            <p className="eyebrow">{t('aw.aiTrainer')}</p>
+            <h2 id="ai-adjust-title">{t('aw.adjustments')}</h2>
             {aiAdjustment.status === 'loading'
-              && <p className="ai-adjust-loading" role="status">Reviewing your sets and effort ratings...</p>}
+              && <p className="ai-adjust-loading" role="status">{t('aw.reviewing')}</p>}
             {aiAdjustment.status === 'ready' && (aiAdjustment.suggestions.length === 0
-              ? <div className="ai-adjust-feedback"><p className="ai-adjust-result-none" role="status">No modifications suggested. Your current plan looks on track for the rest of the session.</p></div>
+              ? <div className="ai-adjust-feedback"><p className="ai-adjust-result-none" role="status">{t('aw.noAdjustments')}</p></div>
               : <div className="ai-adjust-result">
                 <ul>
                   {aiAdjustment.suggestions.map((suggestion, index) => {
                     const isApplied = aiAdjustment.applied.includes(index)
                     const exerciseName = session.exercises.find((exercise) => exercise.exercise_id === suggestion.exercise_id)?.name
                     return <li key={`${suggestion.exercise_id}:${suggestion.action}`} className={isApplied ? 'is-applied' : undefined}>
-                      <span>{exerciseName ?? 'Exercise'}</span>
+                      <span>{exerciseName ?? t('aw.exercise')}</span>
                       <p><strong>{describeAdjustment(suggestion)}.</strong> {suggestion.reason}</p>
                       {isApplied
-                        ? <p className="ai-adjust-applied">Applied</p>
-                        : <button className="ai-adjust-accept" type="button" onClick={() => applyOneAdjustment(index)}>Accept</button>}
+                        ? <p className="ai-adjust-applied">{t('aw.applied')}</p>
+                        : <button className="ai-adjust-accept" type="button" onClick={() => applyOneAdjustment(index)}>{t('tip.accept')}</button>}
                     </li>
                   })}
                 </ul>
                 {aiAdjustment.applied.length < aiAdjustment.suggestions.length
-                  && <button className="ai-adjust-accept-all" type="button" onClick={applyAllAdjustments}>Accept all suggestions</button>}
+                  && <button className="ai-adjust-accept-all" type="button" onClick={applyAllAdjustments}>{t('aw.acceptAll')}</button>}
               </div>)}
             {aiAdjustment.status === 'error' && <div className="ai-adjust-feedback">
               <p className="ai-adjust-error" role="alert">{aiAdjustment.message}</p>
-              <button className="secondary-action" type="button" onClick={requestAiAdjustment}>Try again</button>
+              <button className="secondary-action" type="button" onClick={requestAiAdjustment}>{t('common.retry')}</button>
             </div>}
             {adjustmentUndo && <div className="set-removal-undo" role="status">
-              <span>Adjustment applied</span>
-              <button type="button" onClick={undoAdjustment}>Undo</button>
+              <span>{t('aw.adjustmentApplied')}</span>
+              <button type="button" onClick={undoAdjustment}>{t('tip.undo')}</button>
             </div>}
             <div className="modal-actions">
-              <button className="secondary-action" type="button" onClick={() => setShowAiAdjustment(false)}>Close</button>
+              <button className="secondary-action" type="button" onClick={() => setShowAiAdjustment(false)}>{t('common.close')}</button>
             </div>
           </div>
         </div>
@@ -1667,15 +1669,14 @@ function ActiveWorkout() {
       {showWarmup && (
         <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowWarmup(false) }}>
           <div className="confirmation-modal ai-adjust-modal warmup-modal" role="dialog" aria-modal="true" aria-labelledby="warmup-title" tabIndex={-1} ref={warmupDialogRef}>
-            <button className="modal-close" type="button" onClick={() => setShowWarmup(false)} aria-label="Close"><X size={20} /></button>
-            <p className="eyebrow">Warm-up</p>
-            <h2 id="warmup-title">Warm-up plan</h2>
+            <button className="modal-close" type="button" onClick={() => setShowWarmup(false)} aria-label={t('common.close')}><X size={20} /></button>
+            <p className="eyebrow">{t('aw.warmup')}</p>
+            <h2 id="warmup-title">{t('aw.warmupPlan')}</h2>
             {warmup.status === 'loading'
-              && <p className="ai-adjust-loading" role="status">Building a warm-up from your working weights...</p>}
+              && <p className="ai-adjust-loading" role="status">{t('aw.buildingWarmup')}</p>}
             {warmup.status === 'premium' && <div className="warmup-feedback">
               <p className="warmup-copy">
-                <strong>Warm-up recommendations are a Premium feature.</strong> Upgrade to get a tailored
-                warm-up with ramp-up sets built from the weights you are about to lift.
+                <strong>{t('aw.warmupPremium')}</strong> {t('aw.warmupPremiumBody')}
               </p>
               <button
                 className="warmup-cta"
@@ -1683,14 +1684,14 @@ function ActiveWorkout() {
                 onClick={() => navigate('/premium', { state: { from: location.pathname } })}
               >
                 <Crown size={16} aria-hidden="true" />
-                Upgrade to Premium
+                {t('aw.upgrade')}
               </button>
             </div>}
             {warmup.status === 'ready' && <div className="warmup-plan">
               <p className="warmup-summary">{warmup.recommendation.summary}</p>
               <p className="warmup-total">
                 <Clock3 size={14} aria-hidden="true" />
-                About {formatWarmupDuration(warmup.recommendation.total_duration_seconds)}
+                {t('aw.about', { value: formatWarmupDuration(warmup.recommendation.total_duration_seconds) })}
               </p>
               <ul>
                 {warmup.recommendation.steps.map((step, index) => <li className="warmup-step" key={`${step.title}-${index}`}>
@@ -1710,7 +1711,7 @@ function ActiveWorkout() {
                   <p>{step.detail}</p>
                   {step.sets.length > 0 && <div className="warmup-sets">
                     {step.sets.map((set, setIndex) => <span key={setIndex}>
-                      {set.weight_kg ? `${set.weight_kg} kg` : 'Bodyweight'} × {set.reps}
+                      {set.weight_kg ? `${set.weight_kg} kg` : t('aw.bodyweight')} × {set.reps}
                     </span>)}
                   </div>}
                 </li>)}
@@ -1722,15 +1723,15 @@ function ActiveWorkout() {
                 disabled={!selectedWarmupSteps.length}
               >
                 <Plus size={16} aria-hidden="true" />
-                Add selected recommendations
+                {t('aw.addSelected')}
               </button>
             </div>}
             {warmup.status === 'error' && <div className="warmup-feedback">
               <p className="ai-adjust-error" role="alert">{warmup.message}</p>
-              <button className="secondary-action" type="button" onClick={requestWarmup}>Try again</button>
+              <button className="secondary-action" type="button" onClick={requestWarmup}>{t('common.retry')}</button>
             </div>}
             <div className="modal-actions">
-              <button className="secondary-action" type="button" onClick={() => setShowWarmup(false)}>Close</button>
+              <button className="secondary-action" type="button" onClick={() => setShowWarmup(false)}>{t('common.close')}</button>
             </div>
           </div>
         </div>
@@ -1739,31 +1740,31 @@ function ActiveWorkout() {
       {showFinish && (
         <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeFinish() }}>
           <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="finish-title" tabIndex={-1} ref={finishDialogRef}>
-            <button className="modal-close" type="button" onClick={closeFinish} aria-label="Close"><X size={20} /></button>
-            <p className="eyebrow">{session?.editWorkoutId ? 'Edit workout history' : 'Session complete'}</p>
-            <h2 id="finish-title">{session?.editWorkoutId ? 'Save workout changes?' : 'Finish workout?'}</h2>
+            <button className="modal-close" type="button" onClick={closeFinish} aria-label={t('common.close')}><X size={20} /></button>
+            <p className="eyebrow">{session?.editWorkoutId ? t('aw.editHistory') : t('aw.sessionComplete')}</p>
+            <h2 id="finish-title">{session?.editWorkoutId ? t('aw.saveChangesQuestion') : t('aw.finishQuestion')}</h2>
             {isEditingWorkout
-              ? <p>Your original date and duration will be kept. Changes are saved to this workout only when confirmed.</p>
+              ? <p>{t('aw.editKeepsDate')}</p>
               : <p>
                   {(completedSets || completedCardio)
-                    ? `${completedSets} of ${totalSets} sets done${session.exercises.some((exercise) => exercise.is_cardio) ? `, ${completedCardio} cardio` : ''} · `
-                    : 'No sets completed yet. Complete at least one to save. · '}
-                  <ElapsedTime startedAt={session.startedAt} format={(seconds) => `${Math.max(1, Math.round(seconds / 60))} min`} />
+                    ? `${t('aw.setsDone', { done: completedSets, total: totalSets })}${session.exercises.some((exercise) => exercise.is_cardio) ? `, ${t('aw.cardioDone', { count: completedCardio })}` : ''} · `
+                    : `${t('aw.noSetsDone')} · `}
+                  <ElapsedTime startedAt={session.startedAt} format={(seconds) => t('time.minutes', { m: Math.max(1, Math.round(seconds / 60)) })} />
                 </p>}
             <div className="workout-name-field">
-              <label htmlFor="completed-workout-name">Workout name (e.g. Best chest day)</label>
+              <label htmlFor="completed-workout-name">{t('aw.workoutNameLabel')}</label>
               <input
                 id="completed-workout-name"
                 type="text"
                 maxLength={120}
-                placeholder="Best chest day"
+                placeholder={t('aw.workoutNamePlaceholder')}
                 value={workoutName}
                 onChange={(event) => setWorkoutName(event.target.value)}
                 disabled={isSaving}
               />
             </div>
             <fieldset className="fatigue-field" aria-describedby="fatigue-hint">
-              <legend>How fatigued do you feel after this workout?</legend>
+              <legend>{t('aw.fatigueQuestion')}</legend>
               <div className="fatigue-scale">
                 {FATIGUE_LABELS.map((label, index) => {
                   const level = index + 1
@@ -1773,7 +1774,7 @@ function ActiveWorkout() {
                       type="button"
                       className="fatigue-scale-button"
                       aria-pressed={fatigueLevel === level}
-                      aria-label={`${level} of 10, ${label}`}
+                      aria-label={t('aw.fatigueAria', { level, label: t(label) })}
                       onClick={() => selectFatigue(level)}
                       disabled={isSaving}
                     >
@@ -1784,26 +1785,26 @@ function ActiveWorkout() {
               </div>
               <p className="fatigue-hint" id="fatigue-hint">
                 {fatigueLevel === null
-                  ? 'Choose 1 (fresh) to 10 (exhausted). This tunes tomorrow’s calories and training.'
-                  : `${fatigueLevel}/10 · ${FATIGUE_LABELS[fatigueLevel - 1]}. Used for tomorrow’s calories and training.`}
+                  ? t('aw.fatigueChoose')
+                  : t('aw.fatigueChosen', { level: fatigueLevel, label: t(FATIGUE_LABELS[fatigueLevel - 1]) })}
               </p>
               {fatigueLevel !== null && fatigueLevel > 5 && (
                 <p className="fatigue-hint fatigue-hint-high">
-                  High fatigue: tomorrow’s calorie target gets a recovery bump and training volume will be reduced.
+                  {t('aw.fatigueHigh')}
                 </p>
               )}
             </fieldset>
             {saveError && <p className="form-error">{saveError}</p>}
             <div className="modal-actions">
-              <button className="secondary-action" type="button" onClick={closeFinish} disabled={isSaving}>Keep training</button>
-              <button className="danger-action" type="button" onClick={discardWorkout} disabled={isSaving}>{confirmDiscard ? 'Tap again to discard' : session?.editWorkoutId ? 'Discard edits' : 'Discard workout'}</button>
-              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || fatigueLevel === null || (!isEditingWorkout && completedSets === 0 && completedCardio === 0)}>{isSaving ? 'Saving...' : session?.editWorkoutId ? 'Save changes' : 'Save workout'}</button>
+              <button className="secondary-action" type="button" onClick={closeFinish} disabled={isSaving}>{t('aw.keepTraining')}</button>
+              <button className="danger-action" type="button" onClick={discardWorkout} disabled={isSaving}>{confirmDiscard ? t('aw.tapAgain') : session?.editWorkoutId ? t('aw.discardEdits') : t('progressBar.discard')}</button>
+              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || fatigueLevel === null || (!isEditingWorkout && completedSets === 0 && completedCardio === 0)}>{isSaving ? t('common.saving') : session?.editWorkoutId ? t('common.saveChanges') : t('aw.saveWorkout')}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Pop-up de sélection d'exercice */}
+      {/* Exercise picker */}
       <SelectExerciseModal
         isOpen={isSelectModalOpen}
         onClose={() => {

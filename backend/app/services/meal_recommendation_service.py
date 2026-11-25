@@ -15,6 +15,7 @@ from fastapi import HTTPException
 
 from app.core.ai_quota import use_ai_call
 from app.core.config import get_settings
+from app.core.i18n import get_language, pick
 from app.core.local_day import LocalDay
 from app.db.supabase_client import get_supabase
 from app.schemas.nutrition import MealCreateRequest, MealIngredient, MealRecommendation, MealRecommendationsResponse
@@ -125,10 +126,15 @@ def ask_model(candidates: list[dict[str, Any]], remaining: dict[str, float], obj
             for meal in candidates
         ],
     }
+    instruction = (
+        f"{INSTRUCTION} Write each \"reason\" in natural Spanish."
+        if get_language() == "es"
+        else INSTRUCTION
+    )
     request: dict[str, Any] = {
         "model": settings.ai_model,
         "temperature": 0.4,
-        "messages": [{"role": "system", "content": INSTRUCTION}, {"role": "user", "content": json.dumps(payload)}],
+        "messages": [{"role": "system", "content": instruction}, {"role": "user", "content": json.dumps(payload)}],
         "response_format": {"type": "json_object"},
     }
     if "gpt-oss" in settings.ai_model:
@@ -168,8 +174,14 @@ def pick_meals(candidates: list[dict[str, Any]], answer: Any) -> list[tuple[dict
 
 def _rules_reason(meal: dict[str, Any]) -> str:
     if meal["origin"] == "favorite":
-        return "One of your favorites, and it fits what you have left today."
-    return "Fits the calories and macros you have left today."
+        return pick(
+            "One of your favorites, and it fits what you have left today.",
+            "Una de tus favoritas y encaja con lo que te queda hoy.",
+        )
+    return pick(
+        "Fits the calories and macros you have left today.",
+        "Encaja con las calorías y macros que te quedan hoy.",
+    )
 
 
 def _choose(user_id: str, candidates: list[dict[str, Any]], remaining: dict[str, float], objective: str | None) -> list[tuple[dict[str, Any], str, str]]:

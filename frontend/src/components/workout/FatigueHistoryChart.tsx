@@ -1,4 +1,5 @@
 import type { WorkoutStatisticsFatiguePoint } from '../../types/workout'
+import { t } from '../../i18n'
 import { formatChartDate, formatFatigueDay } from '../../utils/workoutStatistics'
 
 interface FatigueHistoryChartProps {
@@ -66,7 +67,7 @@ export default function FatigueHistoryChart({ points }: FatigueHistoryChartProps
       <div
         className="stats-chart-graphic"
         role="img"
-        aria-label={`Fatigue history chart: ${orderedPoints.length} rated ${orderedPoints.length === 1 ? 'day' : 'days'}, average ${average.toFixed(1)} out of 10, ${highCount} above the high-fatigue threshold`}
+        aria-label={t('stats.fatigueChartAria', { days: t(orderedPoints.length === 1 ? 'stats.ratedDayOne' : 'stats.ratedDayMany', { count: orderedPoints.length }), average: average.toFixed(1), high: highCount })}
       >
         <svg className="stats-line-chart" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} aria-hidden="true">
           {Y_TICKS.map((tick) => {
@@ -94,7 +95,7 @@ export default function FatigueHistoryChart({ points }: FatigueHistoryChartProps
             y={thresholdY - 6}
             textAnchor="end"
           >
-            High fatigue
+            {t('stats.highFatigue')}
           </text>
 
           {coordinates.length > 1 && <path className="stats-line-path" d={linePath} pathLength={1} />}
@@ -110,7 +111,7 @@ export default function FatigueHistoryChart({ points }: FatigueHistoryChartProps
               />
               <title>
                 {`${formatFatigueDay(point.date)} — ${point.name}: ${point.fatigue_level}/10`}
-                {point.workout_count > 1 ? ` (latest of ${point.workout_count} workouts)` : ''}
+                {point.workout_count > 1 ? ` ${t('stats.latestOf', { count: point.workout_count })}` : ''}
               </title>
             </g>
           ))}

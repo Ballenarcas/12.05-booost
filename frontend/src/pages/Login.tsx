@@ -5,10 +5,13 @@ import { usePageNavigate } from '../utils/usePageNavigate'
 import { loginUser } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { UserProfile } from '../types'
+import LanguageSwitch from '../components/ui/LanguageSwitch'
+import { useT } from '../i18n'
 import '../styles/onboarding.css'
 import '../styles/login.css'
 
 function Login() {
+  const t = useT()
   const navigate = usePageNavigate()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [showPassword, setShowPassword] = useState(false)
@@ -31,7 +34,7 @@ function Login() {
       setProfile(signedInProfile)
       window.setTimeout(() => navigate('/'), 1600)
     } catch (error) {
-      setNotice(describeError(error, "We couldn't sign you in. Please try again."))
+      setNotice(describeError(error, t('login.errorSignIn')))
     } finally {
       setIsSubmitting(false)
     }
@@ -42,8 +45,8 @@ function Login() {
       <main className="onboarding-container hifi-theme login-container">
         <div className="completion-overlay">
           <div className="completion-icon-wrapper"><Check size={34} aria-hidden="true" /></div>
-          <h1 className="onboarding-title">Welcome, {profile.name}!</h1>
-          <p className="onboarding-subtitle">Your personalized training &amp; nutrition plan is ready.</p>
+          <h1 className="onboarding-title">{t('login.welcomeName', { name: profile.name })}</h1>
+          <p className="onboarding-subtitle">{t('login.planReady')}</p>
         </div>
       </main>
     )
@@ -52,21 +55,24 @@ function Login() {
   return (
     <main className="onboarding-container hifi-theme login-container">
       <div className="onboarding-content login-content">
-        <div className="login-mark">BOOOST</div>
+        <div className="login-top">
+          <div className="login-mark">BOOOST</div>
+          <LanguageSwitch />
+        </div>
         <header className="onboarding-header login-header">
-          <h1 className="onboarding-title">Welcome back</h1>
-          <p className="onboarding-subtitle">Sign in to continue your training and nutrition journey.</p>
+          <h1 className="onboarding-title">{t('login.title')}</h1>
+          <p className="onboarding-subtitle">{t('login.subtitle')}</p>
         </header>
 
         <form className="onboarding-form login-form" onSubmit={handleSubmit}>
           <div className="form-field">
-            <label htmlFor="login-email" className="form-label">Email</label>
+            <label htmlFor="login-email" className="form-label">{t('login.email')}</label>
             <input
               id="login-email"
               name="email"
               className="form-input"
               type="email"
-              placeholder="name@example.com"
+              placeholder={t('login.emailPlaceholder')}
               autoComplete="email"
               required
               maxLength={255}
@@ -76,14 +82,14 @@ function Login() {
           </div>
 
           <div className="form-field">
-            <label htmlFor="login-password" className="form-label">Password</label>
+            <label htmlFor="login-password" className="form-label">{t('login.password')}</label>
             <div className="input-wrapper">
               <input
                 id="login-password"
                 name="password"
                 className="form-input"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Enter your password"
+                placeholder={t('login.passwordPlaceholder')}
                 autoComplete="current-password"
                 required
                 maxLength={1024}
@@ -93,20 +99,20 @@ function Login() {
                 type="button"
                 className="password-toggle-btn"
                 onClick={() => setShowPassword((visible) => !visible)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
               >
                 {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
               </button>
             </div>
-            <Link className="login-forgot-link" to="/forgot-password" state={{ email }}>Forgot password?</Link>
+            <Link className="login-forgot-link" to="/forgot-password" state={{ email }}>{t('login.forgot')}</Link>
           </div>
 
           <div className="onboarding-actions login-actions">
             <button type="submit" className="btn-primary-outline" disabled={isSubmitting}>
-              {isSubmitting ? 'Signing in…' : <>Sign in <ArrowRight size={18} aria-hidden="true" /></>}
+              {isSubmitting ? t('login.signingIn') : <>{t('login.signIn')} <ArrowRight size={18} aria-hidden="true" /></>}
             </button>
             <Link className="btn-secondary-outline login-back-link" to="/welcome">
-              <ArrowLeft size={17} aria-hidden="true" /> Back to welcome
+              <ArrowLeft size={17} aria-hidden="true" /> {t('login.backToWelcome')}
             </Link>
           </div>
           {notice && <p className="login-notice" role="alert">{notice}</p>}
@@ -114,7 +120,7 @@ function Login() {
       </div>
 
       <p className="login-create-prompt">
-        New to BOOOST? <Link to="/onboarding">Create your profile</Link>
+        {t('login.newHere')} <Link to="/onboarding">{t('login.createProfile')}</Link>
       </p>
     </main>
   )

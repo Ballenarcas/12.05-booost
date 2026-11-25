@@ -7,10 +7,12 @@ import { fetchExercises } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import MediaCredit from '../components/workout/MediaCredit'
 import type { Exercise } from '../types'
+import { useT } from '../i18n'
 
 const PAGE_SIZE = 30
 
 function ExercisePicker() {
+  const t = useT()
   const navigate = usePageNavigate()
   const location = useLocation()
   const replaceExerciseIndex = (location.state as { replaceExerciseIndex?: number } | null)?.replaceExerciseIndex
@@ -43,13 +45,13 @@ function ExercisePicker() {
         setLoaded({ key: requestKey, error: null })
       })
       .catch((requestError: Error) => {
-        if (isCurrent) setLoaded({ key: requestKey, error: describeError(requestError, "We couldn't load exercises. Please try again.") })
+        if (isCurrent) setLoaded({ key: requestKey, error: describeError(requestError, t('picker.errorLoad')) })
       })
 
     return () => {
       isCurrent = false
     }
-  }, [debouncedSearch, page, requestKey])
+  }, [debouncedSearch, page, requestKey, t])
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const pageNumbers = Array.from(new Set([1, page - 1, page, page + 1, pageCount]
@@ -70,24 +72,24 @@ function ExercisePicker() {
   return (
     <div className="screen hifi-theme exercise-picker-screen">
       <header className="picker-header">
-        <button className="icon-button" type="button" onClick={() => navigate('/workouts/active')} aria-label="Back to active workout">
+        <button className="icon-button" type="button" onClick={() => navigate('/workouts/active')} aria-label={t('picker.backToWorkout')}>
           <ArrowLeft size={21} />
         </button>
         <div>
-          <p className="eyebrow">Active workout</p>
-          <h1>{replaceExerciseIndex === undefined ? 'Add exercise' : 'Replace exercise'}</h1>
+          <p className="eyebrow">{t('picker.activeWorkout')}</p>
+          <h1>{replaceExerciseIndex === undefined ? t('aw.addExercise') : t('aw.replaceExercise')}</h1>
         </div>
         <PremiumUpsellButton compact />
       </header>
 
       <label className="picker-search">
         <Search size={18} aria-hidden="true" />
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search exercises" aria-label="Search exercises" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('picker.searchShort')} aria-label={t('picker.searchShort')} />
       </label>
 
-      {isLoading && <p className="visually-hidden" role="status">Loading exercises...</p>}
+      {isLoading && <p className="visually-hidden" role="status">{t('picker.loading')}</p>}
       {error && <div className="card state-card" role="alert">{error}</div>}
-      {!isLoading && !error && exercises.length === 0 && <div className="card state-card">No exercises found.</div>}
+      {!isLoading && !error && exercises.length === 0 && <div className="card state-card">{t('picker.none')}</div>}
 
       <div className="exercise-picker-list">
         {exercises.map((exercise) => (
@@ -99,7 +101,7 @@ function ExercisePicker() {
                 <small>{exercise.muscles?.slice(0, 2).join(' · ') || exercise.category}</small>
               </span>
             </button>
-            <button className="icon-button ghost" type="button" aria-label={`How to do ${exercise.name}`} onClick={() => navigate(`/exercises/${encodeURIComponent(exercise.id)}/guide`, { state: { replaceExerciseIndex } })}>
+            <button className="icon-button ghost" type="button" aria-label={t('picker.howTo', { name: exercise.name })} onClick={() => navigate(`/exercises/${encodeURIComponent(exercise.id)}/guide`, { state: { replaceExerciseIndex } })}>
               <Info size={19} aria-hidden="true" />
             </button>
           </div>
@@ -108,24 +110,24 @@ function ExercisePicker() {
       <MediaCredit />
 
       {!isLoading && !error && pageCount > 1 && (
-        <nav className="exercise-pagination" aria-label="Exercise pages">
-          <button className="pagination-arrow" type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1} aria-label="Previous page">
-            <ChevronLeft size={17} aria-hidden="true" /> Previous
+        <nav className="exercise-pagination" aria-label={t('picker.pages')}>
+          <button className="pagination-arrow" type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1} aria-label={t('picker.prevPage')}>
+            <ChevronLeft size={17} aria-hidden="true" /> {t('picker.previous')}
           </button>
           <div className="pagination-pages">
             {pageNumbers.map((pageNumber, index) => (
               <span className="pagination-page-slot" key={pageNumber}>
                 {index > 0 && pageNumber - pageNumbers[index - 1] > 1 && <span className="pagination-ellipsis" aria-hidden="true">…</span>}
-                <button className={`pagination-page${pageNumber === page ? ' is-current' : ''}`} type="button" onClick={() => setPage(pageNumber)} aria-current={pageNumber === page ? 'page' : undefined} aria-label={`Page ${pageNumber}`}>
+                <button className={`pagination-page${pageNumber === page ? ' is-current' : ''}`} type="button" onClick={() => setPage(pageNumber)} aria-current={pageNumber === page ? 'page' : undefined} aria-label={t('picker.page', { n: pageNumber })}>
                   {pageNumber}
                 </button>
               </span>
             ))}
           </div>
-          <button className="pagination-arrow" type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page === pageCount} aria-label="Next page">
-            Next <ChevronRight size={17} aria-hidden="true" />
+          <button className="pagination-arrow" type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page === pageCount} aria-label={t('picker.nextPage')}>
+            {t('signup.next')} <ChevronRight size={17} aria-hidden="true" />
           </button>
-          <span className="pagination-count">Page {page} of {pageCount}</span>
+          <span className="pagination-count">{t('picker.pageOf', { page, total: pageCount })}</span>
         </nav>
       )}
     </div>

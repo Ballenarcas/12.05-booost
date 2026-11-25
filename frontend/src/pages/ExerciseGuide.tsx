@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { fetchExerciseById } from '../services/api'
 import { describeError } from '../utils/errors.js'
+import { useT } from '../i18n'
 import '../styles/exercise-guide.css'
 import MediaCredit from '../components/workout/MediaCredit'
 import type { Exercise } from '../types'
@@ -26,6 +27,7 @@ function toSteps(description?: string | null): string[] {
 }
 
 function ExerciseGuide() {
+  const t = useT()
   const navigate = useNavigate()
   const { id = '' } = useParams()
   const location = useLocation()
@@ -38,9 +40,9 @@ function ExerciseGuide() {
     let active = true
     fetchExerciseById(id)
       .then((data: Exercise) => { if (active) setExercise(data) })
-      .catch((err) => { if (active) setError(describeError(err, "We couldn't load that exercise.")) })
+      .catch((err) => { if (active) setError(describeError(err, t('guide.errorLoad'))) })
     return () => { active = false }
-  }, [id])
+  }, [id, t])
 
   const still = exercise?.images?.find((url) => !url.endsWith('.gif'))
   const animation = exercise?.images?.find((url) => url.endsWith('.gif'))
@@ -66,51 +68,51 @@ function ExerciseGuide() {
   return (
     <div className="screen hifi-screen hifi-theme exercise-guide-screen">
       <header className="exercise-guide-header">
-        <button className="scan-back" type="button" onClick={() => navigate(-1)} aria-label="Back">
+        <button className="scan-back" type="button" onClick={() => navigate(-1)} aria-label={t('common.back')}>
           <img src={backIcon} alt="" width={36} height={37} />
         </button>
         <div>
-          <h1 className="hifi-page-title">{exercise?.name ?? 'Exercise guide'}</h1>
+          <h1 className="hifi-page-title">{exercise?.name ?? t('guide.title')}</h1>
           {exercise && <p className="hifi-caption">{exercise.muscles.join(' · ') || exercise.category} / {exercise.category}</p>}
         </div>
       </header>
 
       {error && <div className="card state-card" role="alert">{error}</div>}
-      {!exercise && !error && <p className="visually-hidden" role="status">Loading exercise...</p>}
+      {!exercise && !error && <p className="visually-hidden" role="status">{t('guide.loading')}</p>}
 
       {exercise && <>
         <div className="exercise-guide-media">
           {shown
-            ? <img src={shown} alt={`${exercise.name} demonstration${shown === animation ? ', animated' : ''}`} />
+            ? <img src={shown} alt={t(shown === animation ? 'guide.altAnimated' : 'aw.imageAlt', { name: exercise.name })} />
             : <div className="exercise-image-placeholder" aria-hidden="true">+</div>}
           {animation && still && (
             <button className="hifi-pill exercise-guide-play" type="button" onClick={() => setPlaying((value) => !value)} aria-pressed={playing}>
               {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
-              {playing ? 'Pause' : 'Play'}
+              {playing ? t('aw.pause') : t('guide.play')}
             </button>
           )}
         </div>
         <MediaCredit />
 
-        <ul className="exercise-guide-chips" aria-label="Exercise details">
+        <ul className="exercise-guide-chips" aria-label={t('guide.details')}>
           {chips.map((chip) => <li key={chip}>{chip}</li>)}
         </ul>
 
-        {!steps.length && !guide && <p className="exercise-guide-empty">No instructions for this exercise yet.</p>}
-        <GuideList id="guide-setup" title="Setup" items={guide?.setup} />
-        <GuideList id="guide-steps" title="Instructions" items={steps} ordered />
-        <GuideList id="guide-cues" title="Key form cues" items={guide?.cues} />
+        {!steps.length && !guide && <p className="exercise-guide-empty">{t('guide.none')}</p>}
+        <GuideList id="guide-setup" title={t('guide.setup')} items={guide?.setup} />
+        <GuideList id="guide-steps" title={t('guide.instructions')} items={steps} ordered />
+        <GuideList id="guide-cues" title={t('guide.cues')} items={guide?.cues} />
         {guide?.breathing && <section className="exercise-guide-section" aria-labelledby="guide-breathing">
-          <h2 id="guide-breathing" className="hifi-card-label">Breathing</h2>
+          <h2 id="guide-breathing" className="hifi-card-label">{t('guide.breathing')}</h2>
           <p>{guide.breathing}</p>
         </section>}
-        <GuideList id="guide-mistakes" title="Common mistakes" items={guide?.mistakes} />
+        <GuideList id="guide-mistakes" title={t('guide.mistakes')} items={guide?.mistakes} />
 
-        {guide?.tip && <p className="exercise-guide-tip"><Lightbulb size={18} aria-hidden="true" /><span><strong>Pro tip:</strong> {guide.tip}</span></p>}
+        {guide?.tip && <p className="exercise-guide-tip"><Lightbulb size={18} aria-hidden="true" /><span><strong>{t('guide.proTip')}</strong> {guide.tip}</span></p>}
         {guide?.safety && <p className="exercise-guide-safety">{guide.safety}</p>}
 
         {!fromWorkout && <button className="hifi-pill is-big exercise-guide-cta" type="button" onClick={addToWorkout}>
-          {replaceExerciseIndex === undefined ? 'Add to workout' : 'Replace with this'}
+          {replaceExerciseIndex === undefined ? t('guide.addToWorkout') : t('guide.replaceWith')}
         </button>}
       </>}
     </div>

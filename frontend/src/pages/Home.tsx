@@ -9,6 +9,7 @@ import { fetchDashboardSummary, getActiveDeloadPct, getCachedDashboardSummary, g
 import { describeError } from '../utils/errors.js'
 import WorkoutPhoto from '../components/workout/WorkoutPhoto'
 import { planWorkoutState } from '../utils/workoutPlan'
+import { locale, useT } from '../i18n'
 import '../styles/home.css'
 
 
@@ -22,10 +23,11 @@ function ProgressBar({ value }: { value: number }) {
 
 /** Today against the 7-day average: Health Connect gives no daily goal to measure against. */
 function ActivityStat({ value, average, unit }: { value: number; average: number; unit: string }) {
+  const t = useT()
   return (
     <div className="home-activity-stat">
-      <strong>{value.toLocaleString('en-US')}</strong>
-      <span>/{average.toLocaleString('en-US')} avg {unit}</span>
+      <strong>{value.toLocaleString(locale())}</strong>
+      <span>{t('home.average', { value: average.toLocaleString(locale()), unit })}</span>
       <ProgressBar value={percent(value, average)} />
     </div>
   )
@@ -33,6 +35,7 @@ function ActivityStat({ value, average, unit }: { value: number; average: number
 
 // Nothing shows while loading; screen readers still hear it.
 function Home() {
+  const t = useT()
   const [summary, setSummary] = useState<DashboardSummary | null>(() => getCachedDashboardSummary())
   const [error, setError] = useState<string | null>(null)
   const [planning, setPlanning] = useState(false)
@@ -61,14 +64,14 @@ function Home() {
       })
       .catch((requestError: Error) => {
         if (isMounted && !getCachedDashboardSummary()) {
-          setError(describeError(requestError, "We couldn't load your dashboard. Please try again."))
+          setError(describeError(requestError, t('home.errorLoad')))
         }
       })
 
     return () => {
       isMounted = false
     }
-  }, [userId])
+  }, [userId, t])
 
   if (error) return <div className="screen hifi-theme state-card" role="alert">{error}</div>
 
@@ -81,14 +84,15 @@ function Home() {
   const consumed = nutrition ? nutrition.target_kcals - nutrition.remaining_kcals : 0
   const kcalGoal = nutrition?.target_kcals ?? 0
   const macros = [
-    { label: 'Protein', current: nutrition?.current_protein ?? 0, target: nutrition?.target_protein ?? 0 },
-    { label: 'Carbs', current: nutrition?.current_carbs ?? 0, target: nutrition?.target_carbs ?? 0 },
-    { label: 'Fat', current: nutrition?.current_fat ?? 0, target: nutrition?.target_fat ?? 0 },
+    { label: t('macro.protein'), current: nutrition?.current_protein ?? 0, target: nutrition?.target_protein ?? 0 },
+    { label: t('macro.carbs'), current: nutrition?.current_carbs ?? 0, target: nutrition?.target_carbs ?? 0 },
+    { label: t('macro.fat'), current: nutrition?.current_fat ?? 0, target: nutrition?.target_fat ?? 0 },
   ]
   const firstName = (summary?.user_name || user?.name || '').split(' ')[0]
-  const today = summary?.current_date_formatted ?? new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+  // Formatted here, not taken from the server, so it follows the app language.
+  const today = new Date().toLocaleDateString(locale(), { weekday: 'long', month: 'short', day: 'numeric' })
   const hour = new Date().getHours()
-  const greeting = hour < 12 ? 'Good morning' : hour < 19 ? 'Good afternoon' : 'Good evening'
+  const greeting = hour < 12 ? t('home.goodMorning') : hour < 19 ? t('home.goodAfternoon') : t('home.goodEvening')
   // The dashboard's routine estimate only describes the plan when both name the same workout.
   const duration = summary?.workout && summary.workout.title === plan?.title ? summary.workout.estimated_duration_minutes : null
 
@@ -102,72 +106,72 @@ function Home() {
         <PremiumUpsellButton />
       </header>
 
-      <h2 className="home-heading">Daily overview</h2>
+      <h2 className="home-heading">{t('home.dailyOverview')}</h2>
       <div className="home-cards">
         <IntakeCard
-          label="Nutrition"
+          label={t('welcome.nutrition')}
           consumed={consumed}
           goal={kcalGoal}
           macros={macros}
           pending={!nutrition}
           footer={<>
-            <p className="hifi-caption">{nutrition ? `${Math.round(percent(consumed, kcalGoal) * 100)}% of goal` : ' '}</p>
-            <button className="hifi-pill" type="button" onClick={() => navigate('/log-meals')}>Log a meal</button>
+            <p className="hifi-caption">{nutrition ? t('welcome.ofGoal', { value: Math.round(percent(consumed, kcalGoal) * 100) }) : ' '}</p>
+            <button className="hifi-pill" type="button" onClick={() => navigate('/log-meals')}>{t('home.logMeal')}</button>
           </>}
         />
 
         <AiTipCard onApplied={() => fetchDashboardSummary({ forceRefresh: true }).then(setSummary).catch(() => undefined)} />
 
         <section className="hifi-card" aria-labelledby="home-activity" aria-busy={!summary}>
-          <h2 className="hifi-card-label" id="home-activity">Activity</h2>
+          <h2 className="hifi-card-label" id="home-activity">{t('home.activity')}</h2>
           {activity?.connected ? (
             <>
               <div className="home-activity">
-                <ActivityStat value={activity.steps_today} average={activity.steps_avg_7d} unit="steps" />
+                <ActivityStat value={activity.steps_today} average={activity.steps_avg_7d} unit={t('home.steps')} />
                 <ActivityStat value={activity.active_calories_today} average={activity.active_calories_avg_7d} unit="kcal" />
               </div>
               {activity.source === 'preview' && (
-                <p className="hifi-caption">Browser preview activity. The Android app reads Health Connect directly.</p>
+                <p className="hifi-caption">{t('home.previewActivity')}</p>
               )}
             </>
           ) : (
             <div className="hifi-card-footer">
-              <p className="hifi-muted">Connect Health Connect so the AI trainer can read your steps and active calories.</p>
-              <button className="hifi-pill" type="button" onClick={() => navigate('/profile')} disabled={!summary}>Connect</button>
+              <p className="hifi-muted">{t('home.connectHealth')}</p>
+              <button className="hifi-pill" type="button" onClick={() => navigate('/profile')} disabled={!summary}>{t('home.connect')}</button>
             </div>
           )}
         </section>
 
         <section className="hifi-card" aria-labelledby="home-workout">
-          <h2 className="hifi-card-label" id="home-workout">AI workout</h2>
+          <h2 className="hifi-card-label" id="home-workout">{t('welcome.aiWorkout')}</h2>
           {!summary || (planning && !plan && !completedWorkoutToday) ? (
             // Same card shape straight away, so nothing jumps in later at the bottom of the page.
             <p className="hifi-muted" role="status" aria-busy="true">
-              {summary ? "Planning today's workout…" : "Loading today's workout…"}
+              {summary ? t('home.planning') : t('home.loadingWorkout')}
             </p>
           ) : completedWorkoutToday ? (
-            <p className="home-plan-intro">Workout completed today<span>{completedWorkoutToday.name}</span></p>
+            <p className="home-plan-intro">{t('home.completedToday')}<span>{completedWorkoutToday.name}</span></p>
           ) : plan?.is_rest_day ? (
             <>
-              <p className="home-plan-intro">Rest day<span>Recovery recommended by your AI trainer</span></p>
+              <p className="home-plan-intro">{t('home.restDay')}<span>{t('home.restDayReason')}</span></p>
               {plan.ai_reasoning && <p className="hifi-muted">{plan.ai_reasoning}</p>}
             </>
           ) : plan ? (
             <>
-              <p className="home-plan-intro">Today's plan<span>based on your goals and progress</span></p>
+              <p className="home-plan-intro">{t('home.todaysPlan')}<span>{t('home.todaysPlanReason')}</span></p>
               <div className="home-workout">
                 <WorkoutPhoto name={plan.title} exercises={plan.exercises} size={88} />
                 <div className="home-workout-body">
                   <h3>{plan.title}</h3>
                   {plan.routine_id === null ? (
-                    <span className="hifi-badge">AI generated</span>
-                  ) : plan.ai_adjusted && <span className="hifi-badge">AI adjusted</span>}
+                    <span className="hifi-badge">{t('home.aiGenerated')}</span>
+                  ) : plan.ai_adjusted && <span className="hifi-badge">{t('home.aiAdjusted')}</span>}
                   <div className="home-workout-meta">
                     <p className="hifi-caption">
-                      {duration ? <span>{duration} min</span> : null}
-                      <span>{plan.exercises.length} exercises</span>
+                      {duration ? <span>{t('home.minutes', { value: duration })}</span> : null}
+                      <span>{t(plan.exercises.length === 1 ? 'workouts.exerciseOne' : 'workouts.exerciseCount', { count: plan.exercises.length })}</span>
                     </p>
-                    <button className="hifi-pill" type="button" onClick={() => navigate('/workouts/active', { state: planWorkoutState(plan, getActiveDeloadPct(userId)) })}>Start</button>
+                    <button className="hifi-pill" type="button" onClick={() => navigate('/workouts/active', { state: planWorkoutState(plan, getActiveDeloadPct(userId)) })}>{t('home.start')}</button>
                   </div>
                 </div>
               </div>
@@ -175,8 +179,8 @@ function Home() {
             </>
           ) : (
             <div className="hifi-card-footer">
-              <p className="hifi-muted">No workout scheduled for today.</p>
-              <button className="hifi-pill" type="button" onClick={() => navigate('/workouts')}>Workouts</button>
+              <p className="hifi-muted">{t('home.noWorkout')}</p>
+              <button className="hifi-pill" type="button" onClick={() => navigate('/workouts')}>{t('profile.workouts')}</button>
             </div>
           )}
         </section>

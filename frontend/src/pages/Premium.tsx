@@ -10,33 +10,34 @@ import {
   type PremiumStatus,
 } from '../services/api'
 import type { PremiumPlan } from '../types'
+import { locale, t as tr, useT, type MessageKey } from '../i18n'
 import '../styles/premium.css'
 
 interface PremiumFeature {
-  title: string
-  description: string
+  title: MessageKey
+  description: MessageKey
   Icon: LucideIcon
 }
 
 const FEATURES: PremiumFeature[] = [
   {
-    title: 'AI Program Creation',
-    description: 'Build full workout plans based on your goals and equipment.',
+    title: 'premiumPage.f1Title',
+    description: 'premiumPage.f1Body',
     Icon: Dumbbell,
   },
   {
-    title: 'AI Photo Meal Logging',
-    description: 'Identify meals and ingredients from photos, fast and accurate.',
+    title: 'premiumPage.f2Title',
+    description: 'premiumPage.f2Body',
     Icon: Camera,
   },
   {
-    title: 'AI Meal Recommendations',
-    description: 'Discover personalized meal ideas with full nutritional data.',
+    title: 'premiumPage.f3Title',
+    description: 'premiumPage.f3Body',
     Icon: BookOpen,
   },
   {
-    title: 'Advanced Workout Statistics',
-    description: 'Dive deep into progression over time with specific data points.',
+    title: 'premiumPage.f4Title',
+    description: 'premiumPage.f4Body',
     Icon: TrendingUp,
   },
 ]
@@ -45,11 +46,11 @@ function formatEndDate(value: string | null | undefined): string | null {
   if (!value) return null
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
-  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  return date.toLocaleDateString(locale(), { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function planLabel(plan: string | null | undefined): string {
-  return plan === 'monthly' ? 'Monthly' : 'Annual'
+  return plan === 'monthly' ? tr('profile.planMonthly') : tr('profile.planAnnual')
 }
 
 interface PremiumConfirmationProps {
@@ -60,23 +61,25 @@ interface PremiumConfirmationProps {
 }
 
 function PremiumConfirmation({ plan, expiresAt, isNew, onContinue }: PremiumConfirmationProps) {
+  const t = useT()
   const formattedExpiry = formatEndDate(expiresAt)
   return (
     <div className="premium-success">
       <div className="premium-success-icon"><Check size={30} strokeWidth={3} aria-hidden="true" /></div>
-      <p className="eyebrow">{isNew ? 'Premium unlocked' : 'Your membership'}</p>
-      <h1>{isNew ? "You're all set." : 'Premium is active.'}</h1>
+      <p className="eyebrow">{isNew ? t('premiumPage.unlocked') : t('premiumPage.yourMembership')}</p>
+      <h1>{isNew ? t('premiumPage.allSet') : t('premiumPage.isActive')}</h1>
       <p>
-        Your <strong>{planLabel(plan)}</strong> membership is active
-        {formattedExpiry ? <> until <strong>{formattedExpiry}</strong></> : null}. All premium tools are
-        now unlocked.
+        {formattedExpiry
+          ? t('premiumPage.activeUntil', { plan: planLabel(plan), date: formattedExpiry })
+          : t('premiumPage.active', { plan: planLabel(plan) })}
       </p>
-      <button className="premium-cta" type="button" onClick={onContinue}>Start training</button>
+      <button className="premium-cta" type="button" onClick={onContinue}>{t('premiumPage.startTraining')}</button>
     </div>
   )
 }
 
 function Premium() {
+  const t = useT()
   const navigate = usePageNavigate()
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from
@@ -104,10 +107,10 @@ function Premium() {
         && (purchaseError.name === 'TimeoutError' || purchaseError.name === 'AbortError')
       setError(
         timedOut
-          ? 'The purchase timed out. Please check your connection and try again.'
+          ? t('premiumPage.timedOut')
           : purchaseError instanceof Error
             ? purchaseError.message
-            : 'Could not activate premium',
+            : t('premiumPage.errorActivate'),
       )
     } finally {
       setPurchasing(null)
@@ -117,7 +120,7 @@ function Premium() {
   if (purchase || alreadyPremium) {
     return (
       <div className="premium-screen">
-        <button className="premium-close" type="button" onClick={goBack} aria-label="Close premium screen">
+        <button className="premium-close" type="button" onClick={goBack} aria-label={t('premiumPage.close')}>
           <X size={19} aria-hidden="true" />
         </button>
         <PremiumConfirmation
@@ -132,34 +135,34 @@ function Premium() {
 
   return (
     <div className="premium-screen">
-      <button className="premium-close" type="button" onClick={goBack} aria-label="Close premium screen">
+      <button className="premium-close" type="button" onClick={goBack} aria-label={t('premiumPage.close')}>
         <X size={19} aria-hidden="true" />
       </button>
 
       <header className="premium-heading">
         <p className="premium-kicker"><Crown size={13} aria-hidden="true" /> BOOOST Premium</p>
-        <h1>Unlock your<br />maximum potential</h1>
-        <p className="premium-mock-note">Mock checkout — no payment is processed.</p>
+        <h1>{t('premiumPage.title1')}<br />{t('premiumPage.title2')}</h1>
+        <p className="premium-mock-note">{t('premiumPage.mock')}</p>
       </header>
 
-      <ul className="premium-features" aria-label="Premium features">
+      <ul className="premium-features" aria-label={t('premiumPage.features')}>
         {FEATURES.map(({ title, description, Icon }) => (
           <li className="premium-feature" key={title}>
             <span className="premium-feature-icon" aria-hidden="true"><Icon size={21} /></span>
             <div>
-              <h3>{title}</h3>
-              <p>{description}</p>
+              <h3>{t(title)}</h3>
+              <p>{t(description)}</p>
             </div>
           </li>
         ))}
       </ul>
 
-      <div className="premium-plans" role="group" aria-label="Choose a premium plan">
+      <div className="premium-plans" role="group" aria-label={t('premiumPage.choosePlan')}>
         <article className="premium-plan is-featured">
-          <span className="premium-plan-badge">Best value · most popular</span>
-          <h2>Annual</h2>
-          <p className="premium-price"><span>€79.99</span><small>/year</small></p>
-          <p className="premium-price-note">That's €6.67/month, billed yearly</p>
+          <span className="premium-plan-badge">{t('premiumPage.bestValue')}</span>
+          <h2>{t('profile.planAnnual')}</h2>
+          <p className="premium-price"><span>€79.99</span><small>{t('premiumPage.perYear')}</small></p>
+          <p className="premium-price-note">{t('premiumPage.annualNote')}</p>
           <button
             className="premium-cta"
             type="button"
@@ -167,15 +170,15 @@ function Premium() {
             disabled={purchasing !== null}
           >
             {purchasing === 'annual'
-              ? <><Loader2 className="premium-spinner" size={15} aria-hidden="true" /> Activating…</>
-              : 'Start your free trial'}
+              ? <><Loader2 className="premium-spinner" size={15} aria-hidden="true" /> {t('premiumPage.activating')}</>
+              : t('premiumPage.freeTrial')}
           </button>
         </article>
 
         <article className="premium-plan">
-          <h2>Monthly</h2>
-          <p className="premium-price"><span>€9.99</span><small>/month</small></p>
-          <p className="premium-price-note">Billed monthly · cancel anytime</p>
+          <h2>{t('profile.planMonthly')}</h2>
+          <p className="premium-price"><span>€9.99</span><small>{t('premiumPage.perMonth')}</small></p>
+          <p className="premium-price-note">{t('premiumPage.monthlyNote')}</p>
           <button
             className="premium-cta is-secondary"
             type="button"
@@ -183,47 +186,47 @@ function Premium() {
             disabled={purchasing !== null}
           >
             {purchasing === 'monthly'
-              ? <><Loader2 className="premium-spinner" size={15} aria-hidden="true" /> Activating…</>
-              : 'Subscribe now'}
+              ? <><Loader2 className="premium-spinner" size={15} aria-hidden="true" /> {t('premiumPage.activating')}</>
+              : t('premiumPage.subscribe')}
           </button>
         </article>
       </div>
 
       <p className="premium-trial-note">
-        <Check size={13} aria-hidden="true" /> Includes 7 days free trial on annual plans
+        <Check size={13} aria-hidden="true" /> {t('premiumPage.trialNote')}
       </p>
 
       {error && <p className="premium-error" role="alert">{error}</p>}
       {notice && <p className="premium-notice" role="status">{notice}</p>}
 
-      <nav className="premium-links" aria-label="Premium information">
+      <nav className="premium-links" aria-label={t('premiumPage.info')}>
         <button
           type="button"
-          onClick={() => setNotice('This is a mock checkout — legal pages are not connected.')}
+          onClick={() => setNotice(t('premiumPage.mockLegal'))}
         >
-          Terms of Service
+          {t('premiumPage.terms')}
         </button>
         <span aria-hidden="true">·</span>
         <button
           type="button"
-          onClick={() => setNotice('This is a mock checkout — legal pages are not connected.')}
+          onClick={() => setNotice(t('premiumPage.mockLegal'))}
         >
-          Privacy Policy
+          {t('premiumPage.privacy')}
         </button>
         <span aria-hidden="true">·</span>
         <button
           type="button"
           onClick={() => setNotice(
             isPremiumActive()
-              ? 'Premium is already active on this account.'
-              : 'No previous purchase found. This is a mock checkout.',
+              ? t('premiumPage.alreadyActive')
+              : t('premiumPage.noPurchase'),
           )}
         >
-          Restore Purchases
+          {t('premiumPage.restore')}
         </button>
       </nav>
 
-      <button className="premium-skip" type="button" onClick={goBack}>Continue with Limited Version</button>
+      <button className="premium-skip" type="button" onClick={goBack}>{t('premiumPage.limited')}</button>
     </div>
   )
 }

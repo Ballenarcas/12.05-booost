@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { Trash2 } from 'lucide-react'
+import { useT } from '../../i18n'
 import '../../styles/swipe-row.css'
 
 interface SwipeToDeleteRowProps {
@@ -24,6 +25,7 @@ const REVEAL_THRESHOLD = 48
 const COLLAPSE_MS = 200
 
 function SwipeToDeleteRow({ children, label, className, actionWidth = DEFAULT_ACTION_WIDTH, disabled = false, onDelete }: SwipeToDeleteRowProps) {
+  const t = useT()
   const rootRef = useRef<HTMLDivElement>(null)
   const offsetRef = useRef(0)
   const gestureRef = useRef<Gesture | null>(null)
@@ -161,12 +163,12 @@ function SwipeToDeleteRow({ children, label, className, actionWidth = DEFAULT_AC
           <button
             className="swipe-row__action"
             type="button"
-            aria-label={`Delete ${label}`}
+            aria-label={t('swipe.deleteAria', { label })}
             tabIndex={isOpen && !disabled ? 0 : -1}
             onClick={commitDelete}
             disabled={disabled}
           >
-            <span className="swipe-row__glyph"><Trash2 size={19} aria-hidden="true" /><span>Delete</span></span>
+            <span className="swipe-row__glyph"><Trash2 size={19} aria-hidden="true" /><span>{t('common.delete')}</span></span>
           </button>
         </div>
         <div
@@ -183,10 +185,10 @@ function SwipeToDeleteRow({ children, label, className, actionWidth = DEFAULT_AC
             type="button"
             tabIndex={disabled ? -1 : 0}
             aria-expanded={isOpen}
-            aria-label={`${label} swipe actions`}
+            aria-label={t('swipe.actionsAria', { label })}
             onKeyDown={handleToggleKeyDown}
           >
-            {isOpen ? 'Close delete action' : 'Show delete action'}
+            {isOpen ? t('swipe.close') : t('swipe.show')}
           </button>
         </div>
       </div>

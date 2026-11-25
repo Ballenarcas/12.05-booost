@@ -2,10 +2,11 @@ import { Dumbbell, House, TrendingUp, UserRound, type LucideProps } from 'lucide
 import type { ComponentType } from 'react'
 import { useLocation } from 'react-router-dom'
 import { usePageNavigate } from '../../utils/usePageNavigate'
+import { useT, type MessageKey } from '../../i18n'
 import '../../styles/glass-dock.css'
 
 type DockIcon = ComponentType<LucideProps>
-type DockItem = { path: string; label: string; Icon: DockIcon }
+type DockItem = { path: string; label: MessageKey; Icon: DockIcon }
 
 // Fluent "food-apple-20-regular", the icon the Figma NavBar uses; lucide has no match for it.
 function FoodApple({ size = 24, 'aria-hidden': ariaHidden }: LucideProps) {
@@ -18,14 +19,15 @@ function FoodApple({ size = 24, 'aria-hidden': ariaHidden }: LucideProps) {
 }
 
 const items: DockItem[] = [
-  { path: '/', label: 'Home', Icon: House },
-  { path: '/workouts', label: 'Workouts', Icon: Dumbbell },
-  { path: '/nutrition', label: 'Nutrition', Icon: FoodApple },
-  { path: '/workouts/statistics', label: 'Statistics', Icon: TrendingUp },
-  { path: '/profile', label: 'Profile', Icon: UserRound },
+  { path: '/', label: 'nav.home', Icon: House },
+  { path: '/workouts', label: 'nav.workouts', Icon: Dumbbell },
+  { path: '/nutrition', label: 'nav.nutrition', Icon: FoodApple },
+  { path: '/workouts/statistics', label: 'nav.statistics', Icon: TrendingUp },
+  { path: '/profile', label: 'nav.profile', Icon: UserRound },
 ]
 
 export default function GlassDock() {
+  const t = useT()
   const navigate = usePageNavigate()
   const { pathname: currentPath } = useLocation()
   // Meal pages live outside /nutrition but belong to its tab; /statistics aliases /workouts/statistics.
@@ -43,7 +45,7 @@ export default function GlassDock() {
   return (
     <nav
       className="gdock"
-      aria-label="Primary navigation"
+      aria-label={t('nav.primary')}
     >
       {items.map(({ path, label, Icon }, index) => {
         const isActive = active === index
@@ -52,7 +54,7 @@ export default function GlassDock() {
             key={path}
             type="button"
             className="gdock-item"
-            aria-label={label}
+            aria-label={t(label)}
             aria-current={isActive ? 'page' : undefined}
             data-active={isActive}
             // Tabs slide in the dock's order: a tab to the right comes in from the right.

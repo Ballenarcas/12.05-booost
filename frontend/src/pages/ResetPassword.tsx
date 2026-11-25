@@ -3,6 +3,7 @@ import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { confirmPasswordReset } from '../services/api'
 import { describeError } from '../utils/errors.js'
+import { useT } from '../i18n'
 import '../styles/onboarding.css'
 import '../styles/login.css'
 
@@ -16,6 +17,7 @@ function readResetToken(): string {
 }
 
 function ResetPassword() {
+  const t = useT()
   const navigate = useNavigate()
   // Read once, then dropped from the address bar so the token isn't kept in history.
   const [token] = useState(readResetToken)
@@ -23,6 +25,8 @@ function ResetPassword() {
   const [confirm, setConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [notice, setNotice] = useState('')
+  // Set when the server refused the reset: offer a new link instead of matching its wording.
+  const [linkFailed, setLinkFailed] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
@@ -34,7 +38,8 @@ function ResetPassword() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (password !== confirm) {
-      setNotice("The two passwords don't match.")
+      setLinkFailed(false)
+      setNotice(t('reset.mismatch'))
       return
     }
     setIsSubmitting(true)
@@ -43,7 +48,8 @@ function ResetPassword() {
       const message = await confirmPasswordReset(token, password)
       navigate('/login', { replace: true, state: { notice: message } })
     } catch (error) {
-      setNotice(describeError(error, "We couldn't update your password. Please try again."))
+      setLinkFailed(true)
+      setNotice(describeError(error, t('reset.errorUpdate')))
     } finally {
       setIsSubmitting(false)
     }
@@ -54,21 +60,21 @@ function ResetPassword() {
       <div className="onboarding-content login-content">
         <div className="login-mark">BOOOST</div>
         <header className="onboarding-header login-header">
-          <h1 className="onboarding-title">Set a new password</h1>
-          <p className="onboarding-subtitle">Use at least {MIN_PASSWORD_LENGTH} characters.</p>
+          <h1 className="onboarding-title">{t('reset.newTitle')}</h1>
+          <p className="onboarding-subtitle">{t('reset.minLength', { count: MIN_PASSWORD_LENGTH })}</p>
         </header>
 
         {!token ? (
           <div className="login-form">
-            <p className="login-notice" role="alert">This link is missing its code. Open the link from the email again, or ask for a new one.</p>
+            <p className="login-notice" role="alert">{t('reset.missingCode')}</p>
             <div className="onboarding-actions login-actions">
-              <Link className="btn-primary-outline" to="/forgot-password">Ask for a new link</Link>
+              <Link className="btn-primary-outline" to="/forgot-password">{t('reset.askNewLink')}</Link>
             </div>
           </div>
         ) : (
           <form className="onboarding-form login-form" onSubmit={handleSubmit}>
             <div className="form-field">
-              <label htmlFor="new-password" className="form-label">New password</label>
+              <label htmlFor="new-password" className="form-label">{t('reset.newPassword')}</label>
               <div className="input-wrapper">
                 <input
                   id="new-password"
@@ -85,14 +91,14 @@ function ResetPassword() {
                   type="button"
                   className="password-toggle-btn"
                   onClick={() => setShowPassword((visible) => !visible)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
                 >
                   {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
                 </button>
               </div>
             </div>
             <div className="form-field">
-              <label htmlFor="confirm-password" className="form-label">Repeat new password</label>
+              <label htmlFor="confirm-password" className="form-label">{t('reset.repeatPassword')}</label>
               <input
                 id="confirm-password"
                 className="form-input"
@@ -107,15 +113,15 @@ function ResetPassword() {
             </div>
             <div className="onboarding-actions login-actions">
               <button type="submit" className="btn-primary-outline" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving…' : 'Save new password'}
+                {isSubmitting ? t('common.saving') : t('reset.savePassword')}
               </button>
               <Link className="btn-secondary-outline login-back-link" to="/login">
-                <ArrowLeft size={17} aria-hidden="true" /> Back to sign in
+                <ArrowLeft size={17} aria-hidden="true" /> {t('reset.backToSignIn')}
               </Link>
             </div>
             {notice && (
               <p className="login-notice" role="alert">
-                {notice} {notice.includes('expired') && <Link to="/forgot-password">Ask for a new link</Link>}
+                {notice} {linkFailed && <Link to="/forgot-password">{t('reset.askNewLink')}</Link>}
               </p>
             )}
           </form>

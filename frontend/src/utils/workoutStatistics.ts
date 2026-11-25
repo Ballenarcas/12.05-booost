@@ -1,39 +1,38 @@
 import type { WorkoutStatisticsRange } from '../types/workout'
+import { locale, t, type MessageKey } from '../i18n/index.ts'
 
 export interface StatisticsRangeOption {
   value: WorkoutStatisticsRange
   label: string
-  description: string
+  description: MessageKey
 }
 
 export const STATISTICS_RANGES: StatisticsRangeOption[] = [
-  { value: '1W', label: '1W', description: 'Last 7 days' },
-  { value: '1M', label: '1M', description: 'Last month' },
-  { value: '3M', label: '3M', description: 'Last 3 months' },
+  { value: '1W', label: '1W', description: 'stats.last7Days' },
+  { value: '1M', label: '1M', description: 'stats.lastMonth' },
+  { value: '3M', label: '3M', description: 'profile.last3Months' },
 ]
 
 export const DEFAULT_STATISTICS_RANGE: WorkoutStatisticsRange = '1M'
 
-// en-US matches the copy in the UI (periods for grouping, commas for decimals);
-// fr-FR here would render "1 234" and break the expectations in the tests.
-const volumeFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
-const countFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
-const fatigueAverageFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
+// Numbers follow the app language: 1,234.5 in English, 1.234,5 in Spanish.
+const volumeFormatter = () => new Intl.NumberFormat(locale(), { maximumFractionDigits: 1 })
+const countFormatter = () => new Intl.NumberFormat(locale(), { maximumFractionDigits: 0 })
 
-/** Format workout numbers with periods for grouping and commas for decimals. */
+/** Format workout volume with the app language's grouping and decimal marks. */
 export function formatVolumeKg(value: number): string {
   if (!Number.isFinite(value) || value < 0) return '0'
-  return volumeFormatter.format(value)
+  return volumeFormatter().format(value)
 }
 
 export function formatWorkoutCount(value: number): string {
   if (!Number.isFinite(value) || value < 0) return '0'
-  return countFormatter.format(Math.floor(value))
+  return countFormatter().format(Math.floor(value))
 }
 
 /** Format recorded seconds as a human-readable duration, e.g. "5 h 35 min". */
 export function formatStatisticsDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return 'Unavailable'
+  if (!Number.isFinite(seconds) || seconds < 0) return t('workouts.unavailable')
   const totalMinutes = Math.floor(seconds / 60)
   if (totalMinutes === 0) return seconds > 0 ? '<1 min' : '0 min'
   const hours = Math.floor(totalMinutes / 60)
@@ -53,13 +52,13 @@ export function volumeAxisTicks(maxValue: number): number[] {
 
 /** Axis label: 0, 500, 2.5k, 10k. */
 export function formatAxisVolume(value: number): string {
-  return value >= 1000 ? `${volumeFormatter.format(value / 1000)}k` : volumeFormatter.format(value)
+  return value >= 1000 ? `${volumeFormatter().format(value / 1000)}k` : volumeFormatter().format(value)
 }
 
 /** Short volume for the stat tiles, as in the wireframe: 950 kg, 9.8k kg, 79.1k kg. */
 export function formatCompactVolumeKg(value: number): string {
   if (!Number.isFinite(value) || value < 1000) return `${formatVolumeKg(value)} kg`
-  return `${volumeFormatter.format(Math.round(value / 100) / 10)}k kg`
+  return `${volumeFormatter().format(Math.round(value / 100) / 10)}k kg`
 }
 
 /** Short duration for the stat tiles, as in the wireframe: 45m, 2h, 2h40m. */
@@ -82,21 +81,21 @@ function parseCalendarDate(value: string): Date | null {
 export function formatChartDate(value: string, granularity: 'day' | 'week'): string {
   const date = parseCalendarDate(value)
   if (!date) return value
-  const formatted = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
-  return granularity === 'week' ? `Week of ${formatted}` : formatted
+  const formatted = new Intl.DateTimeFormat(locale(), { month: 'short', day: 'numeric' }).format(date)
+  return granularity === 'week' ? t('stats.weekOf', { date: formatted }) : formatted
 }
 
 /** Format a fatigue average such as "6.3". */
 export function formatFatigueAverage(value: number | null): string {
   if (value === null || !Number.isFinite(value) || value <= 0) return '—'
-  return fatigueAverageFormatter.format(value)
+  return volumeFormatter().format(value)
 }
 
 /** Format a workout-day bucket without applying a UTC shift. */
 export function formatFatigueDay(value: string): string {
   const date = parseCalendarDate(value)
   if (!date) return value
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(locale(), {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -108,7 +107,7 @@ export function formatStatisticsDateRange(start: string, end: string): string {
   const startDate = new Date(start)
   const endDate = new Date(end)
   if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return ''
-  const formatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const formatter = new Intl.DateTimeFormat(locale(), { month: 'short', day: 'numeric', year: 'numeric' })
   return `${formatter.format(startDate)} – ${formatter.format(endDate)}`
 }
 

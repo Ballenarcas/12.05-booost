@@ -4,15 +4,17 @@ import { getCurrentUser } from '../services/api'
 import { MONTHLY_CHALLENGE, PROFILE_FRIENDS_PREVIEW } from '../data/profileMockups'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import backIcon from '../assets/scan/back.svg'
+import { locale, useT } from '../i18n'
 import '../styles/profile.css'
 
 export default function ProfileFriends() {
+  const t = useT()
   const user = getCurrentUser()
   const navigate = usePageNavigate()
   const [infoOpen, setInfoOpen] = useState(false)
   const [buzzMessage, setBuzzMessage] = useState<string | null>(null)
 
-  const firstName = user?.name?.trim().split(' ')[0] || 'You'
+  const firstName = user?.name?.trim().split(' ')[0] || t('friends.you')
   const userInitials = [user?.name, user?.surname]
     .map((part) => part?.trim()[0] ?? '')
     .join('')
@@ -20,10 +22,10 @@ export default function ProfileFriends() {
 
   const challengeTotal = MONTHLY_CHALLENGE.userWorkouts + MONTHLY_CHALLENGE.partnerWorkouts
   const challengePct = Math.min(100, Math.round((challengeTotal / MONTHLY_CHALLENGE.targetWorkouts) * 100))
-  const currentMonthName = new Date().toLocaleDateString('en-US', { month: 'long' })
+  const currentMonthName = new Date().toLocaleDateString(locale(), { month: 'long' })
 
   function sendBuzz() {
-    setBuzzMessage(`Preview: buzzed ${MONTHLY_CHALLENGE.partnerName}! Live friend nudges are coming soon.`)
+    setBuzzMessage(t('friends.buzzed', { name: MONTHLY_CHALLENGE.partnerName }))
   }
 
   return (
@@ -32,17 +34,17 @@ export default function ProfileFriends() {
         <button
           type="button"
           className="scan-back"
-          aria-label="Go back to Profile"
+          aria-label={t('body.back')}
           onClick={() => navigate('/profile', { direction: 'back' })}
         >
           <img src={backIcon} alt="" width={36} height={37} />
         </button>
-        <h1>Friends</h1>
+        <h1>{t('profile.friends')}</h1>
         <button
           type="button"
           className="friends-more-btn"
           aria-expanded={infoOpen}
-          aria-label="Preview options"
+          aria-label={t('friends.options')}
           onClick={() => setInfoOpen((open) => !open)}
         >
           <MoreHorizontal size={20} aria-hidden="true" />
@@ -50,20 +52,20 @@ export default function ProfileFriends() {
       </header>
 
       <div className="preview-banner" role="note">
-        <strong>Social preview</strong>
-        <span>Mockup of upcoming friend challenges &amp; activity sharing.</span>
+        <strong>{t('friends.socialPreview')}</strong>
+        <span>{t('friends.mockup')}</span>
       </div>
 
       {infoOpen && (
         <div className="preview-banner" role="status">
-          <span>Adding friends by username and sharing workout streaks will launch soon.</span>
+          <span>{t('friends.addSoon')}</span>
         </div>
       )}
 
       <section className="challenge-section" aria-labelledby="challenge-heading">
         <div className="profile-section-head">
           <h2 className="hifi-section-title" id="challenge-heading">
-            {currentMonthName} challenge
+            {t('friends.challenge', { month: currentMonthName })}
           </h2>
           <span className="profile-section-since">{MONTHLY_CHALLENGE.daysLeft}D</span>
         </div>
@@ -84,7 +86,7 @@ export default function ProfileFriends() {
         </div>
 
         <div className="challenge-card">
-          <h3 className="challenge-card-title">Complete {MONTHLY_CHALLENGE.targetWorkouts} workouts</h3>
+          <h3 className="challenge-card-title">{t('friends.complete', { count: MONTHLY_CHALLENGE.targetWorkouts })}</h3>
           <div>
             <p className="challenge-progress-copy">
               <strong>{challengeTotal}</strong>/{MONTHLY_CHALLENGE.targetWorkouts}w
@@ -95,25 +97,25 @@ export default function ProfileFriends() {
               aria-valuemin={0}
               aria-valuemax={MONTHLY_CHALLENGE.targetWorkouts}
               aria-valuenow={challengeTotal}
-              aria-label={`Monthly challenge progress: ${challengeTotal} of ${MONTHLY_CHALLENGE.targetWorkouts} workouts`}
+              aria-label={t('friends.progressAria', { done: challengeTotal, total: MONTHLY_CHALLENGE.targetWorkouts })}
             >
               <span className="challenge-fill" style={{ width: `${challengePct}%` }} />
             </span>
           </div>
 
-          <ul className="challenge-rows" aria-label="Challenge participants">
+          <ul className="challenge-rows" aria-label={t('friends.participants')}>
             <li>
               <strong>{firstName}</strong>
-              <span>{MONTHLY_CHALLENGE.userWorkouts} workouts</span>
+              <span>{t('stats.workoutMany', { count: MONTHLY_CHALLENGE.userWorkouts })}</span>
             </li>
             <li>
               <strong>{MONTHLY_CHALLENGE.partnerName}</strong>
-              <span>{MONTHLY_CHALLENGE.partnerWorkouts} workouts</span>
+              <span>{t('stats.workoutMany', { count: MONTHLY_CHALLENGE.partnerWorkouts })}</span>
             </li>
           </ul>
 
           <button type="button" className="buzz-btn" onClick={sendBuzz}>
-            <span>Give a buzz</span>
+            <span>{t('friends.buzz')}</span>
             <BellRing size={15} aria-hidden="true" />
           </button>
 
@@ -126,7 +128,7 @@ export default function ProfileFriends() {
       </section>
 
       <section className="hifi-section" aria-labelledby="your-friends-title">
-        <h2 className="hifi-section-title" id="your-friends-title">Your friends</h2>
+        <h2 className="hifi-section-title" id="your-friends-title">{t('friends.yours')}</h2>
         <div className="friends-list">
           {PROFILE_FRIENDS_PREVIEW.map((friend) => (
             <details className="friend-card" key={friend.id} open={friend.defaultOpen}>
@@ -149,7 +151,7 @@ export default function ProfileFriends() {
 
               <div className="friend-stats">
                 <div className="friend-stat-box">
-                  <span className="friend-stat-label">WORKOUTS</span>
+                  <span className="friend-stat-label">{t('stats.workoutsTab')}</span>
                   <p className="friend-stat-num">
                     {friend.workoutsDays}
                     <small>d</small>
@@ -158,11 +160,11 @@ export default function ProfileFriends() {
                     <svg width="10" height="9" viewBox="0 0 10 9" fill="currentColor" aria-hidden="true">
                       <path d="M5 0L10 9H0L5 0Z" />
                     </svg>
-                    {friend.workoutsDeltaPct}% from 2024
+                    {t('friends.fromYear', { pct: friend.workoutsDeltaPct, year: 2024 })}
                   </span>
                 </div>
                 <div className="friend-stat-box">
-                  <span className="friend-stat-label">TIME</span>
+                  <span className="friend-stat-label">{t('stats.time')}</span>
                   <p className="friend-stat-num">
                     {friend.timeHours}
                     <small>h</small>
@@ -171,7 +173,7 @@ export default function ProfileFriends() {
                     <svg width="10" height="9" viewBox="0 0 10 9" fill="currentColor" aria-hidden="true">
                       <path d="M5 0L10 9H0L5 0Z" />
                     </svg>
-                    {friend.timeDeltaPct}% from 2024
+                    {t('friends.fromYear', { pct: friend.timeDeltaPct, year: 2024 })}
                   </span>
                 </div>
               </div>

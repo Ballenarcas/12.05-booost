@@ -2,9 +2,12 @@ import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Droplets, GlassWate
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchHydrationHistory, type HydrationHistoryWeek } from '../services/api'
+import { locale, t as tr, useT } from '../i18n'
 import '../styles/hydration-history.css'
 
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+// Monday first, in the app language (1 Jan 2024 was a Monday).
+const weekdays = () => Array.from({ length: 7 }, (_, index) =>
+  new Date(2024, 0, 1 + index).toLocaleDateString(locale(), { weekday: 'short' }).replace('.', ''))
 const CHART_WIDTH = 640
 const CHART_HEIGHT = 268
 const CHART_PADDING = { top: 34, right: 12, bottom: 46, left: 46 }
@@ -42,8 +45,8 @@ function formatWeekRange(startKey: string, endKey: string): string {
   const start = parseDateKey(startKey)
   const end = parseDateKey(endKey)
   const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()
-  const startText = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  const endText = end.toLocaleDateString('en-US', sameMonth ? { day: 'numeric' } : { month: 'short', day: 'numeric' })
+  const startText = start.toLocaleDateString(locale(), { month: 'short', day: 'numeric' })
+  const endText = end.toLocaleDateString(locale(), sameMonth ? { day: 'numeric' } : { month: 'short', day: 'numeric' })
   return `${startText} – ${endText}, ${end.getFullYear()}`
 }
 
@@ -79,10 +82,10 @@ function WeekChart({ data, todayKey }: { data: HydrationHistoryWeek; todayKey: s
   const yFor = (value: number) => CHART_PADDING.top + (1 - value / axisMax) * plotHeight
   const ticks = [0, axisMax / 2, axisMax]
   const goalDescription = uniformGoal
-    ? `Daily goal ${formatMl(goalValues[0])} milliliters.`
-    : `Daily goal varies between ${formatMl(Math.min(...goalValues))} and ${formatMl(Math.max(...goalValues))} milliliters.`
-  const chartLabel = `Hydration chart for ${formatWeekRange(data.week_start, data.week_end)}: ${data.days
-    .map((day, index) => `${WEEKDAYS[index]} ${formatMl(day.total_ml)} milliliters`)
+    ? tr('hh.goalAria', { ml: formatMl(goalValues[0]) })
+    : tr('hh.goalVariesAria', { min: formatMl(Math.min(...goalValues)), max: formatMl(Math.max(...goalValues)) })
+  const chartLabel = `${tr('hh.chartFor', { range: formatWeekRange(data.week_start, data.week_end) })}: ${data.days
+    .map((day, index) => tr('hh.dayAria', { day: weekdays()[index], ml: formatMl(day.total_ml) }))
     .join(', ')}. ${goalDescription}`
 
   return (
@@ -155,7 +158,7 @@ function WeekChart({ data, todayKey }: { data: HydrationHistoryWeek; todayKey: s
                 y={baseline + 24}
                 textAnchor="middle"
               >
-                {WEEKDAYS[index]}
+                {weekdays()[index]}
               </text>
               <text
                 className={`hydration-chart-date${isToday ? ' is-today' : ''}`}
@@ -174,6 +177,7 @@ function WeekChart({ data, todayKey }: { data: HydrationHistoryWeek; todayKey: s
 }
 
 export default function HydrationHistory() {
+  const t = useT()
   const navigate = useNavigate()
   const currentWeekStart = toDateKey(startOfWeek(new Date()))
   const todayKey = toDateKey(new Date())
@@ -193,7 +197,7 @@ export default function HydrationHistory() {
       })
       .catch((requestError: unknown) => {
         if (!active) return
-        setError(requestError instanceof Error ? requestError.message : "We couldn't load your hydration history.")
+        setError(requestError instanceof Error ? requestError.message : t('hh.errorLoad'))
       })
       .finally(() => {
         if (active) setIsLoading(false)
@@ -201,7 +205,7 @@ export default function HydrationHistory() {
     return () => {
       active = false
     }
-  }, [weekStart, retryToken])
+  }, [weekStart, retryToken, t])
 
   function goToWeek(offset: number) {
     setWeekStart(toDateKey(addDays(parseDateKey(weekStart), offset)))
@@ -227,34 +231,34 @@ export default function HydrationHistory() {
         <button
           className="icon-button hydration-history-back"
           type="button"
-          aria-label="Go back"
+          aria-label={t('common.back')}
           onClick={() => navigate(-1)}
         >
           <ArrowLeft size={21} aria-hidden="true" />
         </button>
         <div>
-          <p className="eyebrow">Hydration insights</p>
-          <h1>Hydration history</h1>
+          <p className="eyebrow">{t('hh.eyebrow')}</p>
+          <h1>{t('hh.title')}</h1>
         </div>
       </header>
 
-      <div className="hydration-week-nav" role="group" aria-label="Choose a week">
+      <div className="hydration-week-nav" role="group" aria-label={t('hh.chooseWeek')}>
         <button
           className="hydration-week-button"
           type="button"
-          aria-label="Previous week"
+          aria-label={t('hh.prevWeek')}
           onClick={() => goToWeek(-7)}
         >
           <ChevronLeft size={20} aria-hidden="true" />
         </button>
         <div className="hydration-week-caption" aria-live="polite">
           <strong>{rangeLabel}</strong>
-          <span>{isCurrentWeek ? 'This week' : 'Past week'}</span>
+          <span>{isCurrentWeek ? t('hh.thisWeek') : t('hh.pastWeek')}</span>
         </div>
         <button
           className="hydration-week-button"
           type="button"
-          aria-label="Next week"
+          aria-label={t('hh.nextWeek')}
           onClick={() => goToWeek(7)}
           disabled={isCurrentWeek}
         >
@@ -264,7 +268,7 @@ export default function HydrationHistory() {
 
       {isLoading && !data && (
         <div className="card state-card hydration-history-state" role="status">
-          Loading your hydration week…
+          {t('hh.loading')}
         </div>
       )}
 
@@ -272,7 +276,7 @@ export default function HydrationHistory() {
         <div className="card state-card hydration-history-state" role="alert">
           <p>{error}</p>
           <button className="secondary-action" type="button" onClick={retry}>
-            Try again
+            {t('common.retry')}
           </button>
         </div>
       )}
@@ -282,59 +286,59 @@ export default function HydrationHistory() {
           <div className="hydration-history-metrics">
             <MetricCard
               icon={<Droplets size={18} />}
-              label="Weekly total"
+              label={t('hh.weeklyTotal')}
               value={formatLiters(data.total_ml)}
-              note={`${data.entries_count} ${data.entries_count === 1 ? 'drink' : 'drinks'} logged`}
+              note={t(data.entries_count === 1 ? 'hh.drinkOne' : 'hh.drinkMany', { count: data.entries_count })}
             />
             <MetricCard
               icon={<CalendarDays size={18} />}
-              label="Daily average"
+              label={t('hh.dailyAverage')}
               value={formatLiters(data.daily_average_ml)}
-              note="Across 7 days"
+              note={t('hh.across7')}
             />
             <MetricCard
               icon={<Target size={18} />}
-              label="Goal days"
+              label={t('hh.goalDays')}
               value={`${data.days_met_goal} / 7`}
-              note={goalChanged ? 'Goal changed this week' : `Goal is ${formatMl(data.goal_ml)} ml/day`}
+              note={goalChanged ? t('hh.goalChanged') : t('hh.goalIs', { ml: formatMl(data.goal_ml) })}
             />
           </div>
 
           <section className="card hydration-chart-card" aria-labelledby="hydration-week-overview">
             <div className="hydration-chart-heading">
               <div>
-                <h2 id="hydration-week-overview">Week overview</h2>
-                <p>{data.days_met_goal} of 7 days met the daily goal</p>
+                <h2 id="hydration-week-overview">{t('hh.weekOverview')}</h2>
+                <p>{t('hh.daysMetGoal', { count: data.days_met_goal })}</p>
               </div>
               <span className="hydration-chart-total">{formatLiters(data.total_ml)}</span>
             </div>
 
             <div className="hydration-chart-legend">
-              <span><i className="hydration-legend-swatch is-goal" aria-hidden="true" /> {goalChanged ? 'Daily goal' : `Goal ${formatMl(data.goal_ml)} ml/day`}</span>
-              <span><i className="hydration-legend-swatch is-met" aria-hidden="true" /> Goal met</span>
+              <span><i className="hydration-legend-swatch is-goal" aria-hidden="true" /> {goalChanged ? t('hh.dailyGoal') : t('hh.goalPerDay', { ml: formatMl(data.goal_ml) })}</span>
+              <span><i className="hydration-legend-swatch is-met" aria-hidden="true" /> {t('hh.goalMet')}</span>
             </div>
 
             {data.total_ml === 0 ? (
               <div className="hydration-history-empty">
                 <GlassWater size={26} aria-hidden="true" />
                 <div>
-                  <h3>No water logged this week</h3>
-                  <p>Drinks you log on Home or Nutrition will show up here day by day.</p>
+                  <h3>{t('hh.noneTitle')}</h3>
+                  <p>{t('hh.noneBody')}</p>
                 </div>
               </div>
             ) : (
               <WeekChart data={data} todayKey={todayKey} />
             )}
 
-            <ul className="hydration-day-list" aria-label="Daily hydration for this week">
+            <ul className="hydration-day-list" aria-label={t('hh.dailyAria')}>
               {data.days.map((day, index) => {
                 const isToday = day.date === todayKey
                 return (
                   <li key={day.date} className={`hydration-day-row${day.met_goal ? ' is-met' : ''}`}>
                     <span className="hydration-day-name">
-                      <strong>{WEEKDAYS[index]}</strong>
-                      <span>{parseDateKey(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                      {isToday && <span className="hydration-today-tag">Today</span>}
+                      <strong>{weekdays()[index]}</strong>
+                      <span>{parseDateKey(day.date).toLocaleDateString(locale(), { month: 'short', day: 'numeric' })}</span>
+                      {isToday && <span className="hydration-today-tag">{t('common.today')}</span>}
                     </span>
                     <span className="hydration-day-track" aria-hidden="true">
                       <span className="hydration-day-fill" style={{ width: `${day.progress_percentage}%` }} />
@@ -344,7 +348,7 @@ export default function HydrationHistory() {
                         {formatMl(day.total_ml)}
                         <span className="hydration-day-goal"> / {formatMl(day.goal_ml)} ml</span>
                       </strong>
-                      <span>{day.met_goal ? 'Goal met' : `${day.progress_percentage}%`}</span>
+                      <span>{day.met_goal ? t('hh.goalMet') : `${day.progress_percentage}%`}</span>
                     </span>
                   </li>
                 )

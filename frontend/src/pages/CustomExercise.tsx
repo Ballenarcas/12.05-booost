@@ -12,8 +12,10 @@ import {
   fetchExercises
 } from '../services/api'
 import { useDialogBehavior } from '../utils/useDialogBehavior'
+import { useT, valueLabel } from '../i18n'
 
 export default function CustomExercise() {
+  const t = useT()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const user = getCurrentUser()
@@ -55,21 +57,21 @@ export default function CustomExercise() {
         setNotes(data.description || '')
         setIsLoading(false)
       }).catch(() => {
-        setError("Unable to load the exercise.")
+        setError(t('custom.errorLoad'))
         setIsLoading(false)
       })
     }
-  }, [id, isEditing, isPremium])
+  }, [id, isEditing, isPremium, t])
 
   if (!isPremium && !isEditing) {
     return (
       <div className="screen hifi-theme">
         <header className="active-workout-header">
-          <button className="icon-button" type="button" onClick={() => navigate(-1)} aria-label="Back">
+          <button className="icon-button" type="button" onClick={() => navigate(-1)} aria-label={t('common.back')}>
             <ChevronLeft size={22} />
           </button>
           <div className="workout-title">
-            <h1>Custom Exercise</h1>
+            <h1>{t('custom.title')}</h1>
           </div>
         </header>
 
@@ -77,16 +79,16 @@ export default function CustomExercise() {
           <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(21, 99, 166, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
             <Sparkles size={24} />
           </div>
-          <h2 style={{ margin: 0, fontSize: '20px' }}>Upgrade to Premium</h2>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>{t('aw.upgrade')}</h2>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.5 }}>
-            Custom exercise creation is a Premium feature. Upgrade your account to create private exercises, add them to your routines, and track your stats.
+            {t('custom.premiumBody')}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '10px', marginTop: '8px' }}>
             <button className="primary-button" type="button" onClick={() => navigate('/premium')}>
-              Upgrade to Premium
+              {t('aw.upgrade')}
             </button>
             <button className="secondary-action" type="button" onClick={() => navigate(-1)}>
-              Go back
+              {t('custom.goBack')}
             </button>
           </div>
         </div>
@@ -100,13 +102,13 @@ export default function CustomExercise() {
 
     const trimmedName = name.trim()
     if (!trimmedName) {
-      return setError("Exercise name cannot be empty.")
+      return setError(t('custom.errorEmpty'))
     }
     if (trimmedName.length < 2) {
-      return setError("Exercise name must be at least 2 characters.")
+      return setError(t('custom.errorShort'))
     }
     if (trimmedName.length > 50) {
-      return setError("Exercise name is too long (maximum 50 characters).")
+      return setError(t('custom.errorLong'))
     }
 
     setIsSaving(true)
@@ -118,7 +120,7 @@ export default function CustomExercise() {
       
       if (duplicate) {
         setIsSaving(false)
-        return setError(`The name is already in use by "${duplicate.name}".`)
+        return setError(t('custom.errorDuplicate', { name: duplicate.name }))
       }
 
       const payload = {
@@ -137,7 +139,7 @@ export default function CustomExercise() {
       sessionStorage.setItem('booost_reopen_exercise_modal', 'true')
       navigate(-1)
     } catch (err: unknown) {
-      setError(err instanceof Error && err.message ? err.message : "An error occurred while saving.")
+      setError(err instanceof Error && err.message ? err.message : t('custom.errorSave'))
       setIsSaving(false)
     }
   }
@@ -150,7 +152,7 @@ export default function CustomExercise() {
       sessionStorage.setItem('booost_reopen_exercise_modal', 'true')
       navigate(-1)
     } catch (err: unknown) {
-      setError(err instanceof Error && err.message ? err.message : "An error occurred while deleting.")
+      setError(err instanceof Error && err.message ? err.message : t('custom.errorDelete'))
       setIsSaving(false)
       setShowDeleteModal(false)
     }
@@ -170,18 +172,18 @@ export default function CustomExercise() {
             sessionStorage.setItem('booost_reopen_exercise_modal', 'true')
             navigate(-1)
           }}
-          aria-label="Back"
+          aria-label={t('common.back')}
         >
           <ChevronLeft size={22} />
         </button>
         <div className="workout-title">
-          <h1>{isEditing ? 'Edit Custom Exercise' : 'Create Custom Exercise'}</h1>
+          <h1>{isEditing ? t('custom.editTitle') : t('custom.createTitle')}</h1>
         </div>
       </header>
 
       <form onSubmit={handleSave} style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div>
-          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>EXERCISE NAME</label>
+          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>{t('custom.name')}</label>
           <input 
             type="text" 
             value={name} 
@@ -189,7 +191,7 @@ export default function CustomExercise() {
                 setName(e.target.value)
                 setError(null)
             }}
-            placeholder="e.g. Belt Squat Machine"
+            placeholder={t('custom.namePlaceholder')}
             style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)', fontSize: '16px', boxSizing: 'border-box' }}
           />
           {error && (
@@ -200,46 +202,46 @@ export default function CustomExercise() {
         </div>
 
         <div>
-          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>MAIN MUSCLE GROUP</label>
+          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>{t('custom.mainGroup')}</label>
           <select 
             value={muscleGroup} 
             onChange={(e) => setMuscleGroup(e.target.value)}
             style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)', fontSize: '16px', boxSizing: 'border-box' }}
           >
             {availableGroups.map(group => (
-              <option key={group} value={group}>{group}</option>
+              <option key={group} value={group}>{valueLabel(t, 'muscle', group)}</option>
             ))}
           </select>
         </div>
 
         <div>
-          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>EQUIPMENT (OPTIONAL)</label>
+          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>{t('custom.equipment')}</label>
           <input 
             type="text" 
             value={equipment} 
             onChange={(e) => setEquipment(e.target.value)}
-            placeholder="e.g. Machine, Cable..."
+            placeholder={t('custom.equipmentPlaceholder')}
             style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)', fontSize: '16px', boxSizing: 'border-box' }}
           />
         </div>
 
         <div>
-          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>SECONDARY MUSCLES (OPTIONAL)</label>
+          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>{t('custom.secondary')}</label>
           <input 
             type="text" 
             value={secondaryMuscles} 
             onChange={(e) => setSecondaryMuscles(e.target.value)}
-            placeholder="e.g. Glutes, Calves..."
+            placeholder={t('custom.secondaryPlaceholder')}
             style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)', fontSize: '16px', boxSizing: 'border-box' }}
           />
         </div>
 
         <div>
-          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>NOTES (OPTIONAL)</label>
+          <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>{t('custom.notes')}</label>
           <textarea 
             value={notes} 
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Machine settings, seat height..."
+            placeholder={t('custom.notesPlaceholder')}
             rows={3}
             style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)', fontSize: '16px', boxSizing: 'border-box', resize: 'vertical' }}
           />
@@ -248,7 +250,7 @@ export default function CustomExercise() {
         <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <button className="primary-button" type="submit" disabled={isSaving} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
             {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-            {isEditing ? 'Save Changes' : 'Save'}
+            {isEditing ? t('common.saveChanges') : t('common.save')}
           </button>
           
           {isEditing && (
@@ -258,7 +260,7 @@ export default function CustomExercise() {
               onClick={() => setShowDeleteModal(true)}
               style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--negative)', backgroundColor: 'transparent', color: 'var(--negative)', fontWeight: 600, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
             >
-              <Trash2 size={18} /> Remove Exercise
+              <Trash2 size={18} /> {t('aw.removeExercise')}
             </button>
           )}
         </div>
@@ -267,12 +269,12 @@ export default function CustomExercise() {
       {showDeleteModal && (
         <div className="modal-backdrop">
           <div className="confirmation-modal" role="dialog" aria-modal="true" ref={deleteDialogRef}>
-            <h2 id="delete-title">Remove this exercise?</h2>
-            <p>It will be removed from your exercise list, but your past workouts and statistics will not change.</p>
+            <h2 id="delete-title">{t('custom.removeQuestion')}</h2>
+            <p>{t('custom.removeBody')}</p>
             <div className="modal-actions">
-              <button className="secondary-action" type="button" onClick={() => setShowDeleteModal(false)} disabled={isSaving}>Cancel</button>
+              <button className="secondary-action" type="button" onClick={() => setShowDeleteModal(false)} disabled={isSaving}>{t('common.cancel')}</button>
               <button className="danger-action" type="button" onClick={handleDelete} disabled={isSaving}>
-                {isSaving ? 'Removing...' : 'Confirm'}
+                {isSaving ? t('custom.removing') : t('common.confirm')}
               </button>
             </div>
           </div>

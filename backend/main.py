@@ -3,13 +3,17 @@ import threading
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import ai, dashboard, health_connect, hydration, nutrition, premium, routines, users, workouts
 from app.core.config import get_settings
+from app.core.i18n import parse_accept_language, pick, reset_language, set_language, translate_error_detail
 from app.api.settings import router as settings_router
 from app.db.supabase_client import warm_supabase
 
@@ -42,10 +46,40 @@ app.add_middleware(
     allow_origins=settings.cors_origin_list,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "Accept-Language"],
     expose_headers=["WWW-Authenticate"],
     max_age=600,
 )
+
+
+@app.middleware("http")
+async def language_middleware(request: Request, call_next):
+    token = set_language(parse_accept_language(request.headers.get("accept-language")))
+    try:
+        return await call_next(request)
+    finally:
+        reset_language(token)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def localized_http_exception(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": translate_error_detail(exc.detail)},
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def localized_validation_exception(_request: Request, exc: RequestValidationError) -> JSONResponse:
+    errors = []
+    for item in exc.errors():
+        localized = dict(item)
+        if isinstance(localized.get("msg"), str):
+            localized["msg"] = translate_error_detail(localized["msg"])
+        errors.append(localized)
+    # jsonable_encoder like FastAPI's own handler: custom validators put exception objects in "ctx".
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
 
 
 @app.exception_handler(httpx.ConnectError)
@@ -53,7 +87,12 @@ async def database_unreachable(_request, _exc) -> JSONResponse:
     logger.warning("Database connection failed")
     return JSONResponse(
         status_code=503,
-        content={"detail": "Could not reach the database. Check your network and try again."},
+        content={
+            "detail": pick(
+                "Could not reach the database. Check your network and try again.",
+                "No se pudo conectar con la base de datos. Comprueba tu conexión e inténtalo de nuevo.",
+            )
+        },
     )
 
 
@@ -62,7 +101,12 @@ async def database_timeout(_request, _exc) -> JSONResponse:
     logger.warning("Database request timed out")
     return JSONResponse(
         status_code=503,
-        content={"detail": "The database took too long to answer. Try again."},
+        content={
+            "detail": pick(
+                "The database took too long to answer. Try again.",
+                "La base de datos tardó demasiado en responder. Inténtalo de nuevo.",
+            )
+        },
     )
 
 

@@ -6,6 +6,7 @@ from typing import Any
 from openai import OpenAI
 
 from app.core.config import get_settings
+from app.core.i18n import get_language, pick
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ def generate_trainer_insight(
     user_goal: str,
 ) -> str:
     settings = get_settings()
+    lang_hint = " Reply in natural Spanish." if get_language() == "es" else ""
     response = get_ai_client().chat.completions.create(
         model=settings.ai_model,
         temperature=0.4,
@@ -66,6 +68,7 @@ def generate_trainer_insight(
                 "content": (
                     "You are BOOOST's AI fitness and nutrition coach. "
                     "Give concise, practical, supportive guidance. Do not diagnose medical conditions."
+                    f"{lang_hint}"
                 ),
             },
             {
@@ -79,7 +82,7 @@ def generate_trainer_insight(
             },
         ],
     )
-    return response.choices[0].message.content or "No insight was generated."
+    return response.choices[0].message.content or pick("No insight was generated.", "No se pudo generar una recomendación.")
 
 
 def phrase_tip(message: str, reasoning: str, facts: list[str], next_step: str | None = None) -> Any:

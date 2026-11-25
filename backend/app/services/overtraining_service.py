@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 
+from app.core.i18n import get_language, normalize_language, pick, translate_muscle
 from app.core.local_day import LocalDay, utc_day
 from app.db.supabase_client import get_supabase
 from app.schemas.overtraining import (
@@ -402,7 +403,13 @@ def on_workout_completed(user_id: UUID) -> None:
         _save_state(supabase, uid, state, now)
 
 
-def evaluate_overtraining(user_id: UUID, day: LocalDay | None = None) -> OvertrainingStatusResponse:
+def evaluate_overtraining(
+    user_id: UUID,
+    day: LocalDay | None = None,
+    lang: str | None = None,
+) -> OvertrainingStatusResponse:
+    active_lang = normalize_language(lang) if lang is not None else get_language()
+    is_es = active_lang == "es"
     active_day = day or utc_day()
     now = datetime.now(timezone.utc)
     tz_offset = active_day.start.utcoffset() or timedelta(0)
@@ -658,30 +665,43 @@ def evaluate_overtraining(user_id: UUID, day: LocalDay | None = None) -> Overtra
 
     # 1. Workload spike (ACWR vs chronic 3-week baseline, or fallback thresholds)
     if acwr is not None:
+        baseline_sets = round(chronic_weekly_sets)
         if acwr >= 1.50 and total_sets_7d >= 30:
             score -= 28
             signals.append(OvertrainingSignal(
                 id="workload_spike",
-                label="Acute workload spike",
+                label="Pico agudo de carga" if is_es else "Acute workload spike",
                 value=f"{acwr:.2f}x",
-                detail=f"{total_sets_7d} sets in 7d (+{load_increase_pct}% vs your {round(chronic_weekly_sets)} sets/wk baseline).",
+                detail=(
+                    f"{total_sets_7d} series en 7 d (+{load_increase_pct}% frente a tu media de {baseline_sets} series/sem)."
+                    if is_es
+                    else f"{total_sets_7d} sets in 7d (+{load_increase_pct}% vs your {baseline_sets} sets/wk baseline)."
+                ),
                 severity="high",
             ))
         elif acwr >= 1.30 and total_sets_7d >= 25:
             score -= 16
             signals.append(OvertrainingSignal(
                 id="workload_spike",
-                label="Workload trending up",
+                label="Carga en aumento" if is_es else "Workload trending up",
                 value=f"{acwr:.2f}x",
-                detail=f"{total_sets_7d} sets in 7d (+{load_increase_pct}% vs your {round(chronic_weekly_sets)} sets/wk baseline).",
+                detail=(
+                    f"{total_sets_7d} series en 7 d (+{load_increase_pct}% frente a tu media de {baseline_sets} series/sem)."
+                    if is_es
+                    else f"{total_sets_7d} sets in 7d (+{load_increase_pct}% vs your {baseline_sets} sets/wk baseline)."
+                ),
                 severity="watch",
             ))
         else:
             signals.append(OvertrainingSignal(
                 id="workload_spike",
-                label="Weekly workload balance",
+                label="Equilibrio de carga semanal" if is_es else "Weekly workload balance",
                 value=f"{acwr:.2f}x",
-                detail=f"{total_sets_7d} strength sets vs {round(chronic_weekly_sets)} sets/wk chronic baseline.",
+                detail=(
+                    f"{total_sets_7d} series de fuerza frente a una media crónica de {baseline_sets} series/sem."
+                    if is_es
+                    else f"{total_sets_7d} strength sets vs {baseline_sets} sets/wk chronic baseline."
+                ),
                 severity="ok",
             ))
     else:
@@ -689,26 +709,38 @@ def evaluate_overtraining(user_id: UUID, day: LocalDay | None = None) -> Overtra
             score -= 24
             signals.append(OvertrainingSignal(
                 id="workload_spike",
-                label="High weekly volume",
-                value=f"{total_sets_7d} sets",
-                detail=f"{sessions_7d} sessions and {total_sets_7d} strength sets logged in the last 7 days.",
+                label="Volumen semanal alto" if is_es else "High weekly volume",
+                value=f"{total_sets_7d} series" if is_es else f"{total_sets_7d} sets",
+                detail=(
+                    f"{sessions_7d} sesiones y {total_sets_7d} series de fuerza registradas en los últimos 7 días."
+                    if is_es
+                    else f"{sessions_7d} sessions and {total_sets_7d} strength sets logged in the last 7 days."
+                ),
                 severity="high",
             ))
         elif sessions_7d >= 5 or total_sets_7d >= 65:
             score -= 12
             signals.append(OvertrainingSignal(
                 id="workload_spike",
-                label="Elevated weekly volume",
-                value=f"{total_sets_7d} sets",
-                detail=f"{sessions_7d} sessions and {total_sets_7d} strength sets in 7 days (building 28d baseline).",
+                label="Volumen semanal elevado" if is_es else "Elevated weekly volume",
+                value=f"{total_sets_7d} series" if is_es else f"{total_sets_7d} sets",
+                detail=(
+                    f"{sessions_7d} sesiones y {total_sets_7d} series de fuerza en 7 días (construyendo referencia de 28 d)."
+                    if is_es
+                    else f"{sessions_7d} sessions and {total_sets_7d} strength sets in 7 days (building 28d baseline)."
+                ),
                 severity="watch",
             ))
         else:
             signals.append(OvertrainingSignal(
                 id="workload_spike",
-                label="Weekly workload",
-                value=f"{total_sets_7d} sets",
-                detail=f"{sessions_7d} sessions across {total_sets_7d} strength sets in the last 7 days.",
+                label="Carga semanal" if is_es else "Weekly workload",
+                value=f"{total_sets_7d} series" if is_es else f"{total_sets_7d} sets",
+                detail=(
+                    f"{sessions_7d} sesiones con {total_sets_7d} series de fuerza en los últimos 7 días."
+                    if is_es
+                    else f"{sessions_7d} sessions across {total_sets_7d} strength sets in the last 7 days."
+                ),
                 severity="ok",
             ))
 
@@ -719,26 +751,38 @@ def evaluate_overtraining(user_id: UUID, day: LocalDay | None = None) -> Overtra
             score -= 25
             signals.append(OvertrainingSignal(
                 id="workout_fatigue",
-                label="Post-workout fatigue",
+                label="Fatiga post-entreno" if is_es else "Post-workout fatigue",
                 value=f"{latest_workout_fatigue}/10",
-                detail=f"Latest session rated {latest_workout_fatigue}/10 with a 7-day average of {avg_label}.",
+                detail=(
+                    f"Última sesión valorada en {latest_workout_fatigue}/10 con una media de {avg_label} en 7 días."
+                    if is_es
+                    else f"Latest session rated {latest_workout_fatigue}/10 with a 7-day average of {avg_label}."
+                ),
                 severity="high",
             ))
         elif latest_workout_fatigue >= 7 or (avg_workout_fatigue_7d or 0) >= 6.5:
             score -= 14
             signals.append(OvertrainingSignal(
                 id="workout_fatigue",
-                label="Post-workout fatigue",
+                label="Fatiga post-entreno" if is_es else "Post-workout fatigue",
                 value=avg_label,
-                detail=f"Latest session fatigue is {latest_workout_fatigue}/10 across {len(acute_fatigue_levels)} rated workouts.",
+                detail=(
+                    f"La fatiga de la última sesión es de {latest_workout_fatigue}/10 en {len(acute_fatigue_levels)} entrenamientos valorados."
+                    if is_es
+                    else f"Latest session fatigue is {latest_workout_fatigue}/10 across {len(acute_fatigue_levels)} rated workouts."
+                ),
                 severity="watch",
             ))
         else:
             signals.append(OvertrainingSignal(
                 id="workout_fatigue",
-                label="Post-workout fatigue",
+                label="Fatiga post-entreno" if is_es else "Post-workout fatigue",
                 value=avg_label,
-                detail=f"Recent sessions average {avg_label} on your post-workout fatigue scale.",
+                detail=(
+                    f"Las sesiones recientes promedian {avg_label} en tu escala de fatiga post-entreno."
+                    if is_es
+                    else f"Recent sessions average {avg_label} on your post-workout fatigue scale."
+                ),
                 severity="ok",
             ))
 
@@ -748,26 +792,38 @@ def evaluate_overtraining(user_id: UUID, day: LocalDay | None = None) -> Overtra
         score -= 20
         signals.append(OvertrainingSignal(
             id="high_rpe",
-            label="High-RPE strain",
-            value=f"{high_rpe_sets_7d} sets",
-            detail=f"{round(rpe_ratio * 100)}% of weekly strength sets were pushed to RPE ≥ 8.5.",
+            label="Esfuerzo de RPE alto" if is_es else "High-RPE strain",
+            value=f"{high_rpe_sets_7d} series" if is_es else f"{high_rpe_sets_7d} sets",
+            detail=(
+                f"El {round(rpe_ratio * 100)}% de tus series semanales de fuerza se llevaron a RPE ≥ 8.5."
+                if is_es
+                else f"{round(rpe_ratio * 100)}% of weekly strength sets were pushed to RPE ≥ 8.5."
+            ),
             severity="high",
         ))
     elif high_rpe_sets_7d >= 12 or (total_sets_7d >= 20 and rpe_ratio >= 0.30):
         score -= 10
         signals.append(OvertrainingSignal(
             id="high_rpe",
-            label="Near-failure effort",
-            value=f"{high_rpe_sets_7d} sets",
-            detail=f"{high_rpe_sets_7d} strength sets reached RPE ≥ 8.5 over the last 7 days.",
+            label="Esfuerzo cerca del fallo" if is_es else "Near-failure effort",
+            value=f"{high_rpe_sets_7d} series" if is_es else f"{high_rpe_sets_7d} sets",
+            detail=(
+                f"{high_rpe_sets_7d} series de fuerza alcanzaron RPE ≥ 8.5 en los últimos 7 días."
+                if is_es
+                else f"{high_rpe_sets_7d} strength sets reached RPE ≥ 8.5 over the last 7 days."
+            ),
             severity="watch",
         ))
     else:
         signals.append(OvertrainingSignal(
             id="high_rpe",
-            label="Session intensity (RPE)",
-            value=f"{high_rpe_sets_7d} hard",
-            detail="Intensity distribution stays inside sustainable RPE targets.",
+            label="Intensidad de sesión (RPE)" if is_es else "Session intensity (RPE)",
+            value=f"{high_rpe_sets_7d} duras" if is_es else f"{high_rpe_sets_7d} hard",
+            detail=(
+                "La distribución de intensidad se mantiene dentro de rangos de RPE sostenibles."
+                if is_es
+                else "Intensity distribution stays inside sustainable RPE targets."
+            ),
             severity="ok",
         ))
 
@@ -776,26 +832,38 @@ def evaluate_overtraining(user_id: UUID, day: LocalDay | None = None) -> Overtra
         score -= 20
         signals.append(OvertrainingSignal(
             id="consecutive_days",
-            label="Rest-day streak",
-            value=f"{consecutive_days}d straight",
-            detail=f"{consecutive_days} consecutive training days with no full rest day.",
+            label="Racha sin descanso" if is_es else "Rest-day streak",
+            value=f"{consecutive_days} d seguidos" if is_es else f"{consecutive_days}d straight",
+            detail=(
+                f"{consecutive_days} días consecutivos entrenando sin un día completo de descanso."
+                if is_es
+                else f"{consecutive_days} consecutive training days with no full rest day."
+            ),
             severity="high",
         ))
     elif consecutive_days >= 4:
         score -= 10
         signals.append(OvertrainingSignal(
             id="consecutive_days",
-            label="Consecutive training",
-            value=f"{consecutive_days}d straight",
-            detail=f"{consecutive_days} days trained in a row; scheduling a rest day soon protects recovery.",
+            label="Días seguidos entrenando" if is_es else "Consecutive training",
+            value=f"{consecutive_days} d seguidos" if is_es else f"{consecutive_days}d straight",
+            detail=(
+                f"{consecutive_days} días seguidos entrenando; programar un día de descanso pronto protege tu recuperación."
+                if is_es
+                else f"{consecutive_days} days trained in a row; scheduling a rest day soon protects recovery."
+            ),
             severity="watch",
         ))
     else:
         signals.append(OvertrainingSignal(
             id="consecutive_days",
-            label="Rest spacing",
-            value=f"{consecutive_days}d streak",
-            detail="Rest days are well spaced across your training week.",
+            label="Espaciado de descansos" if is_es else "Rest spacing",
+            value=f"Racha {consecutive_days} d" if is_es else f"{consecutive_days}d streak",
+            detail=(
+                "Los días de descanso están bien repartidos a lo largo de tu semana."
+                if is_es
+                else "Rest days are well spaced across your training week."
+            ),
             severity="ok",
         ))
 
@@ -805,41 +873,60 @@ def evaluate_overtraining(user_id: UUID, day: LocalDay | None = None) -> Overtra
             score -= 18
             signals.append(OvertrainingSignal(
                 id="performance_drop",
-                label="Performance regression",
-                value=f"{len(regressed_exercises)} lifts",
-                detail=f"Estimated strength dipped or RPE spiked at the same load on {', '.join(regressed_exercises[:2])}.",
+                label="Caída de rendimiento" if is_es else "Performance regression",
+                value=f"{len(regressed_exercises)} ejercicios" if is_es else f"{len(regressed_exercises)} lifts",
+                detail=(
+                    f"La fuerza estimada bajó o el RPE subió con la misma carga en {', '.join(regressed_exercises[:2])}."
+                    if is_es
+                    else f"Estimated strength dipped or RPE spiked at the same load on {', '.join(regressed_exercises[:2])}."
+                ),
                 severity="high",
             ))
         elif len(regressed_exercises) == 1 and ((avg_workout_fatigue_7d or 0) >= 6.0 or repeated_fatigue_count >= 1):
             score -= 9
             signals.append(OvertrainingSignal(
                 id="performance_drop",
-                label="Lift readiness dip",
-                value="1 lift",
-                detail=f"{regressed_exercises[0]} showed higher effort or lower output than the prior session.",
+                label="Bajada de rendimiento" if is_es else "Lift readiness dip",
+                value="1 ejercicio" if is_es else "1 lift",
+                detail=(
+                    f"{regressed_exercises[0]} mostró mayor esfuerzo o menor rendimiento que en la sesión anterior."
+                    if is_es
+                    else f"{regressed_exercises[0]} showed higher effort or lower output than the prior session."
+                ),
                 severity="watch",
             ))
         else:
             signals.append(OvertrainingSignal(
                 id="performance_drop",
-                label="Lift progression",
-                value="Steady",
-                detail=f"Tracked strength output held steady across {tracked_repeat_exercises} repeated exercises.",
+                label="Progresión de cargas" if is_es else "Lift progression",
+                value="Estable" if is_es else "Steady",
+                detail=(
+                    f"El rendimiento de fuerza se mantuvo estable en {tracked_repeat_exercises} ejercicios repetidos."
+                    if is_es
+                    else f"Tracked strength output held steady across {tracked_repeat_exercises} repeated exercises."
+                ),
                 severity="ok",
             ))
 
     # 6. Manual recovery check-ins (7-day window)
     if repeated_fatigue_count >= 2 or recent_sharp_joint:
         score -= 24
-        detail = (
-            "Sharp joint discomfort logged in the last 72h; heavy axial/joint loading should be backed off."
-            if recent_sharp_joint
-            else f"{repeated_fatigue_count} high-fatigue check-ins recorded in the last 7 days."
-        )
+        if recent_sharp_joint:
+            detail = (
+                "Molestia articular aguda registrada en las últimas 72 h; conviene reducir las cargas pesadas sobre las articulaciones."
+                if is_es
+                else "Sharp joint discomfort logged in the last 72h; heavy axial/joint loading should be backed off."
+            )
+        else:
+            detail = (
+                f"{repeated_fatigue_count} registros de fatiga alta en los últimos 7 días."
+                if is_es
+                else f"{repeated_fatigue_count} high-fatigue check-ins recorded in the last 7 days."
+            )
         signals.append(OvertrainingSignal(
             id="checkins",
-            label="Recovery check-ins",
-            value=f"{repeated_fatigue_count}/7d",
+            label="Registros de recuperación" if is_es else "Recovery check-ins",
+            value=f"{repeated_fatigue_count}/7 d" if is_es else f"{repeated_fatigue_count}/7d",
             detail=detail,
             severity="high",
         ))
@@ -847,17 +934,25 @@ def evaluate_overtraining(user_id: UUID, day: LocalDay | None = None) -> Overtra
         score -= 12
         signals.append(OvertrainingSignal(
             id="checkins",
-            label="Recovery check-ins",
-            value="1/7d",
-            detail="1 elevated fatigue/soreness check-in logged this week.",
+            label="Registros de recuperación" if is_es else "Recovery check-ins",
+            value="1/7 d" if is_es else "1/7d",
+            detail=(
+                "1 registro de fatiga o agujetas elevadas esta semana."
+                if is_es
+                else "1 elevated fatigue/soreness check-in logged this week."
+            ),
             severity="watch",
         ))
     else:
         signals.append(OvertrainingSignal(
             id="checkins",
-            label="Recovery check-ins",
-            value=f"{len(checkins_7d)} logged",
-            detail="No repeated high-fatigue or joint-strain check-ins in the past 7 days.",
+            label="Registros de recuperación" if is_es else "Recovery check-ins",
+            value=f"{len(checkins_7d)} regs." if is_es else f"{len(checkins_7d)} logged",
+            detail=(
+                "Sin registros repetidos de fatiga alta ni molestias articulares en los últimos 7 días."
+                if is_es
+                else "No repeated high-fatigue or joint-strain check-ins in the past 7 days."
+            ),
             severity="ok",
         ))
 
@@ -868,9 +963,13 @@ def evaluate_overtraining(user_id: UUID, day: LocalDay | None = None) -> Overtra
             score -= 8
             signals.append(OvertrainingSignal(
                 id="nutrition_energy",
-                label="Recovery fueling",
+                label="Energía para recuperar" if is_es else "Recovery fueling",
                 value=f"{round((avg_kcal / calorie_goal) * 100)}%",
-                detail=f"Averaging {avg_kcal:,} of {calorie_goal:,} kcal/day over the last 3 days while training frequently.",
+                detail=(
+                    f"Media de {avg_kcal:,} de {calorie_goal:,} kcal/día en los últimos 3 días mientras entrenas con frecuencia."
+                    if is_es
+                    else f"Averaging {avg_kcal:,} of {calorie_goal:,} kcal/day over the last 3 days while training frequently."
+                ),
                 severity="watch",
             ))
 
@@ -881,10 +980,13 @@ def evaluate_overtraining(user_id: UUID, day: LocalDay | None = None) -> Overtra
         score -= 6
         signals.append(OvertrainingSignal(
             id="activity_load",
-            label="Daily NEAT & steps",
+            label="Actividad diaria y pasos" if is_es else "Daily NEAT & steps",
             value=f"{activity_summary.steps_avg_7d:,}",
             detail=(
-                f"Health Connect averages {activity_summary.steps_avg_7d:,} steps/day and "
+                f"Health Connect promedia {activity_summary.steps_avg_7d:,} pasos/día y "
+                f"{activity_summary.active_calories_avg_7d} kcal activas junto con {sessions_7d} sesiones."
+                if is_es
+                else f"Health Connect averages {activity_summary.steps_avg_7d:,} steps/day and "
                 f"{activity_summary.active_calories_avg_7d} active kcal alongside {sessions_7d} sessions."
             ),
             severity="watch",
@@ -905,48 +1007,97 @@ def evaluate_overtraining(user_id: UUID, day: LocalDay | None = None) -> Overtra
 
     # Honest headline, summary & recommendations (zero HRV claims, zero false auto-applied claims)
     if risk_level == "high":
-        headline = "Recovery debt is stacking up — prioritize rest or a light deload"
-        summary = (
-            f"Readiness is {readiness_score}/100 with {len(high_signals)} elevated strain signal"
-            f"{'s' if len(high_signals) != 1 else ''}: "
-            + " ".join(s.detail for s in high_signals[:2])
+        headline = (
+            "Se acumula deuda de recuperación — prioriza el descanso o una descarga suave"
+            if is_es
+            else "Recovery debt is stacking up — prioritize rest or a light deload"
         )
-        recommendations = [
-            f"Swap today for active recovery or apply a -{DELOAD_PCT}% deload (capped at RPE 6) to let fatigue clear.",
-            "Favor 7.5+ hours of sleep and hit your daily protein and calorie targets to support tissue repair.",
-        ]
-        if strained_muscles:
-            recommendations.append(
-                f"Keep volume light on {', '.join(strained_muscles[:3])} over the next 48 hours."
+        if is_es:
+            signal_word = "señal elevada de fatiga" if len(high_signals) == 1 else "señales elevadas de fatiga"
+            summary = (
+                f"Disponibilidad en {readiness_score}/100 con {len(high_signals)} {signal_word}: "
+                + " ".join(s.detail for s in high_signals[:2])
             )
+            recommendations = [
+                f"Cambia hoy por recuperación activa o aplica una descarga del -{DELOAD_PCT}% (RPE máximo 6) para liberar fatiga.",
+                "Prioriza más de 7,5 horas de sueño y alcanza tus objetivos diarios de proteína y calorías para favorecer la recuperación.",
+            ]
+            if strained_muscles:
+                muscles_label = ", ".join(translate_muscle(m, "es") for m in strained_muscles[:3])
+                recommendations.append(
+                    f"Mantén el volumen bajo en {muscles_label} durante las próximas 48 horas."
+                )
+        else:
+            summary = (
+                f"Readiness is {readiness_score}/100 with {len(high_signals)} elevated strain signal"
+                f"{'s' if len(high_signals) != 1 else ''}: "
+                + " ".join(s.detail for s in high_signals[:2])
+            )
+            recommendations = [
+                f"Swap today for active recovery or apply a -{DELOAD_PCT}% deload (capped at RPE 6) to let fatigue clear.",
+                "Favor 7.5+ hours of sleep and hit your daily protein and calorie targets to support tissue repair.",
+            ]
+            if strained_muscles:
+                recommendations.append(
+                    f"Keep volume light on {', '.join(strained_muscles[:3])} over the next 48 hours."
+                )
     elif risk_level == "moderate":
-        headline = "Elevated fatigue signals — keep effort controlled today"
-        top_notes = (high_signals + watch_signals)[:2]
-        summary = f"Readiness is {readiness_score}/100. " + " ".join(s.detail for s in top_notes)
-        recommendations = [
-            "Leave 2–3 reps in reserve (RPE 7–8) on main compound lifts today.",
-            f"Use Apply -{DELOAD_PCT}% Deload below if energy or bar speed still feel sluggish.",
-        ]
-    else:
-        headline = "Readiness & workload look balanced"
-        summary = (
-            f"Readiness is {readiness_score}/100 across {sessions_7d} sessions and "
-            f"{total_sets_7d} strength sets in the last 7 days."
+        headline = (
+            "Señales de fatiga elevada — mantén el esfuerzo controlado hoy"
+            if is_es
+            else "Elevated fatigue signals — keep effort controlled today"
         )
-        recommendations = [
-            "Continue progressive overload within 1–2 reps of target effort.",
-            "Log a quick recovery check-in anytime stiffness or sleep dips start carrying over.",
-        ]
+        top_notes = (high_signals + watch_signals)[:2]
+        if is_es:
+            summary = f"Disponibilidad en {readiness_score}/100. " + " ".join(s.detail for s in top_notes)
+            recommendations = [
+                "Deja 2–3 repeticiones en reserva (RPE 7–8) en los ejercicios compuestos principales hoy.",
+                f"Usa «Aplicar descarga del -{DELOAD_PCT}%» abajo si notas poca energía o velocidad de barra lenta.",
+            ]
+        else:
+            summary = f"Readiness is {readiness_score}/100. " + " ".join(s.detail for s in top_notes)
+            recommendations = [
+                "Leave 2–3 reps in reserve (RPE 7–8) on main compound lifts today.",
+                f"Use Apply -{DELOAD_PCT}% Deload below if energy or bar speed still feel sluggish.",
+            ]
+    else:
+        headline = (
+            "Disponibilidad y carga de trabajo equilibradas"
+            if is_es
+            else "Readiness & workload look balanced"
+        )
+        if is_es:
+            summary = (
+                f"Disponibilidad en {readiness_score}/100 con {sessions_7d} sesiones y "
+                f"{total_sets_7d} series de fuerza en los últimos 7 días."
+            )
+            recommendations = [
+                "Continúa con la sobrecarga progresiva dejando 1–2 repeticiones del esfuerzo objetivo.",
+                "Registra un breve check-in de recuperación si notas rigidez o peor descanso acumulado.",
+            ]
+        else:
+            summary = (
+                f"Readiness is {readiness_score}/100 across {sessions_7d} sessions and "
+                f"{total_sets_7d} strength sets in the last 7 days."
+            )
+            recommendations = [
+                "Continue progressive overload within 1–2 reps of target effort.",
+                "Log a quick recovery check-in anytime stiffness or sleep dips start carrying over.",
+            ]
 
     if deload_active:
         recommendations.insert(
             0,
-            f"A -{deload_pct}% deload is active on your next workout or AI plan and clears automatically once completed.",
+            f"Hay una descarga del -{deload_pct}% activa para tu próximo entrenamiento o plan de IA y se desactiva al completarlo."
+            if is_es
+            else f"A -{deload_pct}% deload is active on your next workout or AI plan and clears automatically once completed.",
         )
     elif rest_day_scheduled:
         recommendations.insert(
             0,
-            "Today's AI workout is already set as an active recovery rest day.",
+            "El entrenamiento de IA de hoy ya está marcado como día de descanso y recuperación activa."
+            if is_es
+            else "Today's AI workout is already set as an active recovery rest day.",
         )
 
     return OvertrainingStatusResponse(
@@ -1020,9 +1171,12 @@ def apply_overtraining_mods(user_id: UUID, day: LocalDay | None = None) -> Overt
     todays_plan = _fetch_todays_plan(supabase, uid, today_str)
     if supabase is not None and todays_plan and not todays_plan.get("is_rest_day"):
         reasoning = str(todays_plan.get("ai_reasoning") or "").strip()
-        if "Deload active" not in reasoning:
+        if "Deload active" not in reasoning and "Descarga activa" not in reasoning:
             reduced_exercises = _apply_deload_to_exercises(todays_plan.get("exercises") or [], DELOAD_PCT)
-            deload_note = f"Deload active: volume and load reduced by {DELOAD_PCT}%, target RPE capped at 6."
+            deload_note = pick(
+                f"Deload active: volume and load reduced by {DELOAD_PCT}%, target RPE capped at 6.",
+                f"Descarga activa: volumen y carga reducidos un {DELOAD_PCT} %, RPE objetivo limitado a 6.",
+            )
             next_reasoning = f"{reasoning} {deload_note}".strip() if reasoning else deload_note
             try:
                 supabase.table("workout_plans").update({
@@ -1061,11 +1215,14 @@ def schedule_recovery_rest_day(user_id: UUID, day: LocalDay | None = None) -> Ov
             "user_id": uid,
             "plan_date": active_day.local_date.isoformat(),
             "routine_id": None,
-            "title": "Active Recovery & Rest",
+            "title": pick("Active Recovery & Rest", "Recuperación activa y descanso"),
             "exercises": [],
             "is_rest_day": True,
             "ai_adjusted": True,
-            "ai_reasoning": "Swapped to a recovery rest day based on your readiness check.",
+            "ai_reasoning": pick(
+                "Swapped to a recovery rest day based on your readiness check.",
+                "Cambiado a un día de descanso y recuperación según tu evaluación de disponibilidad.",
+            ),
             "updated_at": now.isoformat(),
         }, on_conflict="user_id,plan_date").execute()
     except Exception as err:

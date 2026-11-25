@@ -12,6 +12,14 @@ from fastapi import HTTPException
 from openai import AsyncOpenAI, BadRequestError
 
 from app.core.config import get_settings
+from app.core.i18n import (
+    format_short_date,
+    get_language,
+    normalize_language,
+    pick,
+    template_label,
+    translate_stored_plan_text,
+)
 from app.core.local_day import LocalDay
 from app.services.ai_tip_history import clean_name, instant
 from app.services.ai_tips_service import accepted_training_notes
@@ -322,7 +330,7 @@ def history_sessions(
         if name and groups and name.lower() not in sessions and len(exercises) >= MIN_PLAN_EXERCISES:
             sessions[name.lower()] = {
                 "id": str(workout["id"]), "name": name, "exercises": exercises,
-                "muscle_groups": groups, "last_done": started.strftime("%b %d"), "started": started,
+                "muscle_groups": groups, "last_done": format_short_date(started.date()), "started": started,
             }
 
     def rest(session: dict[str, Any]) -> float:
@@ -396,9 +404,11 @@ async def _quality_checked_exercises(
             result.update(retried)
         else:
             result["exercises"] = fallback_exercises(session, guidance)
-            result["workout_name"] = session["label"]
-            result["reasoning"] = (
-                f"Balanced {session['label'].lower()} session built from the vetted exercise list."
+            localized_label = template_label(session["template"], session["label"])
+            result["workout_name"] = localized_label
+            result["reasoning"] = pick(
+                f"Balanced {session['label'].lower()} session built from the vetted exercise list.",
+                f"Sesión equilibrada de {localized_label.lower()} creada a partir de la lista seleccionada de ejercicios.",
             )
             result["adjusted"] = True
     if session:
@@ -412,7 +422,7 @@ def _save_rest_day(
     try:
         saved = _data(db_session.table("workout_plans").upsert({
             "user_id": str(user_id), "plan_date": today, "routine_id": None,
-            "title": "Rest day", "exercises": [], "is_rest_day": True,
+            "title": pick("Rest day", "Día de descanso"), "exercises": [], "is_rest_day": True,
             "ai_adjusted": adjusted, "ai_reasoning": reasoning,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }, on_conflict="user_id,plan_date").select("id").execute())
@@ -511,7 +521,8 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
     if existing_plans:
         plan = existing_plans[0]
         return {"plan_id": plan["id"], "ai_adjusted": bool(plan.get("ai_adjusted")),
-                "reasoning": plan.get("ai_reasoning"), "rest_day": bool(plan.get("is_rest_day")),
+                "reasoning": translate_stored_plan_text(plan.get("ai_reasoning")),
+                "rest_day": bool(plan.get("is_rest_day")),
                 "sets_created": False}
     if any(row.get("end_time") for row in workouts):
         return {"plan_id": None, "ai_adjusted": False, "reasoning": None, "rest_day": False,
@@ -563,7 +574,10 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         elif recent_covers_whole_body(recent_muscle_groups):
             return _save_rest_day(
                 db_session, user_id, today,
-                "Every major muscle group was trained in the last 48 hours. Today is a rest day.",
+                pick(
+                    "Every major muscle group was trained in the last 48 hours. Today is a rest day.",
+                    "Todos los grupos musculares principales se entrenaron en las últimas 48 horas. Hoy es día de descanso.",
+                ),
                 adjusted=True,
             )
         else:
@@ -576,7 +590,10 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
                         "sets_created": False}
             return _save_rest_day(
                 db_session, user_id, today,
-                "Every muscle group was trained in the last 48 hours. Today is a rest day.",
+                pick(
+                    "Every muscle group was trained in the last 48 hours. Today is a rest day.",
+                    "Todos los grupos musculares se entrenaron en las últimas 48 horas. Hoy es día de descanso.",
+                ),
                 adjusted=True,
             )
     totals = {
@@ -700,6 +717,11 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
                 " Keep sets at the lower end of the range, hold or lower the load, and prefer technique and recovery"
                 " over extra volume while respecting the user's goal."
                 if fatigue_is_high else ""
+            )
+            + (
+                " Write \"reasoning\" (and \"workout_name\" when creating a new workout or rest day) in natural Spanish."
+                " Keep JSON keys and exercise_id values exactly as given."
+                if get_language() == "es" else ""
             ),
     }
     commitments = accepted_training_notes(user_id, start, db_session)
@@ -792,14 +814,19 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
 
     if from_history:
         selected_routine_id = None  # a past workout's id is not a saved routine
-        reason = f"Based on your {workout_name} session from {selected_routine['last_done']}. Its muscles have recovered."
+        reason = pick(
+            f"Based on your {workout_name} session from {selected_routine['last_done']}. Its muscles have recovered.",
+            f"Basado en tu sesión «{workout_name}» del {selected_routine['last_done']}. Sus músculos ya están recuperados.",
+        )
         result["reasoning"] = f"{reason} {result['reasoning']}" if result["adjusted"] else reason
         result["adjusted"] = True
 
     if fatigue_is_high:
-        note = (
+        note = pick(
             f"Latest fatigue was {fatigue['latest']}/10, so volume was trimmed to "
-            f"{guidance['min_sets']}-{guidance['max_sets']} sets per exercise."
+            f"{guidance['min_sets']}-{guidance['max_sets']} sets per exercise.",
+            f"Tu última fatiga fue de {fatigue['latest']}/10, así que el volumen se redujo a "
+            f"{guidance['min_sets']}-{guidance['max_sets']} series por ejercicio.",
         )
         existing = result["reasoning"].strip()
         result["reasoning"] = f"{existing} {note}" if existing else note
@@ -868,7 +895,11 @@ async def suggest_live_adjustment(workout: dict[str, Any]) -> list[dict[str, Any
             "or stop_exercise with both new_weight_kg and new_reps null on the affected exercise. "
             "Warmup sets are preparation, not fatigue evidence. Weigh drop and failure sets by their RPE. "
             "Respect the routine targets and the user's goal when choosing values. "
-            "Return an empty list when the current plan can be kept as is.",
+            "Return an empty list when the current plan can be kept as is."
+            + (
+                " Write each \"reason\" in natural Spanish while keeping JSON keys, action values and exercise_id unchanged."
+                if get_language() == "es" else ""
+            ),
     }), schema)
     by_id = {str(exercise.get("exercise_id")): exercise for exercise in exercises}
     suggestions: list[dict[str, Any]] = []

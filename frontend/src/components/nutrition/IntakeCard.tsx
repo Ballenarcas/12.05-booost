@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from 'react'
 import '../../styles/intake-card.css'
 import { percent } from '../../utils/percent'
+import { locale, useT } from '../../i18n'
 
 type Macro = { label: string; current: number; target: number }
 
@@ -21,6 +22,7 @@ export default function IntakeCard({ label, consumed, goal, macros, pending, foo
   pending: boolean
   footer: ReactNode
 }) {
+  const t = useT()
   const id = useId().replace(/:/g, '')
   const labelId = `intake-label-${id}`
   const clipId = `intake-orb-clip-${id}`
@@ -33,7 +35,7 @@ export default function IntakeCard({ label, consumed, goal, macros, pending, foo
     <section className="hifi-card" aria-labelledby={labelId} aria-busy={pending}>
       <h2 className="hifi-card-label" id={labelId}>{label}</h2>
       <div className="home-nutrition">
-        <div className="home-orb" role="img" aria-label={pending ? 'Loading your daily intake' : `${Math.round(consumed)} of ${goal} kcal eaten`}>
+        <div className="home-orb" role="img" aria-label={pending ? t('intake.loading') : t('intake.eatenAria', { value: Math.round(consumed), goal })}>
           <svg className="home-orb-waves" viewBox="0 0 126 126" width={126} height={126} aria-hidden="true">
             <defs>
               <clipPath id={clipId}>
@@ -57,8 +59,8 @@ export default function IntakeCard({ label, consumed, goal, macros, pending, foo
             </g>
           </svg>
           <p className="home-orb-value" aria-hidden="true">
-            <strong>{pending ? '–' : Math.round(consumed).toLocaleString('en-US')}</strong>
-            <span>/{pending ? '–' : goal.toLocaleString('en-US')} kcal</span>
+            <strong>{pending ? '–' : Math.round(consumed).toLocaleString(locale())}</strong>
+            <span>/{pending ? '–' : goal.toLocaleString(locale())} kcal</span>
           </p>
         </div>
         <ul className="home-macros">

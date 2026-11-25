@@ -3,10 +3,12 @@ import { ArrowLeft } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { requestPasswordReset } from '../services/api'
 import { describeError } from '../utils/errors.js'
+import { useT } from '../i18n'
 import '../styles/onboarding.css'
 import '../styles/login.css'
 
 function ForgotPassword() {
+  const t = useT()
   const location = useLocation()
   const [email, setEmail] = useState((location.state as { email?: string } | null)?.email ?? '')
   const [sentMessage, setSentMessage] = useState('')
@@ -20,7 +22,7 @@ function ForgotPassword() {
     try {
       setSentMessage(await requestPasswordReset(email))
     } catch (error) {
-      setNotice(describeError(error, "We couldn't send the reset link. Please try again."))
+      setNotice(describeError(error, t('reset.errorSend')))
     } finally {
       setIsSubmitting(false)
     }
@@ -31,11 +33,11 @@ function ForgotPassword() {
       <div className="onboarding-content login-content">
         <div className="login-mark">BOOOST</div>
         <header className="onboarding-header login-header">
-          <h1 className="onboarding-title">Reset your password</h1>
+          <h1 className="onboarding-title">{t('reset.forgotTitle')}</h1>
           <p className="onboarding-subtitle">
             {sentMessage
-              ? 'Check your inbox and your spam folder. The link works once, for 30 minutes.'
-              : "Enter your account's email and we'll send you a link to set a new password."}
+              ? t('reset.checkInbox')
+              : t('reset.enterEmail')}
           </p>
         </header>
 
@@ -44,19 +46,19 @@ function ForgotPassword() {
             <p className="login-notice" role="status">{sentMessage}</p>
             <div className="onboarding-actions login-actions">
               <Link className="btn-secondary-outline login-back-link" to="/login">
-                <ArrowLeft size={17} aria-hidden="true" /> Back to sign in
+                <ArrowLeft size={17} aria-hidden="true" /> {t('reset.backToSignIn')}
               </Link>
             </div>
           </div>
         ) : (
           <form className="onboarding-form login-form" onSubmit={handleSubmit}>
             <div className="form-field">
-              <label htmlFor="reset-email" className="form-label">Email</label>
+              <label htmlFor="reset-email" className="form-label">{t('login.email')}</label>
               <input
                 id="reset-email"
                 className="form-input"
                 type="email"
-                placeholder="name@example.com"
+                placeholder={t('login.emailPlaceholder')}
                 autoComplete="email"
                 required
                 maxLength={255}
@@ -66,10 +68,10 @@ function ForgotPassword() {
             </div>
             <div className="onboarding-actions login-actions">
               <button type="submit" className="btn-primary-outline" disabled={isSubmitting}>
-                {isSubmitting ? 'Sending…' : 'Send reset link'}
+                {isSubmitting ? t('reset.sending') : t('reset.sendLink')}
               </button>
               <Link className="btn-secondary-outline login-back-link" to="/login">
-                <ArrowLeft size={17} aria-hidden="true" /> Back to sign in
+                <ArrowLeft size={17} aria-hidden="true" /> {t('reset.backToSignIn')}
               </Link>
             </div>
             {notice && <p className="login-notice" role="alert">{notice}</p>}

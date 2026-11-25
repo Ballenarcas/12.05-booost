@@ -1,5 +1,6 @@
 import { useId, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { TrendingUp } from 'lucide-react'
+import { locale, t } from '../../i18n'
 import type { NutritionStatisticsRange } from '../../types/nutrition'
 import { formatAxisNumber, formatProgressionAxisLabel } from '../../utils/nutritionStatistics'
 import { useSpring } from '../../utils/useSpring'
@@ -27,7 +28,7 @@ type Point = { x: number; y: number }
 const WIDTH = 640
 const HEIGHT = 252
 const PADDING = { top: 18, right: 20, bottom: 42, left: 62 }
-const valueFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
+const valueFormatter = { format: (value: number) => new Intl.NumberFormat(locale(), { maximumFractionDigits: 1 }).format(value) }
 
 function dayNumber(value: string): number {
   const [year, month, day] = value.slice(0, 10).split('-').map(Number)
@@ -84,7 +85,7 @@ function smoothLine(points: Point[]) {
 
 function formatReadingValue(value: number, unit: 'kg' | 'kcal', isWeeklyAvg: boolean): string {
   const formatted = valueFormatter.format(Math.round(value * 10) / 10)
-  return isWeeklyAvg ? `${formatted} ${unit}/day` : `${formatted} ${unit}`
+  return isWeeklyAvg ? t('stats.perDay', { value: formatted, unit }) : `${formatted} ${unit}`
 }
 
 export default function StatsProgressionChart({

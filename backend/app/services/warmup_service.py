@@ -9,6 +9,7 @@ from openai import APIError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.config import get_settings
+from app.core.i18n import get_language, pick
 from app.schemas.workout import (
     WarmupRecommendationRequest,
     WarmupRecommendationResponse,
@@ -149,10 +150,16 @@ def _validate_warmup_plan(
     if len(strength_ids) != len(set(strength_ids)) or set(strength_ids) != set(strength_exercises):
         raise ValueError("The AI returned an invalid strength warm-up selection")
 
+    is_es = get_language() == "es"
     steps = [
         WarmupStep(
-            title="General warm-up",
-            detail=GENERAL_WARMUP_DETAIL,
+            title="Calentamiento general" if is_es else "General warm-up",
+            detail=(
+                "Haz cardio suave y movilidad dinámica para las articulaciones que vas a entrenar. "
+                "Mantén un ritmo cómodo y detente si sientes dolor agudo."
+                if is_es
+                else GENERAL_WARMUP_DETAIL
+            ),
             duration_seconds=plan.general_warmup_seconds,
         )
     ]
@@ -160,9 +167,12 @@ def _validate_warmup_plan(
         exercise = cardio_exercises[warmup.exercise_id]
         steps.append(
             WarmupStep(
-                title=f"{exercise.name} build-up",
+                title=f"Progresión de {exercise.name}" if is_es else f"{exercise.name} build-up",
                 detail=(
-                    "Start at an easy pace and gradually build toward your planned effort. "
+                    "Empieza a un ritmo suave y sube gradualmente hacia tu esfuerzo objetivo. "
+                    "Mantén el calentamiento cómodo."
+                    if is_es
+                    else "Start at an easy pace and gradually build toward your planned effort. "
                     "Keep the warm-up comfortable."
                 ),
                 duration_seconds=warmup.duration_seconds,
@@ -196,7 +206,12 @@ def _validate_warmup_plan(
         steps.append(
             WarmupStep(
                 title=exercise.name,
-                detail=STRENGTH_WARMUP_DETAIL,
+                detail=(
+                    "Usa estas series ligeras de aproximación para preparar tu peso de trabajo. "
+                    "Controla cada repetición y para lejos del fallo."
+                    if is_es
+                    else STRENGTH_WARMUP_DETAIL
+                ),
                 duration_seconds=len(warmup_sets) * RAMP_SET_SECONDS,
                 exercise_id=exercise.exercise_id,
                 sets=warmup_sets,
@@ -205,24 +220,42 @@ def _validate_warmup_plan(
 
     total_seconds = sum(step.duration_seconds or 0 for step in steps)
     minutes = max(1, round(total_seconds / 60))
-    if strength_exercises and cardio_exercises:
-        focus = (
-            f"{len(strength_exercises)} strength exercise"
-            f"{'s' if len(strength_exercises) != 1 else ''} and your cardio work"
-        )
-    elif strength_exercises:
-        focus = (
-            f"{len(strength_exercises)} strength exercise"
-            f"{'s' if len(strength_exercises) != 1 else ''}"
-        )
+    if is_es:
+        if strength_exercises and cardio_exercises:
+            n = len(strength_exercises)
+            focus = f"{n} ejercicio{'s' if n != 1 else ''} de fuerza y tu cardio"
+        elif strength_exercises:
+            n = len(strength_exercises)
+            focus = f"{n} ejercicio{'s' if n != 1 else ''} de fuerza"
+        else:
+            focus = "tu trabajo de cardio"
+        summary = f"Unos {minutes} min para preparar {focus}."
+        if strength_exercises:
+            summary = (
+                f"{summary} El objetivo es activar el sistema nervioso y preparar tus músculos de forma segura "
+                "sin generar fatiga previa antes de las series efectivas."
+            )
+        else:
+            summary = f"{summary} Sube el ritmo de forma progresiva y empieza suave."
     else:
-        focus = "your cardio work"
+        if strength_exercises and cardio_exercises:
+            focus = (
+                f"{len(strength_exercises)} strength exercise"
+                f"{'s' if len(strength_exercises) != 1 else ''} and your cardio work"
+            )
+        elif strength_exercises:
+            focus = (
+                f"{len(strength_exercises)} strength exercise"
+                f"{'s' if len(strength_exercises) != 1 else ''}"
+            )
+        else:
+            focus = "your cardio work"
 
-    summary = f"About {minutes} min to prepare {focus}."
-    if strength_exercises:
-        summary = f"{summary} {STRENGTH_WARMUP_PURPOSE}"
-    else:
-        summary = f"{summary} Build up gradually and keep the start easy."
+        summary = f"About {minutes} min to prepare {focus}."
+        if strength_exercises:
+            summary = f"{summary} {STRENGTH_WARMUP_PURPOSE}"
+        else:
+            summary = f"{summary} Build up gradually and keep the start easy."
 
     return WarmupRecommendationResponse(
         summary=summary,

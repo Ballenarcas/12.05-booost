@@ -4,18 +4,20 @@ import { clearDashboardCache, fetchHealthConnectStatus } from '../../services/ap
 import { connectHealthConnect, disconnectHealthConnect, ensureHealthConnectFresh, syncHealthConnect } from '../../services/healthConnect'
 import type { HealthConnectStatus } from '../../types/health'
 import { describeError } from '../../utils/errors.js'
+import { locale, t as tr, useT } from '../../i18n'
 
 type Notice = { kind: 'success' | 'error'; text: string }
 
 function formatSyncTime(value: string | null): string {
-  if (!value) return 'not yet'
+  if (!value) return tr('health.notYet')
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'not yet'
-  return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  if (Number.isNaN(date.getTime())) return tr('health.notYet')
+  return date.toLocaleString(locale(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 /** Health Connect section of Profile (moved from the old Settings page). */
 export default function HealthConnectCard({ userId }: { userId: string | undefined }) {
+  const t = useT()
   const [health, setHealth] = useState<HealthConnectStatus | null>(null)
   const [isLoading, setIsLoading] = useState(Boolean(userId))
   const [busy, setBusy] = useState<'connecting' | 'syncing' | 'disconnecting' | null>(null)
@@ -40,13 +42,13 @@ export default function HealthConnectCard({ userId }: { userId: string | undefin
         if (isMounted) setHealth(refreshed)
       })
       .catch((error: unknown) => {
-        if (isMounted) setNotice({ kind: 'error', text: describeError(error, "We couldn't load your Health Connect status. Please try again.") })
+        if (isMounted) setNotice({ kind: 'error', text: describeError(error, t('health.errorLoad')) })
       })
       .finally(() => {
         if (isMounted) setIsLoading(false)
       })
     return () => { isMounted = false }
-  }, [userId])
+  }, [userId, t])
 
   const run = async (kind: NonNullable<typeof busy>, action: () => Promise<HealthConnectStatus>, success: string, failure: string) => {
     setBusy(kind)
@@ -66,16 +68,16 @@ export default function HealthConnectCard({ userId }: { userId: string | undefin
     if (!userId) return
     setIsConnectOpen(false)
     void run('connecting', () => connectHealthConnect(userId),
-      'Health Connect is connected. Your steps and active calories now shape the AI trainer.',
-      "We couldn't connect Health Connect. Please try again.")
+      t('health.connected'),
+      t('health.errorConnect'))
   }
   const sync = () => {
     if (!userId) return
-    void run('syncing', () => syncHealthConnect(userId), 'Activity synced from Health Connect.', "We couldn't sync your activity. Please try again.")
+    void run('syncing', () => syncHealthConnect(userId), t('health.synced'), t('health.errorSync'))
   }
   const disconnect = () => void run('disconnecting', disconnectHealthConnect,
-    'Health Connect disconnected. The AI trainer no longer uses activity data.',
-    "We couldn't disconnect Health Connect. Please try again.")
+    t('health.disconnected'),
+    t('health.errorDisconnect'))
 
   return (
     <section className="section" aria-labelledby="health-connect-heading">
@@ -83,55 +85,54 @@ export default function HealthConnectCard({ userId }: { userId: string | undefin
       <div className="settings-card health-card">
         <div className="health-header">
           <HeartPulse size={20} aria-hidden="true" />
-          <p>Steps and active calories that sharpen your AI trainer guidance.</p>
+          <p>{t('health.intro')}</p>
           <span className={`health-status${health?.connected ? ' is-connected' : ''}`}>
-            {isLoading ? 'Checking' : health?.connected ? 'Connected' : 'Not connected'}
+            {isLoading ? t('health.checking') : health?.connected ? t('health.statusConnected') : t('health.statusNotConnected')}
           </span>
         </div>
 
         {isLoading ? (
-          <p className="health-meta" role="status"><Loader2 size={16} className="animate-spin" aria-hidden="true" /> Checking Health Connect...</p>
+          <p className="health-meta" role="status"><Loader2 size={16} className="animate-spin" aria-hidden="true" /> {t('health.checkingLong')}</p>
         ) : health?.connected ? (
           <>
             <div className="health-stats">
               <div className="health-stat">
                 <Footprints size={18} aria-hidden="true" />
-                <strong>{health.activity.steps_today.toLocaleString()}</strong>
-                <span>steps today</span>
+                <strong>{health.activity.steps_today.toLocaleString(locale())}</strong>
+                <span>{t('health.stepsToday')}</span>
               </div>
               <div className="health-stat">
                 <Flame size={18} aria-hidden="true" />
                 <strong>{health.activity.active_calories_today}</strong>
-                <span>active kcal today</span>
+                <span>{t('health.kcalToday')}</span>
               </div>
             </div>
             <p className="health-meta">
-              Last synced {formatSyncTime(health.last_sync_at)}. Seven-day average{' '}
-              {health.activity.steps_avg_7d.toLocaleString()} steps and {health.activity.active_calories_avg_7d} active kcal.
+              {t('health.lastSynced', { time: formatSyncTime(health.last_sync_at), steps: health.activity.steps_avg_7d.toLocaleString(locale()), kcal: health.activity.active_calories_avg_7d })}
             </p>
             {health.source === 'preview' && (
-              <p className="health-meta">Browser preview uses sample activity. The Android app reads Health Connect directly.</p>
+              <p className="health-meta">{t('health.preview')}</p>
             )}
             <div className="health-actions">
               <button type="button" className="secondary-action" onClick={sync} disabled={busy !== null}>
                 {busy === 'syncing' ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <RefreshCw size={16} aria-hidden="true" />}
-                {busy === 'syncing' ? 'Syncing...' : 'Sync now'}
+                {busy === 'syncing' ? t('health.syncing') : t('health.syncNow')}
               </button>
               <button type="button" className="secondary-action health-disconnect" onClick={disconnect} disabled={busy !== null}>
                 {busy === 'disconnecting' ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Unplug size={16} aria-hidden="true" />}
-                {busy === 'disconnecting' ? 'Disconnecting...' : 'Disconnect'}
+                {busy === 'disconnecting' ? t('health.disconnecting') : t('health.disconnect')}
               </button>
             </div>
           </>
         ) : (
           <>
             <p className="health-meta">
-              Health Connect shares steps and active energy from your phone and wearables. BOOOST reads only those two data types.
+              {t('health.explain')}
             </p>
             <button type="button" className="secondary-action health-connect-btn" onClick={() => setIsConnectOpen(true)} disabled={busy !== null}>
               {busy === 'connecting'
-                ? <><Loader2 size={16} className="animate-spin" aria-hidden="true" /> Connecting...</>
-                : <><HeartPulse size={16} aria-hidden="true" /> Connect Health Connect</>}
+                ? <><Loader2 size={16} className="animate-spin" aria-hidden="true" /> {t('health.connecting')}</>
+                : <><HeartPulse size={16} aria-hidden="true" /> {t('health.connect')}</>}
             </button>
           </>
         )}
@@ -148,16 +149,16 @@ export default function HealthConnectCard({ userId }: { userId: string | undefin
         <div className="modal-backdrop" onClick={() => setIsConnectOpen(false)}>
           <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="health-connect-title" onClick={(event) => event.stopPropagation()}>
             <p className="eyebrow">Health Connect</p>
-            <h2 id="health-connect-title">Allow BOOOST to read your activity?</h2>
-            <p>Your AI trainer uses these daily totals to adapt calorie and training guidance. Nothing else from Health Connect is read.</p>
+            <h2 id="health-connect-title">{t('health.allowQuestion')}</h2>
+            <p>{t('health.allowBody')}</p>
             <ul className="health-permission-list">
-              <li><Footprints size={18} aria-hidden="true" /><div><strong>Steps</strong><span>Daily step count</span></div></li>
-              <li><Flame size={18} aria-hidden="true" /><div><strong>Active calories</strong><span>Energy burned above resting</span></div></li>
+              <li><Footprints size={18} aria-hidden="true" /><div><strong>{t('health.steps')}</strong><span>{t('health.stepsHint')}</span></div></li>
+              <li><Flame size={18} aria-hidden="true" /><div><strong>{t('health.activeCalories')}</strong><span>{t('health.activeCaloriesHint')}</span></div></li>
             </ul>
-            <p className="health-privacy"><ShieldCheck size={16} aria-hidden="true" /> Only aggregated daily totals are stored. You can disconnect at any time.</p>
+            <p className="health-privacy"><ShieldCheck size={16} aria-hidden="true" /> {t('health.privacy')}</p>
             <div className="modal-actions">
-              <button className="primary-button" type="button" onClick={connect}>Allow access</button>
-              <button className="secondary-action" type="button" onClick={() => setIsConnectOpen(false)}>Not now</button>
+              <button className="primary-button" type="button" onClick={connect}>{t('health.allow')}</button>
+              <button className="secondary-action" type="button" onClick={() => setIsConnectOpen(false)}>{t('health.notNow')}</button>
             </div>
           </div>
         </div>

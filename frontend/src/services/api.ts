@@ -33,6 +33,7 @@ import type {
 } from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
 import { DEFAULT_STATISTICS_RANGE } from '../utils/workoutStatistics'
+import { getLanguage, onLanguageChange, t } from '../i18n'
 import type { PremiumPlan, UserProfile } from '../types'
 import type {
   HealthActivityDay,
@@ -152,11 +153,13 @@ async function apiFetch(input: string, init: RequestInit = {}): Promise<Response
   const headers = new Headers(init.headers)
   const token = getAccessToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
+  // The server answers messages, tips and plans in the app language.
+  headers.set('Accept-Language', getLanguage())
   const response = await fetch(input, { ...init, headers })
   if (response.status === 401) {
     clearSession()
     if (window.location.pathname !== '/login') window.location.assign('/login')
-    throw new Error('Your session expired. Please sign in again.')
+    throw new Error(t('api.sessionExpired'))
   }
   return response
 }
@@ -250,7 +253,7 @@ export function getCachedDashboardSummary(): DashboardSummary | null {
 
 export async function fetchDashboardSummary(options: { forceRefresh?: boolean } = {}): Promise<DashboardSummary> {
   const user = getCurrentUser()
-  if (!user?.id) throw new Error('Finish setting up your profile to see your dashboard')
+  if (!user?.id) throw new Error(t('api.profileDashboard'))
   const userId = user.id
   const cached = readDashboardCache(userId)
   if (!options.forceRefresh && cached && Date.now() - cached.at < DASHBOARD_CACHE_TTL_MS) return cached.data
@@ -261,7 +264,7 @@ export async function fetchDashboardSummary(options: { forceRefresh?: boolean } 
     signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
   })
     .then(async (response) => {
-      if (!response.ok) throw new Error("We couldn't load your dashboard. Please try again.")
+      if (!response.ok) throw new Error(t('home.errorLoad'))
       const data = await response.json() as DashboardSummary
       try {
         localStorage.setItem(`${DASHBOARD_CACHE_PREFIX}${userId}`, JSON.stringify({ data, at: Date.now(), day: todayKey() }))
@@ -284,7 +287,7 @@ export async function planTodaysWorkout(userId: string): Promise<void> {
     signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
   })
   if (!response.ok) {
-    throw new Error("We couldn't build today's workout. Please try again.")
+    throw new Error(t('api.buildWorkout'))
   }
   clearDashboardCache()
 }
@@ -299,14 +302,14 @@ export function clearRoutinesCache(): void {
 export async function fetchRoutines(): Promise<Routine[]> {
   const user = getCurrentUser()
   const userId = user?.id
-  if (!userId) throw new Error('Finish setting up your profile to see your routines')
+  if (!userId) throw new Error(t('api.profileRoutines'))
   const existing = routinesRequests.get(userId)
   if (existing) return existing
   const request = apiFetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(userId)}`, {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
-      if (!response.ok) throw new Error("We couldn't load your routines. Please try again.")
+      if (!response.ok) throw new Error(t('workouts.errorRoutines'))
       const routines = await response.json() as Routine[]
       saveCopy(`routines:${userId}`, routines)
       return routines
@@ -321,7 +324,7 @@ export async function fetchRoutines(): Promise<Routine[]> {
 
 export async function createRoutine(payload: RoutineCreatePayload): Promise<Routine> {
   const user = getCurrentUser()
-  if (!user?.id) throw new Error('Complete onboarding before creating a routine')
+  if (!user?.id) throw new Error(t('api.onboardingCreateRoutine'))
 
   let response: Response
   try {
@@ -333,10 +336,10 @@ export async function createRoutine(payload: RoutineCreatePayload): Promise<Rout
     })
   } catch (error) {
     if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
-      throw new Error('The request timed out while saving the routine. Please try again.', { cause: error })
+      throw new Error(t('api.routineTimeout'), { cause: error })
     }
     if (error instanceof TypeError) {
-      throw new Error(`Could not reach the server while saving the routine: ${error.message}`, { cause: error })
+      throw new Error(t('api.routineUnreachable', { message: error.message }), { cause: error })
     }
     throw error
   }
@@ -362,7 +365,7 @@ export async function createRoutine(payload: RoutineCreatePayload): Promise<Rout
           .join('; ')
       }
     }
-    throw new Error(detail || `Unable to create routine (server error ${response.status})`)
+    throw new Error(detail || t('api.serverCreate', { status: response.status }))
   }
   const routine = await response.json() as Routine
   clearRoutinesCache()
@@ -371,7 +374,7 @@ export async function createRoutine(payload: RoutineCreatePayload): Promise<Rout
 
 export async function updateRoutine(routineId: string, payload: RoutineCreatePayload): Promise<Routine> {
   const user = getCurrentUser()
-  if (!user?.id) throw new Error('Complete onboarding before updating a routine')
+  if (!user?.id) throw new Error(t('api.onboardingUpdateRoutine'))
 
   const response = await apiFetch(
     `${API_URL}/api/v1/routines/${encodeURIComponent(routineId)}?user_id=${encodeURIComponent(user.id)}`,
@@ -386,7 +389,7 @@ export async function updateRoutine(routineId: string, payload: RoutineCreatePay
     const error: unknown = await response.json().catch(() => null)
     const detail = error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string'
       ? error.detail
-      : `Unable to update routine (server error ${response.status})`
+      : t('api.serverUpdate', { status: response.status })
     throw new Error(detail)
   }
   const routine = await response.json() as Routine
@@ -396,7 +399,7 @@ export async function updateRoutine(routineId: string, payload: RoutineCreatePay
 
 export async function deleteRoutine(routineId: string): Promise<void> {
   const user = getCurrentUser()
-  if (!user?.id) throw new Error('Complete onboarding before deleting a routine')
+  if (!user?.id) throw new Error(t('api.onboardingDeleteRoutine'))
 
   const response = await apiFetch(
     `${API_URL}/api/v1/routines/${encodeURIComponent(routineId)}?user_id=${encodeURIComponent(user.id)}`,
@@ -406,7 +409,7 @@ export async function deleteRoutine(routineId: string): Promise<void> {
     const error: unknown = await response.json().catch(() => null)
     const detail = error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string'
       ? error.detail
-      : `Unable to delete routine (server error ${response.status})`
+      : t('api.serverDelete', { status: response.status })
     throw new Error(detail)
   }
   clearRoutinesCache()
@@ -420,7 +423,7 @@ export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate):
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
   if (!response.ok) {
-    throw new Error("We couldn't save your workout. Please try again.")
+    throw new Error(t('aw.errorSave'))
   }
   invalidateWorkoutStatisticsCache(userId)
   clearDashboardCache()
@@ -429,13 +432,13 @@ export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate):
 
 function workoutAdjustmentError(response: Response, payload: unknown): string {
   if (response.status === 422) {
-    return "The AI couldn't read your workout data. Refresh the page and try again."
+    return t('api.aiCantRead')
   }
   if (payload && typeof payload === 'object' && 'detail' in payload) {
     const detail = (payload as { detail?: unknown }).detail
     if (typeof detail === 'string' && detail.trim()) return detail
   }
-  return 'Unable to get AI adjustments'
+  return t('aw.errorAdjust')
 }
 
 export async function requestWorkoutAdjustment(
@@ -454,7 +457,7 @@ export async function requestWorkoutAdjustment(
     })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'TimeoutError') {
-      throw new Error('The AI trainer is taking too long. Please try again.', { cause: error })
+      throw new Error(t('api.trainerSlow'), { cause: error })
     }
     throw error
   }
@@ -493,7 +496,7 @@ export async function requestWarmupRecommendation(
     if (response.status === 403) {
       throw new PremiumRequiredError(detail ?? 'Warm-up recommendations are a Premium feature.')
     }
-    throw new Error(detail ?? 'Unable to build your warm-up. Please try again.')
+    throw new Error(detail ?? t('aw.errorWarmup'))
   }
   return response.json() as Promise<WarmupRecommendation>
 }
@@ -512,7 +515,7 @@ async function loadWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
   if (!response.ok) {
-    throw new Error("We couldn't load your workout history. Please try again.")
+    throw new Error(t('workouts.errorHistory'))
   }
   const result = await response.json() as { items: WorkoutHistoryEntry[] }
   return result.items
@@ -532,7 +535,7 @@ export async function updateWorkoutHistoryEntry(
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
-    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update this workout. Please try again.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('api.updateWorkout'))
   }
   clearDashboardCache()
   return response.json()
@@ -545,7 +548,7 @@ export async function deleteWorkoutHistoryEntry(userId: string, workoutId: strin
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
   if (!response.ok) {
-    throw new Error("We couldn't remove that workout. Please try again.")
+    throw new Error(t('api.removeWorkout'))
   }
   invalidateWorkoutStatisticsCache(userId)
   clearDashboardCache()
@@ -647,7 +650,7 @@ export async function fetchWorkoutStatistics(
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   })
   if (!response.ok) {
-    throw new Error("We couldn't load your workout statistics. Please try again.")
+    throw new Error(t('stats.errorWorkouts'))
   }
   const data = await response.json() as WorkoutStatistics
   workoutStatisticsCache.set(cacheKey, { data, expiresAt: Date.now() + WORKOUT_STATISTICS_CACHE_TTL_MS })
@@ -680,7 +683,7 @@ export async function fetchNutritionStatistics(
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   })
   if (!response.ok) {
-    throw new Error("We couldn't load your meal statistics. Please try again.")
+    throw new Error(t('stats.errorMeals'))
   }
   const data = await response.json() as NutritionStatistics
   nutritionStatisticsCache.set(cacheKey, { data, expiresAt: Date.now() + WORKOUT_STATISTICS_CACHE_TTL_MS })
@@ -697,14 +700,14 @@ async function postPasswordReset(path: string, body: object, fallback: string): 
   try {
     response = await fetch(`${API_URL}/api/v1/users/password-reset/${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept-Language': getLanguage() },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(LOGIN_TIMEOUT_MS),
     })
   } catch (error) {
-    throw new Error('This is taking longer than expected. Check your connection and try again.', { cause: error })
+    throw new Error(t('api.slow'), { cause: error })
   }
-  if (response.status === 429) throw new Error('Too many attempts. Wait a minute and try again.')
+  if (response.status === 429) throw new Error(t('api.tooMany'))
   const data = await response.json().catch(() => ({})) as { message?: string; detail?: unknown }
   if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : fallback)
   return data.message ?? ''
@@ -712,11 +715,11 @@ async function postPasswordReset(path: string, body: object, fallback: string): 
 
 /** Always resolves with the same message, whether or not the email has an account. */
 export function requestPasswordReset(email: string): Promise<string> {
-  return postPasswordReset('request', { email: email.trim() }, "We couldn't send the reset link. Please try again.")
+  return postPasswordReset('request', { email: email.trim() }, t('reset.errorSend'))
 }
 
 export function confirmPasswordReset(token: string, newPassword: string): Promise<string> {
-  return postPasswordReset('confirm', { token, new_password: newPassword }, "We couldn't update your password. Please try again.")
+  return postPasswordReset('confirm', { token, new_password: newPassword }, t('reset.errorUpdate'))
 }
 
 export async function loginUser(email: string, password: string): Promise<import('../types').UserProfile> {
@@ -724,25 +727,25 @@ export async function loginUser(email: string, password: string): Promise<import
   try {
     response = await fetch(`${API_URL}/api/v1/users/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept-Language': getLanguage() },
       body: JSON.stringify({ email: email.trim(), password }),
       signal: AbortSignal.timeout(LOGIN_TIMEOUT_MS),
     })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'TimeoutError') {
-      throw new Error('Sign-in is taking longer than expected. Check your connection and try again.', { cause: error })
+      throw new Error(t('api.signInSlow'), { cause: error })
     }
     throw error
   }
 
   if (!response.ok) {
     if (response.status === 401 || response.status === 404) {
-      throw new Error('That email and password do not match. Please try again.')
+      throw new Error(t('api.wrongPassword'))
     }
     if (response.status === 429) {
-      throw new Error('Too many attempts. Wait a minute and try again.')
+      throw new Error(t('api.tooMany'))
     }
-    throw new Error("We couldn't sign you in right now. Please try again.")
+    throw new Error(t('api.signInNow'))
   }
 
   const profile = await response.json() as import('../types').UserProfile & { access_token: string }
@@ -751,7 +754,7 @@ export async function loginUser(email: string, password: string): Promise<import
     localStorage.setItem(SESSION_KEY, profile.access_token)
     localStorage.setItem('booost_user', JSON.stringify(profile))
   } catch {
-    throw new Error("We couldn't keep you signed in on this device. Please try again.")
+    throw new Error(t('api.keepSignedIn'))
   }
   return profile
 }
@@ -769,7 +772,7 @@ export interface TrainerInsightResponse {
 
 export async function getHealth(): Promise<{ status: string }> {
   const response = await apiFetch(`${API_URL}/api/v1/health`)
-  if (!response.ok) throw new Error("We couldn't reach BOOOST. Check your connection and try again.")
+  if (!response.ok) throw new Error(t('api.unreachable'))
   return response.json() as Promise<{ status: string }>
 }
 
@@ -782,7 +785,7 @@ export async function fetchHealthConnectStatus(): Promise<HealthConnectStatus> {
     throw new Error(
       typeof body?.detail === 'string'
         ? body.detail
-        : "We couldn't load your Health Connect status. Please try again.",
+        : t('health.errorLoad'),
     )
   }
   return response.json() as Promise<HealthConnectStatus>
@@ -803,7 +806,7 @@ export async function connectHealthConnect(
     throw new Error(
       typeof body?.detail === 'string'
         ? body.detail
-        : "We couldn't connect Health Connect. Please try again.",
+        : t('health.errorConnect'),
     )
   }
   return response.json() as Promise<HealthConnectStatus>
@@ -824,7 +827,7 @@ export async function syncHealthConnectActivity(
     throw new Error(
       typeof body?.detail === 'string'
         ? body.detail
-        : "We couldn't sync your activity. Please try again.",
+        : t('health.errorSync'),
     )
   }
   return response.json() as Promise<HealthConnectStatus>
@@ -840,7 +843,7 @@ export async function disconnectHealthConnect(): Promise<HealthConnectStatus> {
     throw new Error(
       typeof body?.detail === 'string'
         ? body.detail
-        : "We couldn't disconnect Health Connect. Please try again.",
+        : t('health.errorDisconnect'),
     )
   }
   return response.json() as Promise<HealthConnectStatus>
@@ -860,7 +863,7 @@ export async function generateTrainerInsight(
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
-      if (!response.ok) throw new Error("We couldn't get a trainer tip right now. Please try again later.")
+      if (!response.ok) throw new Error(t('api.trainerTip'))
       return response.json() as Promise<TrainerInsightResponse>
     })
     .finally(() => insightRequests.delete(requestKey))
@@ -909,7 +912,7 @@ export async function parseNaturalLanguage(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, threshold }),
   })
-  if (!response.ok) throw new Error("We couldn't understand that. Please rephrase and try again.")
+  if (!response.ok) throw new Error(t('api.understand'))
   return response.json() as Promise<ParseNaturalLanguageResponse>
 }
 
@@ -921,7 +924,7 @@ export async function conversationalSetup(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   })
-  if (!response.ok) throw new Error("We couldn't continue the setup. Please try again.")
+  if (!response.ok) throw new Error(t('api.continueSetup'))
   return response.json() as Promise<ConversationalSetupResponse>
 }
 
@@ -964,7 +967,7 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
-      if (!response.ok) throw new Error("We couldn't load exercises. Please try again.")
+      if (!response.ok) throw new Error(t('picker.errorLoad'))
       const data = (await response.json()) as import('../types').ExerciseListResponse
       exerciseListCache.set(cacheKey, { at: Date.now(), data })
       return data
@@ -979,14 +982,14 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
 
 export async function fetchExerciseCategories(): Promise<string[]> {
   const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/categories`)
-  if (!response.ok) throw new Error("We couldn't load exercise categories. Please try again.")
+  if (!response.ok) throw new Error(t('api.exerciseCategories'))
   const data = await response.json()
   return data.categories ?? []
 }
 
 export async function fetchExerciseMuscleGroups(): Promise<string[]> {
   const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/muscle-groups`)
-  if (!response.ok) throw new Error('Failed to fetch exercise muscle groups')
+  if (!response.ok) throw new Error(t('api.muscleGroups'))
   const data = await response.json() as { muscle_groups?: string[] }
   return data.muscle_groups ?? []
 }
@@ -995,7 +998,7 @@ export async function fetchExerciseById(exerciseId: string) {
   const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/${encodeURIComponent(exerciseId)}`, {
     cache: 'no-store',
   })
-  if (!response.ok) throw new Error("We couldn't load that exercise. Please try again.")
+  if (!response.ok) throw new Error(t('api.loadExercise'))
   return response.json()
 }
 
@@ -1048,14 +1051,14 @@ export async function submitUserOnboarding(formData: import('../types').UserOnbo
 
   if (!response.ok) {
     if (response.status === 409) {
-      throw new Error('That email is already registered. Try signing in instead.')
+      throw new Error(t('api.emailTaken'))
     }
-    throw new Error("We couldn't save your profile. Please try again.")
+    throw new Error(t('signup.errorSave'))
   }
 
   const data = await response.json()
   if (!data.saved_to_supabase) {
-    throw new Error("We couldn't save your account. Please try again.")
+    throw new Error(t('api.saveAccount'))
   }
 
   localProfile.id = data.user_id
@@ -1101,7 +1104,7 @@ export function isPremiumActive(profile: UserProfile | null = getCurrentUser()):
 
 export async function purchasePremium(plan: PremiumPlan): Promise<PremiumStatus> {
   const user = getCurrentUser()
-  if (!user?.id) throw new Error('Sign in before upgrading to premium')
+  if (!user?.id) throw new Error(t('api.signInPremium'))
 
   const response = await apiFetch(
     `${API_URL}/api/v1/premium/subscribe`,
@@ -1117,7 +1120,7 @@ export async function purchasePremium(plan: PremiumPlan): Promise<PremiumStatus>
     const error: unknown = await response.json().catch(() => null)
     const detail = error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string'
       ? error.detail
-      : `Unable to activate premium (server error ${response.status})`
+      : t('api.serverActivate', { status: response.status })
     throw new Error(detail)
   }
 
@@ -1148,7 +1151,7 @@ export async function cancelPremium(): Promise<void> {
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
-    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't cancel your subscription. Please try again.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('profile.errorCancel'))
   }
 
   const status = await response.json() as { expires_at: string }
@@ -1179,7 +1182,7 @@ export async function updateUserSettings(
     signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
   })
   if (!response.ok) {
-    throw new Error("We couldn't save your settings. Please try again.")
+    throw new Error(t('api.saveSettings'))
   }
 
   try {
@@ -1291,7 +1294,7 @@ export async function fetchTodayNutrition(userId: string, dateString?: string): 
     { signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS) },
   )
     .then((response) => {
-      if (!response.ok) throw new Error("We couldn't load today's nutrition. Please try again.")
+      if (!response.ok) throw new Error(t('api.loadNutrition'))
       return response.json() as Promise<TodayNutritionData>
     })
     .then((data) => {
@@ -1338,7 +1341,7 @@ export async function fetchCalorieAdjustment(userId: string): Promise<CalorieAdj
     { signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS) },
   )
     .then((response) => {
-      if (!response.ok) throw new Error("We couldn't check your progress right now. Please try again.")
+      if (!response.ok) throw new Error(t('api.checkProgress'))
       return response.json() as Promise<CalorieAdjustmentData>
     })
     .finally(() => adjustmentRequests.delete(userId))
@@ -1358,7 +1361,7 @@ export async function decideCalorieAdjustment(
     body: JSON.stringify({ user_id: userId, adjustment_id: adjustmentId, status }),
   })
   if (!response.ok) {
-    throw new Error("We couldn't update your goal. Please try again.")
+    throw new Error(t('add.errorGoal'))
   }
   return response.json()
 }
@@ -1395,7 +1398,7 @@ export function fetchCurrentTip(): Promise<AiTip | null> {
 
 async function loadCurrentTip(): Promise<AiTip | null> {
   const response = await apiFetch(`${API_URL}/api/v1/ai/tips/current?${localDayQuery()}`, { signal: AbortSignal.timeout(LLM_TIMEOUT_MS) })
-  if (!response.ok) throw new Error("We couldn't load your tip.")
+  if (!response.ok) throw new Error(t('api.loadTip'))
   return ((await response.json()) as { tip: AiTip | null }).tip
 }
 
@@ -1406,7 +1409,7 @@ export async function decideTip(tipId: string, status: 'accepted' | 'dismissed')
     body: JSON.stringify({ status }),
     signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
   })
-  if (!response.ok) throw new Error("We couldn't update this tip. Please try again.")
+  if (!response.ok) throw new Error(t('api.updateTip'))
   forgetCachedTip()
   if (status === 'accepted') clearGoalCaches()
   return response.json() as Promise<AiTipDecision>
@@ -1417,7 +1420,7 @@ export async function undoTip(tipId: string): Promise<AiTipDecision> {
     method: 'POST',
     signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
   })
-  if (!response.ok) throw new Error("We couldn't undo that change. Please try again.")
+  if (!response.ok) throw new Error(t('api.undo'))
   forgetCachedTip()
   clearGoalCaches()
   return response.json() as Promise<AiTipDecision>
@@ -1436,7 +1439,7 @@ export interface FoodSearchItem {
 export async function searchFoodItems(query = ''): Promise<FoodSearchItem[]> {
   const response = await apiFetch(`${API_URL}/api/v1/nutrition/search-foods?q=${encodeURIComponent(query)}`)
   if (!response.ok) {
-    throw new Error('Food search is not available right now. Please try again.')
+    throw new Error(t('add.errorSearch'))
   }
   return response.json()
 }
@@ -1493,22 +1496,22 @@ async function favoriteRequest<T>(path: string, init: RequestInit, fallback: str
 }
 
 export function fetchFavoriteMeals(): Promise<FavoriteMeal[]> {
-  return favoriteRequest('', {}, "We couldn't load your favorite meals. Please try again.")
+  return favoriteRequest('', {}, t('api.loadFavorites'))
 }
 
 export function addFavoriteMeal(mealId: string): Promise<FavoriteMeal> {
-  return favoriteRequest('', { method: 'POST', body: JSON.stringify({ meal_id: mealId }) }, "We couldn't save this favorite. Please try again.")
+  return favoriteRequest('', { method: 'POST', body: JSON.stringify({ meal_id: mealId }) }, t('api.saveFavorite'))
 }
 
 export function updateFavoriteMeal(
   favoriteId: string,
   payload: { name: string; meal_type: string; ingredients: MealIngredient[] },
 ): Promise<FavoriteMeal> {
-  return favoriteRequest(`/${encodeURIComponent(favoriteId)}`, { method: 'PUT', body: JSON.stringify(payload) }, "We couldn't update this favorite. Please try again.")
+  return favoriteRequest(`/${encodeURIComponent(favoriteId)}`, { method: 'PUT', body: JSON.stringify(payload) }, t('api.updateFavorite'))
 }
 
 export async function deleteFavoriteMeal(favoriteId: string): Promise<void> {
-  await favoriteRequest(`/${encodeURIComponent(favoriteId)}`, { method: 'DELETE' }, "We couldn't remove this favorite. Please try again.")
+  await favoriteRequest(`/${encodeURIComponent(favoriteId)}`, { method: 'DELETE' }, t('api.removeFavorite'))
 }
 
 export interface MealScanItem {
@@ -1542,7 +1545,7 @@ export async function scanMealPhoto(image: Blob): Promise<MealScanResult> {
     throw new Error(
       typeof body?.detail === 'string'
         ? body.detail
-        : "We couldn't analyze that photo. Please try again.",
+        : t('scan.errorAnalyze'),
     )
   }
   return response.json() as Promise<MealScanResult>
@@ -1556,7 +1559,7 @@ export async function addMealLog(payload: MealCreateRequest): Promise<MealLogIte
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
-    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't save this meal. Please try again.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('add.errorSave'))
   }
   clearDashboardCache()
   clearNutritionCache()
@@ -1577,7 +1580,7 @@ export async function updateMealLog(
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
-    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update this meal. Please try again.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('api.updateMeal'))
   }
   clearDashboardCache()
   try {
@@ -1598,7 +1601,7 @@ export async function deleteMealLog(userId: string, mealId: string): Promise<voi
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
-    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't remove this meal. Please try again.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('api.removeMeal'))
   }
   clearDashboardCache()
   try {
@@ -1631,7 +1634,7 @@ export async function fetchHydrationToday(): Promise<HydrationToday> {
     signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
   })
   if (!response.ok) {
-    throw new Error("We couldn't load your hydration. Please try again.")
+    throw new Error(t('api.loadHydration'))
   }
   return response.json()
 }
@@ -1663,7 +1666,7 @@ export async function fetchHydrationHistory(weekStart?: string): Promise<Hydrati
     signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
   })
   if (!response.ok) {
-    throw new Error("We couldn't load your hydration history. Please try again.")
+    throw new Error(t('api.loadHydrationHistory'))
   }
   return response.json()
 }
@@ -1677,7 +1680,7 @@ export async function addHydrationEntry(payload: { amount: number; unit: 'ml' | 
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
-    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't save this drink. Please try again.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('api.saveDrink'))
   }
   invalidateNutritionStatisticsCache()
   return response.json()
@@ -1690,7 +1693,7 @@ export async function removeHydrationEntry(entryId: string): Promise<HydrationTo
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
-    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't remove this drink. Please try again.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('api.removeDrink'))
   }
   invalidateNutritionStatisticsCache()
   return response.json()
@@ -1705,7 +1708,7 @@ export async function updateHydrationGoal(goalMl: number | null): Promise<Hydrat
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
-    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update your hydration goal. Please try again.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('api.updateHydrationGoal'))
   }
   return response.json()
 }
@@ -1718,7 +1721,7 @@ export async function createCustomExercise(userId: string, payload: import('../t
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't create this exercise.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('api.createExercise'))
   }
   exerciseListCache.clear()
   return response.json()
@@ -1732,7 +1735,7 @@ export async function updateCustomExercise(userId: string, exerciseId: string, p
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update this exercise.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('api.updateExercise'))
   }
   exerciseListCache.clear()
   return response.json()
@@ -1744,7 +1747,7 @@ export async function deleteCustomExercise(userId: string, exerciseId: string): 
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't delete this exercise.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('api.deleteExercise'))
   }
   exerciseListCache.clear()
 }
@@ -1789,22 +1792,22 @@ async function recommendationRequest<T>(path: string, method: 'GET' | 'POST', fa
 }
 
 export function fetchMealRecommendations(): Promise<MealRecommendations> {
-  return recommendationRequest('', 'GET', "We couldn't load meal suggestions. Please try again.")
+  return recommendationRequest('', 'GET', t('api.loadSuggestions'))
 }
 
 export function refreshMealRecommendations(): Promise<MealRecommendations> {
-  return recommendationRequest('/refresh', 'POST', "We couldn't get new suggestions. Please try again.")
+  return recommendationRequest('/refresh', 'POST', t('api.newSuggestions'))
 }
 
 export async function addMealRecommendation(id: string): Promise<MealLogItem> {
-  const meal = await recommendationRequest<MealLogItem>(`/${encodeURIComponent(id)}/add`, 'POST', "We couldn't add this meal. Please try again.")
+  const meal = await recommendationRequest<MealLogItem>(`/${encodeURIComponent(id)}/add`, 'POST', t('api.addMeal'))
   clearDashboardCache()
   clearNutritionCache()
   return meal
 }
 
 export async function dismissMealRecommendation(id: string): Promise<void> {
-  await recommendationRequest(`/${encodeURIComponent(id)}/dismiss`, 'POST', "We couldn't hide this suggestion. Please try again.")
+  await recommendationRequest(`/${encodeURIComponent(id)}/dismiss`, 'POST', t('api.hideSuggestion'))
 }
 
 export interface FatigueFeedbackPayload {
@@ -1901,7 +1904,7 @@ export async function fetchOvertrainingAlerts(
   options: { forceRefresh?: boolean } = {},
 ): Promise<OvertrainingAlertStatus> {
   const userId = getCurrentUser()?.id
-  if (!userId) throw new Error('Sign in to view your recovery status.')
+  if (!userId) throw new Error(t('api.signInRecovery'))
   const cacheKey = `overtraining:${userId}:${localDayQuery()}`
   if (options.forceRefresh) shortCache.delete(cacheKey)
 
@@ -1911,7 +1914,7 @@ export async function fetchOvertrainingAlerts(
       { cache: 'no-store', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
     )
     if (!response.ok) {
-      throw new Error("We couldn't check your recovery status right now.")
+      throw new Error(t('api.checkRecovery'))
     }
     const status = (await response.json()) as OvertrainingAlertStatus
     saveCopy(`overtraining:${userId}`, status)
@@ -1928,7 +1931,7 @@ async function postOvertrainingMutation(
   invalidateDashboard = false,
 ): Promise<OvertrainingAlertStatus> {
   const userId = getCurrentUser()?.id
-  if (!userId) throw new Error('Sign in to update your recovery status.')
+  if (!userId) throw new Error(t('api.signInRecoveryUpdate'))
   const response = await apiFetch(`${API_URL}/api/v1/workouts${path}?${localDayQuery()}`, {
     method,
     ...(body !== undefined ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
@@ -1950,7 +1953,7 @@ export function submitFatigueFeedback(payload: FatigueFeedbackPayload): Promise<
   return postOvertrainingMutation(
     '/fatigue-feedback',
     'POST',
-    "We couldn't save your recovery check-in.",
+    t('api.saveCheckIn'),
     payload,
   )
 }
@@ -1959,7 +1962,7 @@ export function deleteFatigueFeedback(entryId: string): Promise<OvertrainingAler
   return postOvertrainingMutation(
     `/fatigue-feedback/${encodeURIComponent(entryId)}`,
     'DELETE',
-    "We couldn't remove that recovery check-in.",
+    t('ot.errorDeleteCheckIn'),
   )
 }
 
@@ -1967,7 +1970,7 @@ export function applyOvertrainingMods(): Promise<OvertrainingAlertStatus> {
   return postOvertrainingMutation(
     '/overtraining-alerts/apply',
     'POST',
-    "We couldn't apply the deload modifications.",
+    t('ot.errorDeloadApply'),
     undefined,
     true,
   )
@@ -1977,7 +1980,7 @@ export function clearOvertrainingMods(): Promise<OvertrainingAlertStatus> {
   return postOvertrainingMutation(
     '/overtraining-alerts/apply',
     'DELETE',
-    "We couldn't turn off the active deload.",
+    t('ot.errorDeloadOff'),
     undefined,
     true,
   )
@@ -1987,7 +1990,7 @@ export function scheduleRecoveryRestDay(): Promise<OvertrainingAlertStatus> {
   return postOvertrainingMutation(
     '/overtraining-alerts/rest-day',
     'POST',
-    "We couldn't update today's workout to a rest day.",
+    t('ot.errorRestSwap'),
     undefined,
     true,
   )
@@ -1997,6 +2000,12 @@ export function dismissOvertrainingAlert(): Promise<OvertrainingAlertStatus> {
   return postOvertrainingMutation(
     '/overtraining-alerts/dismiss',
     'POST',
-    "We couldn't dismiss the alert.",
+    t('ot.errorDismiss'),
   )
 }
+
+// Saved copies hold server text in the old language; drop them so the next load is in the new one.
+onLanguageChange(() => {
+  clearDashboardCache()
+  forgetSavedCopies()
+})

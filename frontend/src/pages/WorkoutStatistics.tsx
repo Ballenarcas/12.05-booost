@@ -33,6 +33,7 @@ import {
   formatVolumeKg,
   formatWorkoutCount,
 } from '../utils/workoutStatistics'
+import { locale, t as tr, useT, valueLabel } from '../i18n'
 import '../styles/workout-statistics.css'
 
 type StatsTab = 'workouts' | 'meals'
@@ -59,7 +60,7 @@ const DIAL = (() => {
 
 function workoutDurationSplit(data: WorkoutStatistics): SplitMetricValue {
   if (data.total_workouts === 0) return { value: '0', unit: 'm', exact: '0 min' }
-  if (data.workouts_with_duration === 0) return { value: '–', unit: '', exact: 'Unavailable' }
+  if (data.workouts_with_duration === 0) return { value: '–', unit: '', exact: tr('workouts.unavailable') }
   const totalMinutes = Math.floor(data.total_duration_seconds / 60)
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
@@ -79,7 +80,7 @@ function pillDurationLabel(seconds: number, volumeKg: number): string {
     return `${Math.max(1, minutes)}m`
   }
   if (volumeKg > 0) return `${formatVolumeKg(volumeKg)}kg`
-  return 'Done'
+  return tr('stats.done')
 }
 
 function buildFallbackRangeBounds(range: WorkoutStatisticsRange): { start: string; end: string } {
@@ -92,6 +93,7 @@ function buildFallbackRangeBounds(range: WorkoutStatisticsRange): { start: strin
 }
 
 function WorkoutStatisticsPage() {
+  const t = useT()
   const userId = getCurrentUser()?.id
   const [searchParams, setSearchParams] = useSearchParams()
   // The URL is the one source of the tab, so back/forward and links switch it too.
@@ -104,7 +106,7 @@ function WorkoutStatisticsPage() {
   ))
   const [workoutLoading, setWorkoutLoading] = useState(Boolean(userId))
   const [workoutError, setWorkoutError] = useState<string | null>(
-    userId ? null : 'Sign in to view your workout statistics.',
+    userId ? null : tr('stats.signInWorkouts'),
   )
 
   const [mealData, setMealData] = useState<NutritionStatistics | null>(() => (
@@ -112,7 +114,7 @@ function WorkoutStatisticsPage() {
   ))
   const [mealLoading, setMealLoading] = useState(Boolean(userId))
   const [mealError, setMealError] = useState<string | null>(
-    userId ? null : 'Sign in to view your meal statistics.',
+    userId ? null : tr('stats.signInMeals'),
   )
 
   const [workoutRetryToken, setWorkoutRetryToken] = useState(0)
@@ -136,14 +138,14 @@ function WorkoutStatisticsPage() {
       })
       .catch((requestError: unknown) => {
         if (controller.signal.aborted || currentRequest !== workoutReqId.current) return
-        setWorkoutError(describeError(requestError, "We couldn't load your workout statistics. Please try again."))
+        setWorkoutError(describeError(requestError, t('stats.errorWorkouts')))
       })
       .finally(() => {
         if (currentRequest === workoutReqId.current) setWorkoutLoading(false)
       })
 
     return () => controller.abort()
-  }, [range, workoutRetryToken, userId])
+  }, [range, workoutRetryToken, userId, t])
 
   useEffect(() => {
     if (!userId) return
@@ -159,14 +161,14 @@ function WorkoutStatisticsPage() {
       })
       .catch((requestError: unknown) => {
         if (controller.signal.aborted || currentRequest !== mealReqId.current) return
-        setMealError(describeError(requestError, "We couldn't load your meal statistics. Please try again."))
+        setMealError(describeError(requestError, t('stats.errorMeals')))
       })
       .finally(() => {
         if (currentRequest === mealReqId.current) setMealLoading(false)
       })
 
     return () => controller.abort()
-  }, [range, mealRetryToken, userId])
+  }, [range, mealRetryToken, userId, t])
 
   function selectTab(nextTab: StatsTab) {
     if (nextTab === tab) return
@@ -235,16 +237,16 @@ function WorkoutStatisticsPage() {
   }))
   const workoutCalendarDays: CalendarDayData[] = (workoutData?.calendar_days ?? []).map((day) => ({
     date: day.date,
-    summaryLabel: `${day.workout_count} ${day.workout_count === 1 ? 'workout' : 'workouts'}, ${formatCompactDuration(day.total_duration_seconds)}`,
+    summaryLabel: `${t(day.workout_count === 1 ? 'stats.workoutOne' : 'stats.workoutMany', { count: day.workout_count })}, ${formatCompactDuration(day.total_duration_seconds)}`,
     pills: day.items.map((item) => ({
-      label: item.label.toUpperCase(),
+      label: item.label.toLocaleUpperCase(locale()),
       value: pillDurationLabel(item.duration_seconds, item.volume_kg),
     })),
   }))
   const classifiedKg = workoutData?.classified_volume_kg ?? 0
   const muscleItems: BreakdownItem[] = (workoutData?.muscle_group_distribution ?? []).map((item) => ({
     id: item.muscle_group,
-    label: item.muscle_group.toUpperCase(),
+    label: valueLabel(t, 'muscle', item.muscle_group).toLocaleUpperCase(locale()),
     valueText: item.volume_kg >= 1000
       ? `${formatCompactKgParts(item.volume_kg).value}kg`
       : `${formatVolumeKg(item.volume_kg)}kg`,
@@ -265,9 +267,9 @@ function WorkoutStatisticsPage() {
   }))
   const mealCalendarDays: CalendarDayData[] = (mealData?.calendar_days ?? []).map((day) => ({
     date: day.date,
-    summaryLabel: `${day.meal_count} ${day.meal_count === 1 ? 'meal' : 'meals'}, ${day.total_calories.toLocaleString('en-US')} kcal`,
+    summaryLabel: `${t(day.meal_count === 1 ? 'stats.mealOne' : 'stats.mealMany', { count: day.meal_count })}, ${day.total_calories.toLocaleString(locale())} kcal`,
     pills: day.items.map((item) => ({
-      label: item.meal_type.toUpperCase(),
+      label: valueLabel(t, 'mealType', item.meal_type).toLocaleUpperCase(locale()),
       value: `${item.calories}kcal`,
     })),
   }))
@@ -276,7 +278,7 @@ function WorkoutStatisticsPage() {
     const gramsSplit = formatCompactGrams(item.grams)
     return {
       id: item.macro,
-      label: item.label.toUpperCase(),
+      label: (valueLabel(t, 'macro', item.macro) === item.macro ? item.label : valueLabel(t, 'macro', item.macro)).toLocaleUpperCase(locale()),
       valueText: `${gramsSplit.value}${gramsSplit.unit}`,
       exactText: gramsSplit.exact,
       share: totalMacrosG > 0 ? (item.grams / totalMacrosG) * 100 : 0,
@@ -285,13 +287,13 @@ function WorkoutStatisticsPage() {
 
   return (
     <div className="screen hifi-screen stats-screen" data-tab={tab} aria-busy={activeLoading}>
-      <h1 className="visually-hidden">Statistics</h1>
+      <h1 className="visually-hidden">{t('nav.statistics')}</h1>
 
-      <section className="stats-range-section" aria-label="Date range">
+      <section className="stats-range-section" aria-label={t('stats.dateRange')}>
         <div
           className="stats-range"
           role="group"
-          aria-label="Statistics date range"
+          aria-label={t('stats.dateRangeAria')}
           style={{ width: DIAL.width, height: DIAL.height }}
         >
           <svg className="stats-range-arc" width={DIAL.width} height={DIAL.height} aria-hidden="true">
@@ -311,7 +313,7 @@ function WorkoutStatisticsPage() {
               key={option.value}
               type="button"
               aria-pressed={range === option.value}
-              aria-label={option.description}
+              aria-label={t(option.description)}
               onClick={() => changeRange(option.value)}
               style={DIAL.labels[index]}
             >
@@ -330,7 +332,7 @@ function WorkoutStatisticsPage() {
       </section>
 
       <div className="stats-switcher-wrap">
-        <div className="stats-switcher" role="tablist" aria-label="Statistics category">
+        <div className="stats-switcher" role="tablist" aria-label={t('stats.category')}>
           <button
             ref={workoutTabRef}
             id="stats-tab-workouts"
@@ -342,7 +344,7 @@ function WorkoutStatisticsPage() {
             onClick={() => selectTab('workouts')}
             onKeyDown={(e) => handleTabKeyDown(e, 'workouts')}
           >
-            WORKOUTS
+            {t('stats.workoutsTab')}
           </button>
           <button
             ref={mealsTabRef}
@@ -355,14 +357,14 @@ function WorkoutStatisticsPage() {
             onClick={() => selectTab('meals')}
             onKeyDown={(e) => handleTabKeyDown(e, 'meals')}
           >
-            MEALS
+            {t('stats.mealsTab')}
           </button>
         </div>
       </div>
 
       {activeLoading && (
         <p className="visually-hidden" role="status">
-          Loading {tab} statistics
+          {t(tab === 'workouts' ? 'stats.loadingWorkouts' : 'stats.loadingMeals')}
         </p>
       )}
 
@@ -378,7 +380,7 @@ function WorkoutStatisticsPage() {
           <div className="card state-card stats-error-card" role="alert">
             <p>{workoutError}</p>
             <button className="secondary-action" type="button" onClick={retryWorkouts}>
-              Try again
+              {t('common.retry')}
             </button>
           </div>
         )}
@@ -389,20 +391,20 @@ function WorkoutStatisticsPage() {
               <div className="card state-card stats-error-card" role="alert">
                 <p>{workoutError}</p>
                 <button className="secondary-action" type="button" onClick={retryWorkouts}>
-                  Try again
+                  {t('common.retry')}
                 </button>
               </div>
             )}
 
             <article className="stats-hero-card" aria-live="polite">
               <div className="stats-hero-top">
-                <span className="stats-hero-title">WORKOUTS</span>
-                <span className="stats-hero-tag">TOTAL</span>
+                <span className="stats-hero-title">{t('stats.workoutsTab')}</span>
+                <span className="stats-hero-tag">{t('stats.total')}</span>
               </div>
               <p className="stats-hero-count">{formatWorkoutCount(workoutData.total_workouts)}</p>
               <div className="stats-hero-bottom">
                 <div className="stats-hero-metric">
-                  <span className="stats-hero-metric-label">TIME</span>
+                  <span className="stats-hero-metric-label">{t('stats.time')}</span>
                   <strong className="stats-hero-metric-value" title={workoutTimeSplit.exact}>
                     <span aria-hidden="true">
                       {workoutTimeSplit.value}
@@ -412,7 +414,7 @@ function WorkoutStatisticsPage() {
                   </strong>
                 </div>
                 <div className="stats-hero-metric is-right">
-                  <span className="stats-hero-metric-label">VOLUME</span>
+                  <span className="stats-hero-metric-label">{t('stats.volume')}</span>
                   <strong className="stats-hero-metric-value" title={workoutVolumeSplit.exact}>
                     <span aria-hidden="true">
                       {workoutVolumeSplit.value}
@@ -428,16 +430,16 @@ function WorkoutStatisticsPage() {
               <div className="hifi-card stats-empty-callout">
                 <Dumbbell size={20} aria-hidden="true" />
                 <div>
-                  <h2>No completed workouts in this range</h2>
-                  <p>Finish a workout to populate progression and muscle volume. Try 3M for older sessions.</p>
+                  <h2>{t('stats.noWorkouts')}</h2>
+                  <p>{t('stats.noWorkoutsHint')}</p>
                 </div>
               </div>
             )}
 
             <h2 className="stats-section-heading" id="volume-progression-title">
-              Volume
+              {t('stats.volumeProg1')}
               <br />
-              Progression
+              {t('stats.volumeProg2')}
             </h2>
             <section aria-labelledby="volume-progression-title">
               <StatsProgressionChart
@@ -446,16 +448,16 @@ function WorkoutStatisticsPage() {
                 granularity={workoutData.progression_granularity}
                 range={workoutData.range}
                 unit="kg"
-                ariaLabel={`Volume progression: ${volumePoints.length} recorded periods totaling ${formatVolumeKg(workoutData.total_volume_kg)} kilograms`}
-                emptyTitle="No weighted volume in this range."
-                emptyHint="Completed sets with recorded reps and weight will appear here."
+                ariaLabel={t('stats.volumeAria', { count: volumePoints.length, kg: formatVolumeKg(workoutData.total_volume_kg) })}
+                emptyTitle={t('stats.noVolume')}
+                emptyHint={t('stats.noVolumeHint')}
               />
             </section>
 
             <h2 className="stats-section-heading" id="muscle-distribution-title">
-              Muscle
+              {t('stats.muscleDist1')}
               <br />
-              Distribution
+              {t('stats.muscleDist2')}
             </h2>
             <section className="stats-distribution-section" aria-labelledby="muscle-distribution-title">
               <StatsCalendar
@@ -471,17 +473,17 @@ function WorkoutStatisticsPage() {
                 totalValue={classifiedSplit.value}
                 totalUnit={classifiedSplit.unit}
                 totalExact={classifiedSplit.exact}
-                totalLabel="CLASSIFIED"
+                totalLabel={t('stats.classified')}
                 items={muscleItems}
-                ariaLabel="Muscle group volume details"
+                ariaLabel={t('stats.muscleAria')}
                 emptyMessage={
                   workoutData.unclassified_volume_kg > 0
-                    ? 'Recorded exercises could not be matched to catalogue muscle groups.'
-                    : 'Completed weighted sets linked to muscle metadata will appear here.'
+                    ? t('stats.unmatched')
+                    : t('stats.noMuscleData')
                 }
                 note={
                   workoutData.total_volume_kg > 0 && workoutData.unclassified_volume_kg > 0
-                    ? `${formatVolumeKg(workoutData.classified_volume_kg)} kg classified of ${formatVolumeKg(workoutData.total_volume_kg)} kg recorded volume. ${formatVolumeKg(workoutData.unclassified_volume_kg)} kg excluded.`
+                    ? t('stats.classifiedNote', { classified: formatVolumeKg(workoutData.classified_volume_kg), total: formatVolumeKg(workoutData.total_volume_kg), excluded: formatVolumeKg(workoutData.unclassified_volume_kg) })
                     : undefined
                 }
               />
@@ -492,18 +494,20 @@ function WorkoutStatisticsPage() {
                 <div className="stats-panel-heading">
                   <div>
                     <h2 id="fatigue-history-title">
-                      <HeartPulse size={17} aria-hidden="true" /> Fatigue History
+                      <HeartPulse size={17} aria-hidden="true" /> {t('stats.fatigueHistory')}
                     </h2>
-                    <p>Latest fatigue rating per workout day (all time).</p>
+                    <p>{t('stats.fatigueHistoryHint')}</p>
                   </div>
-                  <span className="stats-panel-total">Avg {formatFatigueAverage(workoutData.fatigue_average)}/10</span>
+                  <span className="stats-panel-total">{t('stats.avgOutOf10', { value: formatFatigueAverage(workoutData.fatigue_average) })}</span>
                 </div>
                 <FatigueHistoryChart points={fatigueHistory} />
                 <p className="stats-classification-note">
-                  {fatigueHistory.length} rated {fatigueHistory.length === 1 ? 'day' : 'days'} across{' '}
-                  {workoutData.fatigue_workouts} {workoutData.fatigue_workouts === 1 ? 'workout' : 'workouts'}. Latest{' '}
-                  {workoutData.fatigue_latest}/10
-                  {latestFatigue ? ` on ${formatFatigueDay(latestFatigue.date)}` : ''}.
+                  {t('stats.fatigueNote', {
+                    days: t(fatigueHistory.length === 1 ? 'stats.ratedDayOne' : 'stats.ratedDayMany', { count: fatigueHistory.length }),
+                    workouts: t(workoutData.fatigue_workouts === 1 ? 'stats.workoutOne' : 'stats.workoutMany', { count: workoutData.fatigue_workouts }),
+                    latest: workoutData.fatigue_latest ?? '–',
+                  })}
+                  {latestFatigue ? ` ${t('stats.onDate', { date: formatFatigueDay(latestFatigue.date) })}` : ''}.
                 </p>
               </section>
             )}
@@ -523,7 +527,7 @@ function WorkoutStatisticsPage() {
           <div className="card state-card stats-error-card" role="alert">
             <p>{mealError}</p>
             <button className="secondary-action" type="button" onClick={retryMeals}>
-              Try again
+              {t('common.retry')}
             </button>
           </div>
         )}
@@ -534,20 +538,20 @@ function WorkoutStatisticsPage() {
               <div className="card state-card stats-error-card" role="alert">
                 <p>{mealError}</p>
                 <button className="secondary-action" type="button" onClick={retryMeals}>
-                  Try again
+                  {t('common.retry')}
                 </button>
               </div>
             )}
 
             <article className="stats-hero-card" aria-live="polite">
               <div className="stats-hero-top">
-                <span className="stats-hero-title">MEALS</span>
-                <span className="stats-hero-tag">TOTAL</span>
+                <span className="stats-hero-title">{t('stats.mealsTab')}</span>
+                <span className="stats-hero-tag">{t('stats.total')}</span>
               </div>
               <p className="stats-hero-count">{formatWorkoutCount(mealData.total_meals)}</p>
               <div className="stats-hero-bottom">
                 <div className="stats-hero-metric">
-                  <span className="stats-hero-metric-label">HYDRATION</span>
+                  <span className="stats-hero-metric-label">{t('stats.hydration')}</span>
                   <strong className="stats-hero-metric-value" title={hydrationSplit.exact}>
                     <span aria-hidden="true">
                       {hydrationSplit.value}
@@ -558,9 +562,9 @@ function WorkoutStatisticsPage() {
                 </div>
                 <div className="stats-hero-metric is-right">
                   <span className="stats-hero-metric-label">
-                    NUTRITION
+                    {t('stats.nutritionLabel')}
                     <br />
-                    INTAKE
+                    {t('stats.intakeLabel')}
                   </span>
                   <strong className="stats-hero-metric-value" title={intakeSplit.exact}>
                     <span aria-hidden="true">
@@ -577,16 +581,16 @@ function WorkoutStatisticsPage() {
               <div className="hifi-card stats-empty-callout">
                 <Utensils size={20} aria-hidden="true" />
                 <div>
-                  <h2>No meals logged in this range</h2>
-                  <p>Log a meal to see daily calorie trends and macro totals. Try 3M for older entries.</p>
+                  <h2>{t('stats.noMeals')}</h2>
+                  <p>{t('stats.noMealsHint')}</p>
                 </div>
               </div>
             )}
 
             <h2 className="stats-section-heading" id="nutrition-progression-title">
-              Nutrition
+              {t('stats.nutritionProg1')}
               <br />
-              Progression
+              {t('stats.nutritionProg2')}
             </h2>
             <section aria-labelledby="nutrition-progression-title">
               <StatsProgressionChart
@@ -596,16 +600,16 @@ function WorkoutStatisticsPage() {
                 range={mealData.range}
                 unit="kcal"
                 weeklyIsAverage
-                ariaLabel={`Nutrition progression: ${mealPoints.length} recorded periods totaling ${mealData.total_calories.toLocaleString('en-US')} kilocalories`}
-                emptyTitle="No calorie data in this range."
-                emptyHint="Meals with recorded calories will populate this progression chart."
+                ariaLabel={t('stats.nutritionAria', { count: mealPoints.length, kcal: mealData.total_calories.toLocaleString(locale()) })}
+                emptyTitle={t('stats.noCalories')}
+                emptyHint={t('stats.noCaloriesHint')}
               />
             </section>
 
             <h2 className="stats-section-heading" id="nutrition-intake-title">
-              Nutrition
+              {t('stats.nutritionIntake1')}
               <br />
-              Intake
+              {t('stats.nutritionIntake2')}
             </h2>
             <section className="stats-distribution-section" aria-labelledby="nutrition-intake-title">
               <StatsCalendar
@@ -621,10 +625,10 @@ function WorkoutStatisticsPage() {
                 totalValue={intakeSplit.value}
                 totalUnit={intakeSplit.unit}
                 totalExact={intakeSplit.exact}
-                totalLabel="CLASSIFIED"
+                totalLabel={t('stats.classified')}
                 items={macroItems}
-                ariaLabel="Macronutrient breakdown"
-                emptyMessage="Logged meals with protein, carbs, and fats will appear here."
+                ariaLabel={t('stats.macroAria')}
+                emptyMessage={t('stats.noMacros')}
               />
             </section>
           </div>

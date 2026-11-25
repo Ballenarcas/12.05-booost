@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useDialogBehavior } from '../../utils/useDialogBehavior'
+import { useT } from '../../i18n'
 
 const ITEM_HEIGHT = 40
 
@@ -16,6 +17,7 @@ type Props<T> = {
 
 /** Bottom sheet with a scroll wheel; the centred row is chosen when Done is pressed. */
 export default function WheelPickerSheet<T>({ title, subtitle, options, initialIndex, onDone, onClose }: Props<T>) {
+  const t = useT()
   const dialogRef = useDialogBehavior(true, onClose)
   const wheelRef = useRef<HTMLDivElement | null>(null)
   const id = useId()
@@ -77,7 +79,7 @@ export default function WheelPickerSheet<T>({ title, subtitle, options, initialI
             ))}
           </div>
         </div>
-        <button className="primary-button rest-sheet-done" type="button" onClick={() => onDone(options[index].value)}>Done</button>
+        <button className="primary-button rest-sheet-done" type="button" onClick={() => onDone(options[index].value)}>{t('rpe.done')}</button>
       </div>
     </div>
   )

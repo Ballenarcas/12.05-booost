@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 
+from app.core.i18n import pick
 from app.db.supabase_client import get_supabase
 from app.schemas.exercise import Exercise
 from app.schemas.workout import CustomExerciseCreate, RoutineCreate, RoutineExerciseSummary, RoutineSummary
@@ -319,7 +320,7 @@ def list_user_routines(user_id: UUID) -> list[RoutineSummary]:
             exercise = exercise[0] if exercise else {}
         name = exercise.get("name", "Exercise")
         if exercise.get("archived_at"):
-            name = f"{name} (Removed - pick a replacement)"
+            name = f"{name} ({pick('Removed - pick a replacement', 'Eliminado - elige un sustituto')})"
         grouped.setdefault(str(row["routine_id"]), []).append(
             RoutineExerciseSummary(
                 exercise_id=ex_id,

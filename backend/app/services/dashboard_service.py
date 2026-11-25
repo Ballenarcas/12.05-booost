@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
+from app.core.i18n import format_short_date, pick, translate_stored_plan_text
 from app.core.local_day import LocalDay, utc_day
 from app.db.supabase_client import get_supabase
 from app.schemas.dashboard import CompletedWorkoutToday, DashboardSummary, NutritionDashboard, PlanExercise, WorkoutDashboard, WorkoutPlanSummary
@@ -115,11 +116,11 @@ def _query_todays_plan(user_id: UUID, day: LocalDay) -> WorkoutPlanSummary | Non
     return WorkoutPlanSummary(
         id=str(row["id"]),
         routine_id=str(row["routine_id"]) if row.get("routine_id") else None,
-        title=row.get("title") or "Today's workout",
+        title=translate_stored_plan_text(row.get("title") or "Today's workout") or pick("Today's workout", "Entrenamiento de hoy"),
         plan_date=row["plan_date"],
         is_rest_day=bool(row.get("is_rest_day")),
         ai_adjusted=bool(row.get("ai_adjusted")),
-        ai_reasoning=row.get("ai_reasoning"),
+        ai_reasoning=translate_stored_plan_text(row.get("ai_reasoning")),
         exercises=[PlanExercise(**exercise) for exercise in row.get("exercises") or []],
     )
 
@@ -181,7 +182,7 @@ def get_dashboard_summary(user_id: UUID, day: LocalDay | None = None) -> Dashboa
     full_name = " ".join(part for part in (user.get("Name"), user.get("Surname")) if part)
     return DashboardSummary(
         user_name=full_name,
-        current_date_formatted=day.local_date.strftime("%a, %b %d"),
+        current_date_formatted=format_short_date(day.local_date, with_weekday=True),
         ai_notification=None,
         nutrition=nutrition,
         workout=workout,

@@ -6,6 +6,7 @@ import {
 import { getCurrentUser } from '../services/api'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import backIcon from '../assets/scan/back.svg'
+import { useT, valueLabel } from '../i18n'
 import '../styles/profile.css'
 
 type Unit = 'cm' | 'in'
@@ -22,6 +23,7 @@ function formatDelta(deltaCm: number, unit: Unit): string {
 }
 
 export default function BodyMeasurements() {
+  const t = useT()
   const user = getCurrentUser()
   const navigate = usePageNavigate()
   const [unit, setUnit] = useState<Unit>('cm')
@@ -37,13 +39,13 @@ export default function BodyMeasurements() {
         <button
           type="button"
           className="scan-back"
-          aria-label="Go back to Profile"
+          aria-label={t('body.back')}
           onClick={() => navigate('/profile', { direction: 'back' })}
         >
           <img src={backIcon} alt="" width={36} height={37} />
         </button>
-        <h1>Body measurements</h1>
-        <div className="measurements-unit-toggle" role="group" aria-label="Measurement unit">
+        <h1>{t('profile.bodyMeasurements')}</h1>
+        <div className="measurements-unit-toggle" role="group" aria-label={t('body.unit')}>
           <button type="button" aria-pressed={unit === 'cm'} onClick={() => setUnit('cm')}>
             cm
           </button>
@@ -54,21 +56,21 @@ export default function BodyMeasurements() {
       </header>
 
       <div className="preview-banner" role="note">
-        <strong>Coming soon</strong>
-        <span>Sample preview using your saved weight &amp; height plus upcoming tape logs.</span>
+        <strong>{t('common.comingSoon')}</strong>
+        <span>{t('body.sample')}</span>
       </div>
 
       <section className="hifi-section" aria-labelledby="comp-title">
         <div className="profile-section-head">
-          <h2 className="hifi-section-title" id="comp-title">Body composition</h2>
-          <span className="profile-section-since">PREVIEW</span>
+          <h2 className="hifi-section-title" id="comp-title">{t('body.composition')}</h2>
+          <span className="profile-section-since">{t('body.previewTag')}</span>
         </div>
 
         <div className="profile-progress-grid">
           <div className="profile-preview-card">
             <div className="profile-stat-top">
-              <span className="profile-stat-label">MUSCLE</span>
-              <span className="profile-soon-tag">SOON</span>
+              <span className="profile-stat-label">{t('body.muscle')}</span>
+              <span className="profile-soon-tag">{t('body.soonTag')}</span>
             </div>
             <p className="profile-stat-val">
               {BODY_COMPOSITION_PREVIEW.muscleMassPct.toFixed(1)}
@@ -77,8 +79,8 @@ export default function BodyMeasurements() {
           </div>
           <div className="profile-preview-card">
             <div className="profile-stat-top">
-              <span className="profile-stat-label">BODY FAT</span>
-              <span className="profile-soon-tag">SOON</span>
+              <span className="profile-stat-label">{t('body.bodyFat')}</span>
+              <span className="profile-soon-tag">{t('body.soonTag')}</span>
             </div>
             <p className="profile-stat-val">
               {BODY_COMPOSITION_PREVIEW.bodyFatPct.toFixed(1)}
@@ -86,14 +88,14 @@ export default function BodyMeasurements() {
             </p>
           </div>
           <div className="profile-preview-card">
-            <span className="profile-stat-label">WEIGHT</span>
+            <span className="profile-stat-label">{t('body.weight')}</span>
             <p className="profile-stat-val">
               {weightKg !== null ? weightKg.toFixed(1) : '–'}
               {weightKg !== null && <small>kg</small>}
             </p>
           </div>
           <div className="profile-preview-card">
-            <span className="profile-stat-label">BMI</span>
+            <span className="profile-stat-label">{t('body.bmi')}</span>
             <p className="profile-stat-val">
               {bmi !== null ? bmi.toFixed(1) : '–'}
             </p>
@@ -102,7 +104,7 @@ export default function BodyMeasurements() {
       </section>
 
       <section className="hifi-section" aria-labelledby="trend-title">
-        <h2 className="hifi-section-title" id="trend-title">Composition trend</h2>
+        <h2 className="hifi-section-title" id="trend-title">{t('body.trend')}</h2>
         <div className="hifi-card">
           <ul className="measurements-trend-list">
             {BODY_COMPOSITION_PREVIEW.checkins.map((item) => (
@@ -122,15 +124,15 @@ export default function BodyMeasurements() {
 
       <section className="hifi-section" aria-labelledby="tape-title">
         <div className="profile-section-head">
-          <h2 className="hifi-section-title" id="tape-title">Tape measurements</h2>
+          <h2 className="hifi-section-title" id="tape-title">{t('body.tape')}</h2>
           <button
             type="button"
             className="hifi-pill"
             onClick={() =>
-              setPreviewNotice('Logging custom tape measurements & progress photos will launch soon.')
+              setPreviewNotice(t('body.tapeSoon'))
             }
           >
-            Log check-in
+            {t('ot.logCheckIn')}
           </button>
         </div>
 
@@ -144,7 +146,7 @@ export default function BodyMeasurements() {
           <ul className="measurements-tape-list">
             {BODY_MEASUREMENTS_PREVIEW.map((entry) => (
               <li className="measurements-tape-row" key={entry.id}>
-                <span className="measurements-tape-name">{entry.label}</span>
+                <span className="measurements-tape-name">{valueLabel(t, 'tape', entry.id) === entry.id ? entry.label : valueLabel(t, 'tape', entry.id)}</span>
                 <span className="measurements-tape-right">
                   <span className="measurements-tape-val">{formatMeasure(entry.cm, unit)}</span>
                   <span

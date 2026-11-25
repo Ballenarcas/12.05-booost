@@ -2,13 +2,17 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { monthWeeks, sameDay } from '../../utils/monthGrid'
 import { useDialogBehavior } from '../../utils/useDialogBehavior'
+import { locale, useT } from '../../i18n'
 
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+// Monday first, in the app language (1 Jan 2024 was a Monday).
+const weekdays = () => Array.from({ length: 7 }, (_, index) =>
+  new Date(2024, 0, 1 + index).toLocaleDateString(locale(), { weekday: 'short' }).replace('.', ''))
 
 type Props = { selected: Date; min: Date; max: Date; onSelect: (date: Date) => void; onClose: () => void }
 
 /** Bottom-sheet calendar in the wireframes' style: Monday first, round days, the chosen day ringed. */
 export default function MealDatePicker({ selected, min, max, onSelect, onClose }: Props) {
+  const t = useT()
   const [view, setView] = useState({ year: selected.getFullYear(), month: selected.getMonth() })
   const dialogRef = useDialogBehavior(true, onClose)
   const today = new Date()
@@ -32,17 +36,17 @@ export default function MealDatePicker({ selected, min, max, onSelect, onClose }
         onClick={(event) => event.stopPropagation()}
       >
         <div className="date-sheet-heading">
-          <button className="icon-button" type="button" onClick={() => move(-1)} disabled={!canGoBack} aria-label="Previous month">
+          <button className="icon-button" type="button" onClick={() => move(-1)} disabled={!canGoBack} aria-label={t('stats.prevMonth')}>
             <ChevronLeft size={20} aria-hidden="true" />
           </button>
-          <h2 id="date-sheet-title">{new Date(view.year, view.month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h2>
-          <button className="icon-button" type="button" onClick={() => move(1)} disabled={!canGoForward} aria-label="Next month">
+          <h2 id="date-sheet-title">{new Date(view.year, view.month).toLocaleDateString(locale(), { month: 'long', year: 'numeric' })}</h2>
+          <button className="icon-button" type="button" onClick={() => move(1)} disabled={!canGoForward} aria-label={t('stats.nextMonth')}>
             <ChevronRight size={20} aria-hidden="true" />
           </button>
         </div>
         <div className="date-grid" role="grid">
           <div className="date-row" role="row">
-            {WEEKDAYS.map((weekday) => <span className="date-weekday" role="columnheader" key={weekday}>{weekday}</span>)}
+            {weekdays().map((weekday) => <span className="date-weekday" role="columnheader" key={weekday}>{weekday}</span>)}
           </div>
           {monthWeeks(view.year, view.month).map((week) => (
             <div className="date-row" role="row" key={week[0].toISOString()}>
@@ -62,7 +66,7 @@ export default function MealDatePicker({ selected, min, max, onSelect, onClose }
                       type="button"
                       disabled={!allowed}
                       aria-pressed={sameDay(day, selected)}
-                      aria-label={day.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                      aria-label={day.toLocaleDateString(locale(), { weekday: 'long', month: 'long', day: 'numeric' })}
                       onClick={() => onSelect(day)}
                     >
                       {day.getDate()}
@@ -73,7 +77,7 @@ export default function MealDatePicker({ selected, min, max, onSelect, onClose }
             </div>
           ))}
         </div>
-        <p className="date-sheet-note">You can review the last 7 days.</p>
+        <p className="date-sheet-note">{t('meals.last7Note')}</p>
       </div>
     </div>
   )

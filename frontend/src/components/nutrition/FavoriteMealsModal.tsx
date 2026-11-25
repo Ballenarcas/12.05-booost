@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowLeft, Heart, Loader2, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import type { FavoriteMeal } from '../../services/api';
+import { locale, useT, valueLabel } from '../../i18n';
 
 // The Meals page only lets you browse a week back, so logging further back would hide the meal.
 const MAX_DAYS_BACK = 7;
@@ -30,6 +31,7 @@ const rowStyle = { backgroundColor: 'var(--surface)', borderRadius: '16px', padd
 const iconButton = { background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '6px', display: 'flex' } as const;
 
 export default function FavoriteMealsModal({ favorites, isLoading, loadError, onClose, onLog, onEdit, onDelete }: FavoriteMealsModalProps) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [logging, setLogging] = useState<FavoriteMeal | null>(null);
   const [day, setDay] = useState<'today' | 'past'>('today');
@@ -70,7 +72,7 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
       await onLog(logging, day === 'today' ? null : pastInstant);
       setLogging(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "We couldn't log this meal.");
+      setError(err instanceof Error ? err.message : t('fav.errorLog'));
     } finally {
       setBusyId(null);
     }
@@ -82,7 +84,7 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
     try {
       await onDelete(favorite);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "We couldn't remove this favorite.");
+      setError(err instanceof Error ? err.message : t('fav.errorRemove'));
     } finally {
       setBusyId(null);
     }
@@ -94,25 +96,25 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {logging && (
-              <button type="button" style={{ ...iconButton, color: 'var(--text)', padding: 0 }} onClick={() => setLogging(null)} aria-label="Back to favorites" disabled={!!busyId}>
+              <button type="button" style={{ ...iconButton, color: 'var(--text)', padding: 0 }} onClick={() => setLogging(null)} aria-label={t('fav.back')} disabled={!!busyId}>
                 <ArrowLeft size={20} />
               </button>
             )}
             <div>
-              <h2 id="favorites-title" className="modal-title">{logging ? 'Add to your log' : 'Favorite meals'}</h2>
+              <h2 id="favorites-title" className="modal-title">{logging ? t('fav.addToLog') : t('fav.title')}</h2>
               <p className="card-subtitle">
-                {logging ? `${logging.meal_type}: ${logging.name}` : 'Log a meal you eat often in one tap.'}
+                {logging ? `${valueLabel(t, 'mealType', logging.meal_type)}: ${logging.name}` : t('fav.subtitle')}
               </p>
             </div>
           </div>
-          <button type="button" className="btn-modal-close" onClick={onClose} aria-label="Close favorites" disabled={!!busyId}>
+          <button type="button" className="btn-modal-close" onClick={onClose} aria-label={t('fav.close')} disabled={!!busyId}>
             <X size={20} />
           </button>
         </div>
 
         {logging ? (
           <div className="modal-form">
-            <div role="radiogroup" aria-label="Which day" style={{ display: 'flex', gap: '10px' }}>
+            <div role="radiogroup" aria-label={t('fav.whichDay')} style={{ display: 'flex', gap: '10px' }}>
               {(['today', 'past'] as const).map((option) => (
                 <button
                   key={option}
@@ -127,7 +129,7 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
                     backgroundColor: day === option ? 'var(--hifi-selected)' : 'var(--surface)',
                   }}
                 >
-                  {option === 'today' ? 'Today' : 'Another day'}
+                  {option === 'today' ? t('common.today') : t('fav.anotherDay')}
                 </button>
               ))}
             </div>
@@ -135,7 +137,7 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
             {day === 'past' && (
               <div className="inputs-row">
                 <div className="form-group">
-                  <label className="form-label" htmlFor="favorite-day">Day</label>
+                  <label className="form-label" htmlFor="favorite-day">{t('meals.day')}</label>
                   <input
                     id="favorite-day"
                     className="form-input"
@@ -148,7 +150,7 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="favorite-time">Time</label>
+                  <label className="form-label" htmlFor="favorite-time">{t('fav.time')}</label>
                   <input
                     id="favorite-time"
                     className="form-input"
@@ -161,30 +163,30 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
               </div>
             )}
             {day === 'past' && !pastIsValid && (
-              <p className="calc-disclaimer" role="alert">Pick a moment in the last {MAX_DAYS_BACK} days, not in the future.</p>
+              <p className="calc-disclaimer" role="alert">{t('fav.pickMoment', { days: MAX_DAYS_BACK })}</p>
             )}
 
             <div className="calculation-preview-card">
               <div className="calc-header-row">
-                <span className="calc-label">Meal total · {Math.round(logging.quantity_g)}g</span>
+                <span className="calc-label">{t('meals.total', { grams: Math.round(logging.quantity_g) })}</span>
                 <span className="calc-cals-badge">{logging.calories} kcal</span>
               </div>
               <div className="calc-macros-grid">
-                <div className="calc-macro-item"><span className="macro-name">Protein</span><span className="macro-num">{logging.proteins_g}g</span></div>
-                <div className="calc-macro-item"><span className="macro-name">Carbs</span><span className="macro-num">{logging.carbs_g}g</span></div>
-                <div className="calc-macro-item"><span className="macro-name">Fat</span><span className="macro-num">{logging.fats_g}g</span></div>
+                <div className="calc-macro-item"><span className="macro-name">{t('macro.protein')}</span><span className="macro-num">{logging.proteins_g}g</span></div>
+                <div className="calc-macro-item"><span className="macro-name">{t('macro.carbs')}</span><span className="macro-num">{logging.carbs_g}g</span></div>
+                <div className="calc-macro-item"><span className="macro-name">{t('macro.fat')}</span><span className="macro-num">{logging.fats_g}g</span></div>
               </div>
             </div>
 
             {error && <div className="inline-alert" role="alert">{error}</div>}
             <button className="btn-modal-submit" type="button" onClick={confirmLog} disabled={!!busyId || (day === 'past' && !pastIsValid)}>
-              {busyId ? <><Loader2 size={18} className="animate-spin" aria-hidden="true" /> Adding...</> : 'Add to log'}
+              {busyId ? <><Loader2 size={18} className="animate-spin" aria-hidden="true" /> {t('fav.adding')}</> : t('fav.addToLogButton')}
             </button>
           </div>
         ) : (
           <div className="modal-form">
             <div className="form-group">
-              <label className="form-label" htmlFor="favorite-search">Search</label>
+              <label className="form-label" htmlFor="favorite-search">{t('fav.search')}</label>
               <div className="input-with-icon">
                 <input
                   id="favorite-search"
@@ -192,7 +194,7 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
                   type="search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Meal, type or ingredient..."
+                  placeholder={t('fav.searchPlaceholder')}
                   autoComplete="off"
                 />
                 <Search size={16} className="input-spinner" aria-hidden="true" />
@@ -204,40 +206,40 @@ export default function FavoriteMealsModal({ favorites, isLoading, loadError, on
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {isLoading ? (
-                <p className="calc-disclaimer" role="status">Loading your favorites...</p>
+                <p className="calc-disclaimer" role="status">{t('fav.loading')}</p>
               ) : favorites.length === 0 ? (
                 <p className="calc-disclaimer" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  Tap the <Heart size={14} aria-label="heart" /> on a meal to save it here.
+                  {t('fav.emptyBefore')} <Heart size={14} aria-label={t('fav.heart')} /> {t('fav.emptyAfter')}
                 </p>
               ) : shown.length === 0 ? (
-                <p className="calc-disclaimer">No favorites match “{query.trim()}”.</p>
+                <p className="calc-disclaimer">{t('fav.noMatch', { query: query.trim() })}</p>
               ) : (
                 shown.map((favorite) => (
                   <div key={favorite.id} style={rowStyle}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', overflowWrap: 'anywhere' }}>
-                        {favorite.meal_type.toUpperCase()}: {favorite.name.toUpperCase()}
+                        {valueLabel(t, 'mealType', favorite.meal_type).toLocaleUpperCase(locale())}: {favorite.name.toLocaleUpperCase(locale())}
                       </div>
                       <div style={{ marginTop: '4px', color: 'var(--text-muted)', fontSize: '12.5px', display: 'flex', flexWrap: 'wrap', columnGap: '8px' }}>
-                        {[`${favorite.calories} kcal`, `P ${favorite.proteins_g}g`, `C ${favorite.carbs_g}g`, `F ${favorite.fats_g}g`].map((part) => (
+                        {[`${favorite.calories} kcal`, t('fav.macroP', { g: favorite.proteins_g }), t('fav.macroC', { g: favorite.carbs_g }), t('fav.macroF', { g: favorite.fats_g })].map((part) => (
                           <span key={part} style={{ whiteSpace: 'nowrap' }}>{part}</span>
                         ))}
                       </div>
                     </div>
-                    <button type="button" style={iconButton} onClick={() => onEdit(favorite)} disabled={!!busyId} aria-label={`Edit ${favorite.name}`}>
+                    <button type="button" style={iconButton} onClick={() => onEdit(favorite)} disabled={!!busyId} aria-label={t('fav.editAria', { name: favorite.name })}>
                       <Pencil size={17} />
                     </button>
-                    <button type="button" style={{ ...iconButton, color: 'var(--negative)' }} onClick={() => remove(favorite)} disabled={!!busyId} aria-label={`Remove ${favorite.name} from favorites`}>
+                    <button type="button" style={{ ...iconButton, color: 'var(--negative)' }} onClick={() => remove(favorite)} disabled={!!busyId} aria-label={t('meals.unfavorite', { name: favorite.name })}>
                       {busyId === favorite.id ? <Loader2 size={17} className="animate-spin" /> : <Trash2 size={17} />}
                     </button>
                     <button
                       type="button"
                       onClick={() => startLogging(favorite)}
                       disabled={!!busyId}
-                      aria-label={`Add ${favorite.name} to your log`}
+                      aria-label={t('fav.addAria', { name: favorite.name })}
                       style={{ display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid var(--line)', borderRadius: '12px', color: 'var(--text)', backgroundColor: 'var(--surface-raised)', cursor: 'pointer', fontSize: '13px', fontWeight: 700, padding: '8px 12px' }}
                     >
-                      <Plus size={15} aria-hidden="true" /> Add
+                      <Plus size={15} aria-hidden="true" /> {t('hydration.add')}
                     </button>
                   </div>
                 ))

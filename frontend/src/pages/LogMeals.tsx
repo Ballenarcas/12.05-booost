@@ -18,6 +18,7 @@ import {
 import { summarizeMeal } from '../utils/mealComposition.js'
 import { describeError } from '../utils/errors.js'
 import backIcon from '../assets/scan/back.svg'
+import { locale, useT, valueLabel } from '../i18n'
 import '../styles/log-meals.css'
 import '../styles/add-food.css'
 
@@ -47,6 +48,7 @@ function mealTypeForNow(): string {
 }
 
 export function LogMeals() {
+  const t = useT()
   const navigate = usePageNavigate()
   const currentUser = getCurrentUser()
 
@@ -99,13 +101,13 @@ export function LogMeals() {
       })
       .catch((err: Error) => {
         if (!isMounted || hadCachedNutrition.current) return
-        setErrorMessage(describeError(err, "We couldn't load today's meals. Please try again."))
+        setErrorMessage(describeError(err, t('add.errorLoad')))
       })
 
     return () => {
       isMounted = false
     }
-  }, [currentUser?.id])
+  }, [currentUser?.id, t])
 
   const refetchNutrition = () => {
     if (!currentUser?.id) return
@@ -149,7 +151,7 @@ export function LogMeals() {
         setAdjustmentError(null)
       })
       .catch((err: unknown) => {
-        setAdjustmentError(describeError(err, "We couldn't load your progress. Please try again."))
+        setAdjustmentError(describeError(err, t('add.errorProgress')))
       })
   }
 
@@ -170,7 +172,7 @@ export function LogMeals() {
         refetchNutrition()
       })
       .catch((err: unknown) => {
-        setAdjustmentError(describeError(err, "We couldn't update your goal. Please try again."))
+        setAdjustmentError(describeError(err, t('add.errorGoal')))
       })
       .finally(() => setIsDeciding(false))
   }
@@ -194,7 +196,7 @@ export function LogMeals() {
         setIsTipOpen(false)
       })
       .catch((err: unknown) => {
-        setAdjustmentError(describeError(err, "We couldn't save your choice. Please try again."))
+        setAdjustmentError(describeError(err, t('add.errorChoice')))
       })
       .finally(() => setIsDeciding(false))
   }
@@ -211,12 +213,12 @@ export function LogMeals() {
         .then((items) => {
           if (!isCurrent) return
           setSuggestions(items)
-          setFoodSearchMessage(items.length === 0 ? 'No foods found. Try another search.' : null)
+          setFoodSearchMessage(items.length === 0 ? t('add.noFoods') : null)
         })
         .catch((err: unknown) => {
           if (!isCurrent) return
           setSuggestions([])
-          setFoodSearchMessage(describeError(err, 'Food search is not available right now. Please try again.'))
+          setFoodSearchMessage(describeError(err, t('add.errorSearch')))
         })
         .finally(() => {
           if (isCurrent) setIsSearchingFoods(false)
@@ -227,7 +229,7 @@ export function LogMeals() {
       isCurrent = false
       clearTimeout(timer)
     }
-  }, [foodInput, isFoodSearchOpen])
+  }, [foodInput, isFoodSearchOpen, t])
 
   // 4. Live Automatic Nutrition Calculation (User NEVER inputs calories manually)
   const calculatedNutrition = useMemo(() => {
@@ -314,41 +316,41 @@ export function LogMeals() {
 
       navigate('/nutrition', { replace: true })
     } catch (err: unknown) {
-      setErrorMessage(describeError(err, "We couldn't save this meal. Please try again."))
+      setErrorMessage(describeError(err, t('add.errorSave')))
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const macroBars = [
-    { label: 'Protein', value: calculatedNutrition.protein, target: nutritionData?.target_proteins_g ?? 0 },
-    { label: 'Fats', value: calculatedNutrition.fat, target: nutritionData?.target_fats_g ?? 0 },
-    { label: 'Carbs', value: calculatedNutrition.carbs, target: nutritionData?.target_carbs_g ?? 0 },
+    { label: t('macro.protein'), value: calculatedNutrition.protein, target: nutritionData?.target_proteins_g ?? 0 },
+    { label: t('macro.fats'), value: calculatedNutrition.fat, target: nutritionData?.target_fats_g ?? 0 },
+    { label: t('macro.carbs'), value: calculatedNutrition.carbs, target: nutritionData?.target_carbs_g ?? 0 },
   ]
 
   return (
     <div className="screen hifi-screen hifi-theme add-food-screen">
       <header className="add-food-header">
-        <button type="button" className="scan-back" onClick={handleBack} aria-label="Go back">
+        <button type="button" className="scan-back" onClick={handleBack} aria-label={t('common.back')}>
           <img src={backIcon} alt="" width={36} height={37} />
         </button>
         <div className="hifi-page-header">
-          <h1 className="hifi-page-title">Add food</h1>
+          <h1 className="hifi-page-title">{t('add.title')}</h1>
           <button
             type="button"
             className="hifi-pill add-food-scan"
             // Non-Premium users see the paywall; the server checks Premium again on every scan.
             onClick={() => navigate(isPremiumActive() ? '/scan-meal' : '/premium')}
-            aria-label={isPremiumActive() ? 'Scan a meal' : 'Scan a meal, available with Pro'}
+            aria-label={isPremiumActive() ? t('add.scanAria') : t('add.scanAriaPro')}
           >
-            Scan <Crown size={16} aria-hidden="true" />
+            {t('add.scan')} <Crown size={16} aria-hidden="true" />
           </button>
         </div>
       </header>
 
       <form onSubmit={handleSaveMeal} className="add-food-form">
         <section className="hifi-section" aria-labelledby="meal-type-title">
-          <h2 className="hifi-section-title" id="meal-type-title">Meal type</h2>
+          <h2 className="hifi-section-title" id="meal-type-title">{t('meals.mealType')}</h2>
           <div className="add-food-types" role="group" aria-labelledby="meal-type-title">
             {MEAL_TYPES.map((type) => (
               <button
@@ -358,7 +360,7 @@ export function LogMeals() {
                 aria-pressed={mealType === type}
                 onClick={() => setMealType(type)}
               >
-                {type}
+                {valueLabel(t, 'mealType', type)}
               </button>
             ))}
           </div>
@@ -366,11 +368,11 @@ export function LogMeals() {
 
         <div className="add-food-fields">
           <div className="add-food-field">
-            <label htmlFor="foodInput">Food name</label>
+            <label htmlFor="foodInput">{t('add.foodName')}</label>
             <input
               id="foodInput"
               type="text"
-              placeholder="e.g. Chicken breast"
+              placeholder={t('add.foodPlaceholder')}
               value={foodInput}
               onChange={(e) => {
                 setFoodInput(e.target.value)
@@ -388,7 +390,7 @@ export function LogMeals() {
               }}
               autoComplete="off"
             />
-            {isSearchingFoods && <Loader2 size={16} className="animate-spin add-food-spinner" aria-label="Searching" />}
+            {isSearchingFoods && <Loader2 size={16} className="animate-spin add-food-spinner" aria-label={t('meals.searching')} />}
             {isFoodSearchOpen && suggestions.length > 0 && (
               <ul className="add-food-suggestions">
                 {suggestions.map((item) => (
@@ -405,7 +407,7 @@ export function LogMeals() {
           </div>
 
           <div className="add-food-field">
-            <label htmlFor="quantityGrams">Quantity</label>
+            <label htmlFor="quantityGrams">{t('meals.quantity')}</label>
             <span className="add-food-quantity">
               <input
                 id="quantityGrams"
@@ -418,7 +420,7 @@ export function LogMeals() {
               />
               <span aria-hidden="true">g</span>
             </span>
-            <span className="add-food-presets" role="group" aria-label="Quick portions">
+            <span className="add-food-presets" role="group" aria-label={t('add.quickPortions')}>
               {['50', '100', '150', '200', '250'].map((g) => (
                 <button key={g} type="button" aria-pressed={quantityGrams === g} onClick={() => setQuantityGrams(g)}>{g}g</button>
               ))}
@@ -426,7 +428,7 @@ export function LogMeals() {
           </div>
         </div>
 
-        <ul className="add-food-macros" aria-label={`Macros for ${quantityGrams || 100}g`}>
+        <ul className="add-food-macros" aria-label={t('add.macrosFor', { grams: quantityGrams || 100 })}>
           {macroBars.map((macro) => (
             <li key={macro.label}>
               <span className="add-food-macro-name">{macro.label}</span>
@@ -440,13 +442,13 @@ export function LogMeals() {
         </ul>
 
         <button type="button" className="hifi-pill add-food-add" onClick={handleAddFood} disabled={!foodInput.trim()}>
-          + Add to {mealType.toLowerCase()}
+          + {t('add.addTo', { type: valueLabel(t, 'mealType', mealType).toLowerCase() })}
         </button>
 
         <section className="hifi-section" aria-labelledby="meal-contents-title">
-          <h2 className="hifi-section-title" id="meal-contents-title">{mealType} contents</h2>
+          <h2 className="hifi-section-title" id="meal-contents-title">{t('add.contents', { type: valueLabel(t, 'mealType', mealType) })}</h2>
           {plateFoods.length === 0 ? (
-            <p className="hifi-muted">Add each food and its portion to build this meal.</p>
+            <p className="hifi-muted">{t('add.buildHint')}</p>
           ) : (
             <ul className="add-food-contents">
               {plateFoods.map((food, index) => (
@@ -454,7 +456,7 @@ export function LogMeals() {
                   <span className="add-food-content-name">{food.name}</span>
                   <span className="add-food-content-grams">{food.quantityGrams}g</span>
                   <span className="add-food-content-kcal">{food.calories}kcal</span>
-                  <button type="button" onClick={() => setPlateFoods((foods) => foods.filter((_, i) => i !== index))} aria-label={`Remove ${food.name}`}>
+                  <button type="button" onClick={() => setPlateFoods((foods) => foods.filter((_, i) => i !== index))} aria-label={t('hydration.removeAria', { label: food.name })}>
                     <X size={16} aria-hidden="true" />
                   </button>
                 </li>
@@ -464,17 +466,17 @@ export function LogMeals() {
         </section>
 
         <dl className="add-food-totals">
-          <div><dt>Nutrition estimate</dt><dd>{foodInput.trim() ? `${calculatedNutrition.calories}kcal` : '–'}</dd></div>
-          <div><dt>Meal total</dt><dd>{plateNutrition.calories}kcal</dd></div>
+          <div><dt>{t('add.estimate')}</dt><dd>{foodInput.trim() ? `${calculatedNutrition.calories}kcal` : '–'}</dd></div>
+          <div><dt>{t('add.mealTotal')}</dt><dd>{plateNutrition.calories}kcal</dd></div>
         </dl>
 
         {errorMessage && <div className="inline-alert" role="alert">{errorMessage}</div>}
 
         <button type="submit" className="hifi-pill is-big add-food-save" disabled={isSubmitting || plateFoods.length === 0}>
-          {isSubmitting ? <><Loader2 size={18} className="animate-spin" aria-hidden="true" /> Saving...</> : 'Save meal'}
+          {isSubmitting ? <><Loader2 size={18} className="animate-spin" aria-hidden="true" /> {t('common.saving')}</> : t('add.saveMeal')}
         </button>
         <button type="button" className="hifi-link-button add-food-tip" onClick={handleOpenTip}>
-          <Sparkles size={14} aria-hidden="true" /> AI calorie tip
+          <Sparkles size={14} aria-hidden="true" /> {t('add.aiTip')}
         </button>
       </form>
 
@@ -483,9 +485,9 @@ export function LogMeals() {
           <div className="modal-dialog tip-dialog">
             <div className="modal-header">
               <h2 className="modal-title" id="calorie-adjustment-title">
-                {adjustment?.has_change ? 'Calorie Goal Adjustment' : 'AI Trainer Tip'}
+                {adjustment?.has_change ? t('add.goalAdjustment') : t('add.trainerTip')}
               </h2>
-              <button type="button" className="btn-modal-close" onClick={handleDeclineTip} aria-label="Close tip">
+              <button type="button" className="btn-modal-close" onClick={handleDeclineTip} aria-label={t('add.closeTip')}>
                 <X size={18} />
               </button>
             </div>
@@ -493,7 +495,7 @@ export function LogMeals() {
               {adjustmentError ? (
                 <p className="tip-error" role="alert">{adjustmentError}</p>
               ) : !adjustment ? (
-                <p className="tip-message">Checking your last 7 days...</p>
+                <p className="tip-message">{t('add.checking7')}</p>
               ) : (
                 <>
                   {adjustment.has_change && (
@@ -506,30 +508,26 @@ export function LogMeals() {
                   <p className="tip-message">{adjustment.reason}</p>
                   {(adjustment.status === 'pending' || adjustment.status === 'advice') && (
                     <p className="tip-reasoning">
-                      <strong>Why:</strong> last 7 days, {Math.round(adjustment.compliance_rate * 100)}% of days
-                      on target, averaging {adjustment.avg_daily_intake} kcal, weekly training volume{' '}
-                      {adjustment.weekly_volume} kg.
+                      <strong>{t('add.why')}</strong> {t('add.whyBody', { pct: Math.round(adjustment.compliance_rate * 100), kcal: adjustment.avg_daily_intake, volume: adjustment.weekly_volume })}
                     </p>
                   )}
                   {adjustment.fatigue_workouts > 0 && (
                     <p className="tip-reasoning">
-                      <strong>Workout fatigue:</strong>{' '}
+                      <strong>{t('add.fatigue')}</strong>{' '}
                       {adjustment.fatigue_latest > 0
-                        ? `${adjustment.fatigue_latest}/10 after your last workout`
-                        : `${adjustment.fatigue_avg}/10 average`}
+                        ? t('add.fatigueLatest', { value: adjustment.fatigue_latest })
+                        : t('add.fatigueAvg', { value: adjustment.fatigue_avg })}
                       {adjustment.fatigue_workouts > 1
-                        && ` · ${adjustment.fatigue_avg}/10 average over ${adjustment.fatigue_workouts} workouts`}.
+                        && ` · ${t('add.fatigueAvgOver', { value: adjustment.fatigue_avg, count: adjustment.fatigue_workouts })}`}.
                       {adjustment.fatigue_latest > 5
-                        ? ' Recovery calories are included and the next workout will be lighter.'
-                        : ' No recent high-fatigue session, so no recovery bump is applied.'}
+                        ? ` ${t('add.recoveryIncluded')}`
+                        : ` ${t('add.noRecovery')}`}
                     </p>
                   )}
                   {adjustment.activity?.connected && (
                     <p className="tip-reasoning">
                       <strong>Health Connect:</strong>{' '}
-                      {adjustment.activity.steps_avg_7d.toLocaleString()} steps and{' '}
-                      {adjustment.activity.active_calories_avg_7d} active kcal per day. That activity is
-                      included in this suggestion.
+                      {t('add.healthBody', { steps: adjustment.activity.steps_avg_7d.toLocaleString(locale()), kcal: adjustment.activity.active_calories_avg_7d })}
                     </p>
                   )}
                 </>
@@ -545,10 +543,10 @@ export function LogMeals() {
                     disabled={isDeciding}
                   >
                     {isDeciding
-                      ? 'Saving...'
+                      ? t('common.saving')
                       : adjustment.has_change
-                        ? `Apply ${adjustment.proposed_goal} kcal`
-                        : 'Got it'}
+                        ? t('add.apply', { kcal: adjustment.proposed_goal })
+                        : t('tip.gotIt')}
                   </button>
                   {adjustment.has_change && (
                     <button
@@ -557,7 +555,7 @@ export function LogMeals() {
                       onClick={handleDeclineTip}
                       disabled={isDeciding}
                     >
-                      Keep {adjustment.previous_goal} kcal
+                      {t('add.keep', { kcal: adjustment.previous_goal })}
                     </button>
                   )}
                 </>
@@ -568,7 +566,7 @@ export function LogMeals() {
                   onClick={handleOpenTip}
                   disabled={!adjustmentError}
                 >
-                  {adjustmentError ? 'Try again' : 'Checking...'}
+                  {adjustmentError ? t('common.retry') : t('add.checking')}
                 </button>
               )}
             </div>

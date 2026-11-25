@@ -5,6 +5,7 @@ import { fetchExerciseMuscleGroups, fetchExercises, getCurrentUser, isPremiumAct
 import MediaCredit from '../workout/MediaCredit';
 import { useNavigate } from 'react-router-dom';
 import type { Exercise } from '../../types';
+import { useT, valueLabel } from '../../i18n';
 
 interface SelectExerciseModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
   excludedExerciseIds = [],
   excludedExerciseNames = [],
 }) => {
+  const t = useT();
   const navigate = useNavigate();
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,12 +63,12 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
       })
       .catch((error: unknown) => {
         if (isCurrent) {
-          setMuscleGroupError(error instanceof Error ? error.message : 'Unable to load muscle groups.');
+          setMuscleGroupError(error instanceof Error ? error.message : t('picker.errorGroups'));
           setMuscleGroupsLoaded(true);
         }
       });
     return () => { isCurrent = false; };
-  }, [isOpen]);
+  }, [isOpen, t]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -86,12 +88,12 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
       })
       .catch((error: unknown) => {
         if (isCurrent) {
-          setLoadError(error instanceof Error ? error.message : 'Unable to load exercises.');
+          setLoadError(error instanceof Error ? error.message : t('picker.errorExercises'));
           setResolvedExerciseRequest(exerciseRequestKey);
         }
       });
     return () => { isCurrent = false; };
-  }, [searchQuery, selectedMuscleGroup, isOpen, exerciseRequestKey]);
+  }, [searchQuery, selectedMuscleGroup, isOpen, exerciseRequestKey, t]);
 
   if (!isOpen) return null;
 
@@ -138,7 +140,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: '16px' }}>
           <h2 style={{ fontSize: '14px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0, textAlign: 'center', color: 'var(--text)' }}>
-            SELECT EXERCISE
+            {t('picker.title')}
           </h2>
           <button onClick={onClose} type="button" style={{ position: 'absolute', right: 0, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}>
             <X size={18} />
@@ -148,21 +150,21 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
         <div style={{ position: 'relative', marginBottom: '14px' }}>
           <input
             type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search exercises..." autoFocus
+            placeholder={t('picker.search')} autoFocus
             style={{ width: '100%', padding: '11px 38px 11px 14px', backgroundColor: 'var(--surface-raised)', border: 'none', borderRadius: '12px', color: 'var(--text)', fontSize: '13.5px', outline: 'none', boxSizing: 'border-box' }}
           />
           <Search size={17} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
         </div>
 
         <label style={{ display: 'grid', gap: '6px', marginBottom: '14px', color: 'var(--text-muted)', fontSize: '12px', fontWeight: 600 }}>
-          Muscle group
+          {t('picker.muscleGroup')}
           <select
-            aria-label="Filter exercises by muscle group"
+            aria-label={t('picker.filterAria')}
             value={selectedMuscleGroup} onChange={(event) => setSelectedMuscleGroup(event.target.value)}
             style={{ width: '100%', padding: '10px 12px', backgroundColor: 'var(--surface-raised)', border: 'none', borderRadius: '12px', color: 'var(--text)', fontSize: '13px', boxSizing: 'border-box' }}
           >
-            <option value="">All muscle groups</option>
-            {muscleGroups.map((group) => <option key={group} value={group}>{group}</option>)}
+            <option value="">{t('picker.allGroups')}</option>
+            {muscleGroups.map((group) => <option key={group} value={group}>{valueLabel(t, 'muscle', group)}</option>)}
           </select>
           {muscleGroupError && <span role="alert" style={{ color: 'var(--negative)', fontWeight: 400 }}>{muscleGroupError}</span>}
           {!muscleGroupsLoaded && <span role="status" style={{ color: 'var(--text-muted)', fontWeight: 400 }}>Loading muscle groups...</span>}
@@ -199,7 +201,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
                       {ex.is_custom && <span style={{ fontSize: '9px', backgroundColor: 'var(--surface-raised)', color: 'var(--text-muted)', padding: '2px 5px', borderRadius: '4px', fontWeight: 700 }}>CUSTOM</span>}
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {ex.muscle_group || ex.muscles?.[0] || ex.category || 'General'}
+                      {valueLabel(t, 'muscle', ex.muscle_group || ex.muscles?.[0] || ex.category || 'General')}
                     </div>
                   </div>
                 </div>
@@ -207,7 +209,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
                   {ex.is_custom && (
                     <button
                       type="button"
-                      aria-label={`Edit ${ex.name}`}
+                      aria-label={t('fav.editAria', { name: ex.name })}
                       onClick={(e) => { e.stopPropagation(); onClose(); navigate(`/exercises/custom/${ex.id}`); }}
                       style={{ background: 'none', border: 'none', color: 'var(--text-muted)', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                     >
@@ -216,7 +218,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
                   )}
                   <button
                     type="button"
-                    aria-label={`Add ${ex.name}`}
+                    aria-label={t('picker.addAria', { name: ex.name })}
                     onClick={(e) => { e.stopPropagation(); onSelectExercise(ex); onClose(); }}
                     style={{ background: 'none', border: 'none', color: 'var(--text-muted)', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                   >
@@ -250,7 +252,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
               cursor: 'pointer',
             }}
           >
-            {isPremium ? 'Create custom exercise' : 'Create custom exercise (Upgrade)'}
+            {isPremium ? t('picker.createCustom') : t('picker.createCustomUpgrade')}
           </button>
         </div>
       </div>

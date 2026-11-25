@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 from uuid import UUID
 
+from app.core.i18n import get_language, normalize_language
 from app.db.supabase_client import get_supabase
 from app.schemas.health import HealthActivitySummary
 from app.services.exercise_catalog import get_cached_exercise
@@ -73,23 +74,31 @@ def _health(metrics: dict[str, Any]) -> HealthActivitySummary:
     return HealthActivitySummary()
 
 
-def _activity_phrase(health: HealthActivitySummary) -> str:
+def _activity_phrase(health: HealthActivitySummary, is_es: bool = False) -> str:
     parts = []
     if health.steps_avg_7d > 0:
-        parts.append(f"{health.steps_avg_7d:,} steps")
+        parts.append(f"{health.steps_avg_7d:,} pasos" if is_es else f"{health.steps_avg_7d:,} steps")
     if health.active_calories_avg_7d > 0:
-        parts.append(f"{health.active_calories_avg_7d} active kcal")
-    return " and ".join(parts)
+        parts.append(
+            f"{health.active_calories_avg_7d} kcal activas"
+            if is_es
+            else f"{health.active_calories_avg_7d} active kcal"
+        )
+    return (" y " if is_es else " and ").join(parts)
 
 
-def _activity_sentence(metrics: dict[str, Any]) -> str:
+def _activity_sentence(metrics: dict[str, Any], is_es: bool = False) -> str:
     health = _health(metrics)
     if not health.connected:
         return ""
-    phrase = _activity_phrase(health)
+    phrase = _activity_phrase(health, is_es=is_es)
     if not phrase:
-        return "Health Connect is connected, but no recent activity was synced."
-    return f"You averaged {phrase} per day."
+        return (
+            "Health Connect está conectado, pero aún no se ha sincronizado actividad reciente."
+            if is_es
+            else "Health Connect is connected, but no recent activity was synced."
+        )
+    return f"Promediaste {phrase} al día." if is_es else f"You averaged {phrase} per day."
 
 
 def _activity_is_high(metrics: dict[str, Any]) -> bool:
@@ -142,7 +151,7 @@ def _fatigue_bump(metrics: dict[str, Any]) -> int:
     return min(MAX_FATIGUE_BUMP, int(round(points * FATIGUE_KCAL_PER_POINT / 10.0) * 10))
 
 
-def _fatigue_proposal(metrics: dict[str, Any], bump: int) -> dict[str, Any]:
+def _fatigue_proposal(metrics: dict[str, Any], bump: int, is_es: bool = False) -> dict[str, Any]:
     """High fatigue always earns recovery calories, whatever the compliance picture is."""
     goal = int(metrics.get("goal") or 0)
     level = _fatigue_level(metrics)
@@ -152,55 +161,85 @@ def _fatigue_proposal(metrics: dict[str, Any], bump: int) -> dict[str, Any]:
     if objective == "fat_loss" and maintenance > 0:
         # Recovery during a cut shrinks the deficit; it never turns into a surplus.
         proposed = min(proposed, maintenance)
-    label = f"Your latest workout fatigue was {level:.1f}/10."
+    label = (
+        f"Tu última fatiga tras entrenar fue de {level:.1f}/10."
+        if is_es
+        else f"Your latest workout fatigue was {level:.1f}/10."
+    )
     if proposed <= goal:
         if objective == "fat_loss" and maintenance > 0 and goal >= maintenance:
-            detail = "Your target is already at maintenance, so it stays there while you recover."
+            detail = (
+                "Tu objetivo ya está en mantenimiento, así que se mantiene mientras te recuperas."
+                if is_es
+                else "Your target is already at maintenance, so it stays there while you recover."
+            )
         else:
-            detail = f"Your target is at the {MAX_GOAL} kcal ceiling, so it stays there."
+            detail = (
+                f"Tu objetivo ya está en el límite de {MAX_GOAL} kcal, así que se mantiene."
+                if is_es
+                else f"Your target is at the {MAX_GOAL} kcal ceiling, so it stays there."
+            )
         return {"has_change": False, "proposed_goal": goal, "reason": f"{label} {detail}"}
     extra = proposed - goal
     if objective == "fat_loss":
         detail = (
-            f"To keep recovery on track, the target rises by {extra} kcal "
+            f"Para favorecer la recuperación, el objetivo sube {extra} kcal "
+            "(ajustado a tu fatiga) manteniendo todavía el déficit."
+            if is_es
+            else f"To keep recovery on track, the target rises by {extra} kcal "
             "(scaled to your fatigue) while still keeping a deficit."
         )
     elif objective == "muscle_gain":
         detail = (
-            f"To support recovery and keep training quality, the target rises by {extra} kcal "
+            f"Para favorecer la recuperación y mantener la calidad del entreno, el objetivo sube {extra} kcal "
+            "(ajustado a tu fatiga)."
+            if is_es
+            else f"To support recovery and keep training quality, the target rises by {extra} kcal "
             "(scaled to your fatigue)."
         )
     else:
-        detail = f"To support recovery, the target rises by {extra} kcal (scaled to your fatigue)."
+        detail = (
+            f"Para favorecer la recuperación, el objetivo sube {extra} kcal (ajustado a tu fatiga)."
+            if is_es
+            else f"To support recovery, the target rises by {extra} kcal (scaled to your fatigue)."
+        )
     reason = f"{label} {detail}"
     if _health(metrics).connected:
-        reason += f" {_activity_sentence(metrics)}"
+        reason += f" {_activity_sentence(metrics, is_es=is_es)}"
     return {"has_change": True, "proposed_goal": proposed, "reason": reason}
 
 
-def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
+def propose_adjustment(metrics: dict[str, Any], lang: str | None = None) -> dict[str, Any]:
     """Return {has_change, proposed_goal, reason}. Deterministic, no database access."""
+    is_es = (normalize_language(lang) if lang is not None else get_language()) == "es"
     goal = int(metrics.get("goal") or 0)
     if goal <= 0:
         return {
             "has_change": False,
             "proposed_goal": goal,
-            "reason": "Set your daily calorie goal in Settings before the target can be tuned.",
+            "reason": (
+                "Define tu objetivo diario de calorías en Ajustes antes de poder ajustarlo."
+                if is_es
+                else "Set your daily calorie goal in Settings before the target can be tuned."
+            ),
         }
 
     fatigue_bump = _fatigue_bump(metrics)
     if fatigue_bump > 0:
-        return _fatigue_proposal(metrics, fatigue_bump)
+        return _fatigue_proposal(metrics, fatigue_bump, is_es=is_es)
 
     compliance = float(metrics.get("compliance") or 0.0)
     days_within = int(metrics.get("days_within") or 0)
     if compliance < LOW_COMPLIANCE:
         reason = (
-            f"Consistency first: only {days_within} of {EVALUATION_DAYS} days landed within "
+            f"Primero constancia: solo {days_within} de {EVALUATION_DAYS} días estuvieron dentro del "
+            f"10 % de tu objetivo de {goal} kcal. Registra todos los días durante una semana antes de cambiarlo."
+            if is_es
+            else f"Consistency first: only {days_within} of {EVALUATION_DAYS} days landed within "
             f"10% of your {goal} kcal goal. Log every day for a week before the target moves."
         )
         if _health(metrics).connected:
-            reason += f" {_activity_sentence(metrics)}"
+            reason += f" {_activity_sentence(metrics, is_es=is_es)}"
         return {
             "has_change": False,
             "proposed_goal": goal,
@@ -209,11 +248,14 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
 
     if compliance < HIGH_COMPLIANCE:
         reason = (
-            f"You are close. {days_within} of {EVALUATION_DAYS} days stayed on target; "
+            f"Estás cerca. {days_within} de {EVALUATION_DAYS} días cumplieron el objetivo; "
+            "llega a 6 de 7 antes de moverlo."
+            if is_es
+            else f"You are close. {days_within} of {EVALUATION_DAYS} days stayed on target; "
             "reach 6 of 7 before the goal changes."
         )
         if _health(metrics).connected:
-            reason += f" {_activity_sentence(metrics)}"
+            reason += f" {_activity_sentence(metrics, is_es=is_es)}"
         return {
             "has_change": False,
             "proposed_goal": goal,
@@ -226,11 +268,18 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
     if objective == "fat_loss":
         if avg_intake < goal * 0.98:
             reason = (
-                f"Your average intake is {avg_intake} kcal against a {goal} kcal goal, so the "
+                f"Tu ingesta media es de {avg_intake} kcal frente a un objetivo de {goal} kcal, así que el "
+                "déficit está funcionando. Mantén el objetivo."
+                if is_es
+                else f"Your average intake is {avg_intake} kcal against a {goal} kcal goal, so the "
                 "deficit is working. Hold the target."
             )
             if _health(metrics).connected:
-                reason += f" {_activity_sentence(metrics)} Activity is widening the deficit, so no cut is needed."
+                reason += (
+                    f" {_activity_sentence(metrics, is_es=True)} Tu actividad ya amplía el déficit, así que no hace falta recortar más."
+                    if is_es
+                    else f" {_activity_sentence(metrics)} Activity is widening the deficit, so no cut is needed."
+                )
             return {
                 "has_change": False,
                 "proposed_goal": goal,
@@ -241,7 +290,10 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
                 "has_change": False,
                 "proposed_goal": goal,
                 "reason": (
-                    f"{_activity_sentence(metrics)} Activity is already widening the deficit, "
+                    f"{_activity_sentence(metrics, is_es=True)} Tu actividad ya amplía el déficit, "
+                    f"así que mantener {goal} kcal es más seguro que recortarlo."
+                    if is_es
+                    else f"{_activity_sentence(metrics)} Activity is already widening the deficit, "
                     f"so keeping the {goal} kcal target is safer than cutting it."
                 ),
             }
@@ -252,21 +304,32 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
                 "has_change": False,
                 "proposed_goal": goal,
                 "reason": (
-                    f"Your goal is already at the {floor} kcal safety floor, so it stays there."
+                    f"Tu objetivo ya está en el mínimo de seguridad de {floor} kcal, así que se mantiene."
+                    if is_es
+                    else f"Your goal is already at the {floor} kcal safety floor, so it stays there."
                 ),
             }
         proposed = goal - reduction
         reason = (
-            f"Your average intake is {avg_intake} kcal against a {goal} kcal goal, so the "
+            f"Tu ingesta media es de {avg_intake} kcal frente a un objetivo de {goal} kcal, así que el "
+            f"déficit no se está produciendo. Bajamos el objetivo en {goal - proposed} kcal."
+            if is_es
+            else f"Your average intake is {avg_intake} kcal against a {goal} kcal goal, so the "
             f"deficit is not happening. Lowering the target by {goal - proposed} kcal."
         )
         if _activity_is_low(metrics):
             reason += (
-                f" {_activity_sentence(metrics)} Adding a daily walk would widen the deficit "
+                f" {_activity_sentence(metrics, is_es=True)} Añadir una caminata diaria ampliaría el déficit sin comer menos."
+                if is_es
+                else f" {_activity_sentence(metrics)} Adding a daily walk would widen the deficit "
                 "without eating less."
             )
         elif _health(metrics).connected:
-            reason += f" {_activity_sentence(metrics)} Keep that activity up while the target comes down."
+            reason += (
+                f" {_activity_sentence(metrics, is_es=True)} Mantén esa actividad mientras baja el objetivo."
+                if is_es
+                else f" {_activity_sentence(metrics)} Keep that activity up while the target comes down."
+            )
         return {
             "has_change": True,
             "proposed_goal": proposed,
@@ -281,7 +344,9 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
                 "has_change": False,
                 "proposed_goal": goal,
                 "reason": (
-                    "Training volume is not rising yet, so keep intake steady until it does."
+                    "El volumen de entrenamiento aún no sube, así que mantén la ingesta estable hasta que lo haga."
+                    if is_es
+                    else "Training volume is not rising yet, so keep intake steady until it does."
                 ),
             }
         activity_bonus = _activity_credit(metrics) if _activity_is_high(metrics) else 0
@@ -290,16 +355,26 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
             return {
                 "has_change": False,
                 "proposed_goal": goal,
-                "reason": f"Your goal is at the {MAX_GOAL} kcal ceiling, so it stays there.",
+                "reason": (
+                    f"Tu objetivo ya está en el límite de {MAX_GOAL} kcal, así que se mantiene."
+                    if is_es
+                    else f"Your goal is at the {MAX_GOAL} kcal ceiling, so it stays there."
+                ),
             }
         reason = (
-            f"Training volume rose from {volume_before} kg to {volume_now} kg this week with "
+            f"El volumen de entrenamiento subió de {volume_before} kg a {volume_now} kg esta semana con "
+            f"{days_within} de {EVALUATION_DAYS} días en objetivo. Subimos el objetivo en "
+            f"{proposed - goal} kcal."
+            if is_es
+            else f"Training volume rose from {volume_before} kg to {volume_now} kg this week with "
             f"{days_within} of {EVALUATION_DAYS} days on target. Raising the target by "
             f"{proposed - goal} kcal."
         )
         if activity_bonus:
             reason += (
-                f" {_activity_sentence(metrics)} That activity raises recovery needs, so the "
+                f" {_activity_sentence(metrics, is_es=True)} Esa actividad aumenta las necesidades de recuperación, así que el aumento lo cubre."
+                if is_es
+                else f" {_activity_sentence(metrics)} That activity raises recovery needs, so the "
                 "increase covers it."
             )
         return {
@@ -315,18 +390,28 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
             "has_change": True,
             "proposed_goal": proposed,
             "reason": (
-                f"Maintenance: {_activity_sentence(metrics)} Raising the target by "
+                f"Mantenimiento: {_activity_sentence(metrics, is_es=True)} Subir el objetivo en "
+                f"{proposed - goal} kcal lo ajusta a esa actividad."
+                if is_es
+                else f"Maintenance: {_activity_sentence(metrics)} Raising the target by "
                 f"{proposed - goal} kcal keeps it matched to that activity."
             ),
         }
     reason = (
-        f"Maintenance: {days_within} of {EVALUATION_DAYS} days matched your {goal} kcal goal. "
+        f"Mantenimiento: {days_within} de {EVALUATION_DAYS} días cumplieron tu objetivo de {goal} kcal. "
+        "Mantenemos el objetivo estable."
+        if is_es
+        else f"Maintenance: {days_within} of {EVALUATION_DAYS} days matched your {goal} kcal goal. "
         "Keeping the target steady."
     )
     if _health(metrics).connected:
-        reason += f" {_activity_sentence(metrics)}"
+        reason += f" {_activity_sentence(metrics, is_es=is_es)}"
         if _activity_is_low(metrics):
-            reason += " A daily walk would give the trainer more to work with."
+            reason += (
+                " Una caminata diaria le daría más margen al entrenador."
+                if is_es
+                else " A daily walk would give the trainer more to work with."
+            )
     return {
         "has_change": False,
         "proposed_goal": goal,

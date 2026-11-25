@@ -23,6 +23,7 @@ import MealRecommendationsModal from '../components/nutrition/MealRecommendation
 import { sameDay } from '../utils/monthGrid';
 import type { FavoriteMeal, FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
 import HydrationSummary from '../components/home/HydrationSummary';
+import { locale, useT, valueLabel } from '../i18n';
 import '../styles/log-meals.css';
 import '../styles/meals.css';
 
@@ -62,6 +63,7 @@ function toInputDate(date: Date): string {
 }
 
 export default function Nutrition() {
+  const t = useT();
   const navigate = usePageNavigate();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   // Start from the copy saved earlier in this visit, so the card and list show at once.
@@ -119,9 +121,9 @@ export default function Nutrition() {
   useEffect(() => {
     fetchFavoriteMeals()
       .then(setFavorites)
-      .catch((error: unknown) => setFavoritesError(error instanceof Error ? error.message : "We couldn't load your favorite meals."))
+      .catch((error: unknown) => setFavoritesError(error instanceof Error ? error.message : t('meals.errorFavorites')))
       .finally(() => setIsLoadingFavorites(false));
-  }, []);
+  }, [t]);
 
   const favoritesByKey = new Map(favorites.map((favorite) => [favoriteKey(favorite.meal_type, favorite.name), favorite]));
 
@@ -159,7 +161,7 @@ export default function Nutrition() {
       setFavorites((current) => (existing
         ? [existing, ...current.filter((favorite) => favorite.id !== existing.id)]
         : current.filter((favorite) => favorite.id !== pendingId)));
-      setFavoriteNotice(error instanceof Error ? error.message : "We couldn't update your favorites.");
+      setFavoriteNotice(error instanceof Error ? error.message : t('meals.errorFavoriteUpdate'));
     } finally {
       setHeartBusyId(null);
     }
@@ -167,7 +169,7 @@ export default function Nutrition() {
 
   const logFavorite = async (favorite: FavoriteMeal, consumedAt: Date | null) => {
     const user = getCurrentUser();
-    if (!user?.id) throw new Error('Sign in again to log this meal.');
+    if (!user?.id) throw new Error(t('meals.errorSignInLog'));
     await addMealLog({
       user_id: user.id,
       name: favorite.name,
@@ -256,7 +258,7 @@ export default function Nutrition() {
           if (isCurrent) setFoodSuggestions(items);
         })
         .catch((error: unknown) => {
-          if (isCurrent) setEditError(error instanceof Error ? error.message : 'Food search is unavailable.');
+          if (isCurrent) setEditError(error instanceof Error ? error.message : t('meals.errorSearch'));
         })
         .finally(() => {
           if (isCurrent) setIsSearchingFoods(false);
@@ -267,7 +269,7 @@ export default function Nutrition() {
       isCurrent = false;
       window.clearTimeout(timer);
     };
-  }, [editingMeal, editFoodName, isFoodSearchOpen]);
+  }, [editingMeal, editFoodName, isFoodSearchOpen, t]);
 
   const consumedKcal = meals.reduce((total, meal) => total + meal.item_calories, 0);
   const today = new Date();
@@ -286,10 +288,10 @@ export default function Nutrition() {
     yesterday.setDate(yesterday.getDate() - 1);
 
     const options: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long', day: 'numeric' };
-    const dateString = date.toLocaleDateString('en-US', options);
+    const dateString = date.toLocaleDateString(locale(), options);
 
-    if (date.toDateString() === today.toDateString()) return `Today, ${dateString}`;
-    if (date.toDateString() === yesterday.toDateString()) return `Yesterday, ${dateString}`;
+    if (date.toDateString() === today.toDateString()) return t('meals.todayDate', { date: dateString });
+    if (date.toDateString() === yesterday.toDateString()) return t('meals.yesterdayDate', { date: dateString });
     return dateString;
   };
 
@@ -380,7 +382,7 @@ export default function Nutrition() {
     if (nextQuantity > MAX_REASONABLE_QUANTITY_G && nextQuantity !== previousQuantity) {
       setHighQuantityWarning({
         target: 'new',
-        name: editFoodName.trim() || 'This ingredient',
+        name: editFoodName.trim() || t('meals.thisIngredient'),
         previous: newQuantityStartRef.current,
         next: nextQuantity,
       });
@@ -423,7 +425,7 @@ export default function Nutrition() {
     if (!editingMeal || highQuantityWarning || editIngredients.length === 0 || editIngredients.some((ingredient) => ingredient.quantity_g <= 0)) return;
     const user = getCurrentUser();
     if (!user?.id) {
-      setEditError('Sign in again to update this meal.');
+      setEditError(t('meals.errorSignInUpdate'));
       return;
     }
     setIsSavingEdit(true);
@@ -444,7 +446,7 @@ export default function Nutrition() {
       setMeals((current) => current.map((meal) => meal.id === updatedMeal.id ? updatedMeal : meal));
       setEditingMeal(null);
     } catch (error) {
-      setEditError(error instanceof Error ? error.message : "We couldn't update this meal.");
+      setEditError(error instanceof Error ? error.message : t('meals.errorUpdate'));
     } finally {
       setIsSavingEdit(false);
     }
@@ -454,7 +456,7 @@ export default function Nutrition() {
     if (!deletingMeal) return;
     const user = getCurrentUser();
     if (!user?.id) {
-      setDeleteError('Sign in again to remove this meal.');
+      setDeleteError(t('meals.errorSignInRemove'));
       return;
     }
     setIsDeletingMeal(true);
@@ -464,7 +466,7 @@ export default function Nutrition() {
       setMeals((current) => current.filter((meal) => meal.id !== deletingMeal.id));
       setDeletingMeal(null);
     } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : "We couldn't remove this meal.");
+      setDeleteError(error instanceof Error ? error.message : t('meals.errorRemove'));
     } finally {
       setIsDeletingMeal(false);
     }
@@ -490,18 +492,18 @@ export default function Nutrition() {
       }}
     >
       <header className="hifi-page-header">
-        <h1 className="hifi-page-title">Meals</h1>
-        <button className="hifi-pill" type="button" onClick={() => navigate('/log-meals')}>Add meal</button>
+        <h1 className="hifi-page-title">{t('meals.title')}</h1>
+        <button className="hifi-pill" type="button" onClick={() => navigate('/log-meals')}>{t('meals.addMeal')}</button>
       </header>
 
-      <nav className="meal-day-nav" aria-label="Day">
-        <button className="subpage-button" type="button" onClick={() => moveDay(-1)} disabled={!canGoBack} aria-label="Previous day">
+      <nav className="meal-day-nav" aria-label={t('meals.day')}>
+        <button className="subpage-button" type="button" onClick={() => moveDay(-1)} disabled={!canGoBack} aria-label={t('meals.prevDay')}>
           <ChevronLeft size={20} aria-hidden="true" />
         </button>
-        <button className="meal-day-button" type="button" onClick={() => setIsDatePickerOpen(true)} aria-haspopup="dialog" aria-label={`${formatDateLabel(selectedDate)}. Choose a day`}>
+        <button className="meal-day-button" type="button" onClick={() => setIsDatePickerOpen(true)} aria-haspopup="dialog" aria-label={t('meals.chooseDay', { date: formatDateLabel(selectedDate) })}>
           {formatDateLabel(selectedDate)}
         </button>
-        <button className="subpage-button" type="button" onClick={() => moveDay(1)} disabled={!canGoForward} aria-label="Next day">
+        <button className="subpage-button" type="button" onClick={() => moveDay(1)} disabled={!canGoForward} aria-label={t('meals.nextDay')}>
           <ChevronRight size={20} aria-hidden="true" />
         </button>
       </nav>
@@ -521,43 +523,43 @@ export default function Nutrition() {
 
       {/* Always drawn, so it never pops in late: it shows its shape while the day loads. */}
       <IntakeCard
-        label="Daily intake"
+        label={t('meals.dailyIntake')}
         consumed={consumedKcal}
         goal={targets?.daily_goal ?? 0}
         pending={!targets}
         macros={[
-          { label: 'Protein', current: meals.reduce((total, meal) => total + (meal.proteins_g ?? 0), 0), target: targets?.target_proteins_g ?? 0 },
-          { label: 'Carbs', current: meals.reduce((total, meal) => total + (meal.carbs_g ?? 0), 0), target: targets?.target_carbs_g ?? 0 },
-          { label: 'Fat', current: meals.reduce((total, meal) => total + (meal.fats_g ?? 0), 0), target: targets?.target_fats_g ?? 0 },
+          { label: t('macro.protein'), current: meals.reduce((total, meal) => total + (meal.proteins_g ?? 0), 0), target: targets?.target_proteins_g ?? 0 },
+          { label: t('macro.carbs'), current: meals.reduce((total, meal) => total + (meal.carbs_g ?? 0), 0), target: targets?.target_carbs_g ?? 0 },
+          { label: t('macro.fat'), current: meals.reduce((total, meal) => total + (meal.fats_g ?? 0), 0), target: targets?.target_fats_g ?? 0 },
         ]}
         footer={<p className="hifi-caption meals-remaining">
-          {targets ? `${Math.abs(Math.round(targets.daily_goal - consumedKcal)).toLocaleString('en-US')} ${consumedKcal > targets.daily_goal ? 'over' : 'remaining'}` : ' '}
+          {targets ? t(consumedKcal > targets.daily_goal ? 'meals.over' : 'meals.remaining', { value: Math.abs(Math.round(targets.daily_goal - consumedKcal)).toLocaleString(locale()) }) : ' '}
         </p>}
       />
 
       <div className="action-row">
         <button className="action-button" type="button" onClick={() => { setFavoriteNotice(null); setIsFavoritesOpen(true); }}>
-          <Heart size={17} aria-hidden="true" /> Favorites{favorites.length > 0 && ` · ${favorites.length}`}
+          <Heart size={17} aria-hidden="true" /> {t('meals.favorites')}{favorites.length > 0 && ` · ${favorites.length}`}
         </button>
         <button
           className="action-button"
           type="button"
           // Non-Premium users see the paywall; the server checks Premium again on every request.
           onClick={() => (isPremiumActive() ? setIsSuggestionsOpen(true) : navigate('/premium'))}
-          aria-label={isPremiumActive() ? 'Suggested meals' : 'Suggested meals, available with Pro'}
+          aria-label={isPremiumActive() ? t('meals.suggested') : t('meals.suggestedPro')}
         >
-          <ChefHat size={17} aria-hidden="true" /> Suggestions {!isPremiumActive() && <span className="pro-badge">Pro</span>}
+          <ChefHat size={17} aria-hidden="true" /> {t('meals.suggestions')} {!isPremiumActive() && <span className="pro-badge">Pro</span>}
         </button>
       </div>
       {favoriteNotice && <p className="form-error" role="alert">{favoriteNotice}</p>}
 
       <section className="meals-panel" aria-labelledby="meals-list-title">
-        <h2 className="hifi-section-title" id="meals-list-title">{sameDay(selectedDate, today) ? "Today's meals" : 'Meals this day'}</h2>
+        <h2 className="hifi-section-title" id="meals-list-title">{sameDay(selectedDate, today) ? t('meals.todaysMeals') : t('meals.thisDay')}</h2>
         <div className="meals-panel-list">
           {isLoading ? (
-            <p className="visually-hidden" role="status">Loading your meals...</p>
+            <p className="visually-hidden" role="status">{t('meals.loading')}</p>
           ) : meals.length === 0 ? (
-            <p className="hifi-muted">No meals recorded for this day.</p>
+            <p className="hifi-muted">{t('meals.none')}</p>
           ) : (
             meals.map((meal) => {
               const isFavorite = favoritesByKey.has(favoriteKey(meal.meal_type, meal.meal_name));
@@ -569,9 +571,9 @@ export default function Nutrition() {
                       type="button"
                       onClick={() => setOpenMealId(openMealId === meal.id ? null : meal.id)}
                       aria-expanded={openMealId === meal.id}
-                      aria-label={`${meal.meal_type}: ${meal.meal_name}, ${meal.item_calories} kcal. ${openMealId === meal.id ? 'Hide' : 'Show'} contents`}
+                      aria-label={t(openMealId === meal.id ? 'meals.cardAriaHide' : 'meals.cardAriaShow', { type: valueLabel(t, 'mealType', meal.meal_type), name: meal.meal_name, kcal: meal.item_calories })}
                     >
-                      <span className="meals-card-type">{meal.meal_type}</span>
+                      <span className="meals-card-type">{valueLabel(t, 'mealType', meal.meal_type)}</span>
                       <span className="meals-card-name">{meal.meal_name}</span>
                     </button>
                     <span className="meals-card-side">
@@ -583,7 +585,7 @@ export default function Nutrition() {
                           onClick={() => toggleFavorite(meal)}
                           disabled={heartBusyId === meal.id}
                           aria-pressed={isFavorite}
-                          aria-label={isFavorite ? `Remove ${meal.meal_name} from favorites` : `Save ${meal.meal_name} as a favorite`}
+                          aria-label={isFavorite ? t('meals.unfavorite', { name: meal.meal_name }) : t('meals.favorite', { name: meal.meal_name })}
                         >
                           <Heart size={18} aria-hidden="true" fill={isFavorite ? 'currentColor' : 'none'} />
                         </button>
@@ -595,7 +597,7 @@ export default function Nutrition() {
                   {openMealId === meal.id && (
                     <div className="meals-card-details">
                       {meal.ingredients?.length ? (
-                        <ul className="meals-card-foods" aria-label={`Contents of ${meal.meal_name}`}>
+                        <ul className="meals-card-foods" aria-label={t('meals.contents', { name: meal.meal_name })}>
                           {meal.ingredients.map((ingredient, index) => (
                             <li key={`${ingredient.name}-${index}`}>
                               <span>{ingredient.name}</span>
@@ -604,9 +606,9 @@ export default function Nutrition() {
                           ))}
                         </ul>
                       ) : (
-                        <p className="meals-card-foods-empty">{meal.weight_g ? `${Math.round(Number(meal.weight_g))}g · ` : ''}No ingredient breakdown for this meal.</p>
+                        <p className="meals-card-foods-empty">{meal.weight_g ? `${Math.round(Number(meal.weight_g))}g · ` : ''}{t('meals.noBreakdown')}</p>
                       )}
-                      <button className="hifi-link-button meals-card-edit" type="button" onClick={() => openEditModal(meal)}>Edit</button>
+                      <button className="hifi-link-button meals-card-edit" type="button" onClick={() => openEditModal(meal)}>{t('common.edit')}</button>
                     </div>
                   )}
                 </article>
@@ -623,26 +625,26 @@ export default function Nutrition() {
           <div className="modal-dialog" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="edit-meal-title">
             <div className="modal-header">
               <div>
-                <h2 id="edit-meal-title" className="modal-title">{editingFavoriteId ? 'Edit favorite' : 'Edit meal'}</h2>
+                <h2 id="edit-meal-title" className="modal-title">{editingFavoriteId ? t('meals.editFavorite') : t('meals.editMeal')}</h2>
                 <p className="card-subtitle">
-                  {editingFavoriteId ? 'Changes apply next time you add it. Meals already logged stay the same.' : 'Update ingredients and portion sizes.'}
+                  {editingFavoriteId ? t('meals.editFavoriteHint') : t('meals.editMealHint')}
                 </p>
               </div>
-              <button type="button" className="btn-modal-close" onClick={closeEditor} aria-label="Close editor" disabled={isSavingEdit}>
+              <button type="button" className="btn-modal-close" onClick={closeEditor} aria-label={t('meals.closeEditor')} disabled={isSavingEdit}>
                 <X size={20} />
               </button>
             </div>
 
             <form className="modal-form" onSubmit={confirmEdit}>
               <div className="form-group">
-                <label className="form-label" htmlFor="edit-meal-type">Meal type</label>
+                <label className="form-label" htmlFor="edit-meal-type">{t('meals.mealType')}</label>
                 <select id="edit-meal-type" className="form-input" value={editMealType} onChange={(event) => setEditMealType(event.target.value)}>
-                  {['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Meal'].map((type) => <option key={type} value={type}>{type}</option>)}
+                  {['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Meal'].map((type) => <option key={type} value={type}>{valueLabel(t, 'mealType', type)}</option>)}
                 </select>
               </div>
 
               <div className="form-group" style={{ position: 'relative' }}>
-                <label className="form-label" htmlFor="edit-food-name">Add an ingredient</label>
+                <label className="form-label" htmlFor="edit-food-name">{t('meals.addIngredientLabel')}</label>
                 <div className="input-with-icon">
                   <input
                     id="edit-food-name"
@@ -656,11 +658,11 @@ export default function Nutrition() {
                       setEditDensity(DEFAULT_FOOD_DENSITY);
                       setEditError(null);
                     }}
-                    placeholder="Search foods..."
+                    placeholder={t('meals.searchFoods')}
                     autoComplete="off"
                   />
                   {isSearchingFoods
-                    ? <Loader2 size={16} className="animate-spin input-spinner" aria-label="Searching" />
+                    ? <Loader2 size={16} className="animate-spin input-spinner" aria-label={t('meals.searching')} />
                     : <Search size={16} className="input-spinner" aria-hidden="true" />}
                 </div>
                 {isFoodSearchOpen && foodSuggestions.length > 0 && (
@@ -679,7 +681,7 @@ export default function Nutrition() {
 
               <div className="inputs-row">
                 <div className="form-group">
-                  <label className="form-label" htmlFor="edit-food-quantity">Quantity</label>
+                  <label className="form-label" htmlFor="edit-food-quantity">{t('meals.quantity')}</label>
                   <div className="input-with-suffix">
                     <input
                       id="edit-food-quantity"
@@ -690,21 +692,21 @@ export default function Nutrition() {
                       onFocus={rememberNewQuantityStart}
                       onChange={(event) => updateNewQuantity(event.target.value)}
                     />
-                    <span className="input-suffix"><Scale size={16} aria-hidden="true" /> grams</span>
+                    <span className="input-suffix"><Scale size={16} aria-hidden="true" /> {t('meals.grams')}</span>
                   </div>
                 </div>
                 <button className="btn-add-food" type="button" onClick={addEditIngredient} disabled={!editFoodName.trim() || Number(editQuantity) <= 0}>
-                  <Plus size={16} aria-hidden="true" /> Add ingredient
+                  <Plus size={16} aria-hidden="true" /> {t('meals.addIngredient')}
                 </button>
               </div>
 
-              <section className="plate-foods" aria-label="Ingredients in this meal">
+              <section className="plate-foods" aria-label={t('meals.ingredientsAria')}>
                 <div className="calc-header-row">
-                  <span className="calc-label">Ingredients</span>
+                  <span className="calc-label">{t('meals.ingredients')}</span>
                   <span className="plate-food-count">{editIngredients.length}</span>
                 </div>
                 {editIngredients.length === 0 ? (
-                  <p className="calc-disclaimer">Add at least one ingredient to save this meal.</p>
+                  <p className="calc-disclaimer">{t('meals.needIngredient')}</p>
                 ) : (
                   <ul className="plate-food-list">
                     {editIngredients.map((ingredient, index) => (
@@ -712,7 +714,7 @@ export default function Nutrition() {
                         <span>{ingredient.name}</span>
                         <label className="edit-ingredient-quantity">
                           <input
-                            aria-label={`${ingredient.name} quantity in grams`}
+                            aria-label={t('meals.ingredientQuantity', { name: ingredient.name })}
                             type="number"
                             min="1"
                             value={ingredient.quantity_g || ''}
@@ -721,7 +723,7 @@ export default function Nutrition() {
                           />
                           <small>g</small>
                         </label>
-                        <button type="button" onClick={() => setEditIngredients((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remove ${ingredient.name}`}>
+                        <button type="button" onClick={() => setEditIngredients((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={t('hydration.removeAria', { label: ingredient.name })}>
                           <Trash2 size={16} aria-hidden="true" />
                         </button>
                       </li>
@@ -732,22 +734,22 @@ export default function Nutrition() {
 
               <div className="calculation-preview-card">
                 <div className="calc-header-row">
-                  <span className="calc-label">Meal total · {Math.round(editNutrition.quantity)}g</span>
+                  <span className="calc-label">{t('meals.total', { grams: Math.round(editNutrition.quantity) })}</span>
                   <span className="calc-cals-badge">{Math.round(editNutrition.calories)} kcal</span>
                 </div>
                 <div className="calc-macros-grid">
-                  <div className="calc-macro-item"><span className="macro-name">Protein</span><span className="macro-num">{editNutrition.protein.toFixed(1)}g</span></div>
-                  <div className="calc-macro-item"><span className="macro-name">Carbs</span><span className="macro-num">{editNutrition.carbs.toFixed(1)}g</span></div>
-                  <div className="calc-macro-item"><span className="macro-name">Fat</span><span className="macro-num">{editNutrition.fat.toFixed(1)}g</span></div>
+                  <div className="calc-macro-item"><span className="macro-name">{t('macro.protein')}</span><span className="macro-num">{editNutrition.protein.toFixed(1)}g</span></div>
+                  <div className="calc-macro-item"><span className="macro-name">{t('macro.carbs')}</span><span className="macro-num">{editNutrition.carbs.toFixed(1)}g</span></div>
+                  <div className="calc-macro-item"><span className="macro-name">{t('macro.fat')}</span><span className="macro-num">{editNutrition.fat.toFixed(1)}g</span></div>
                 </div>
               </div>
 
               {editError && <div className="inline-alert" role="alert">{editError}</div>}
               <button className="primary-button" type="submit" disabled={isSavingEdit || editIngredients.length === 0 || editIngredients.some((ingredient) => ingredient.quantity_g <= 0)}>
-                {isSavingEdit ? <><Loader2 size={18} className="animate-spin" aria-hidden="true" /> Saving...</> : 'Save changes'}
+                {isSavingEdit ? <><Loader2 size={18} className="animate-spin" aria-hidden="true" /> {t('common.saving')}</> : t('common.saveChanges')}
               </button>
               <button className="text-action meal-delete-link" type="button" disabled={isSavingEdit} onClick={() => { setDeletingMeal(editingMeal); setEditingMeal(null); }}>
-                <Trash2 size={16} aria-hidden="true" /> Delete meal
+                <Trash2 size={16} aria-hidden="true" /> {t('meals.deleteMeal')}
               </button>
             </form>
           </div>
@@ -793,18 +795,17 @@ export default function Nutrition() {
             <div className="quantity-warning-icon" aria-hidden="true">
               <AlertTriangle size={24} />
             </div>
-            <h3 id="quantity-warning-title">Is {highQuantityWarning.next.toLocaleString()}g correct?</h3>
+            <h3 id="quantity-warning-title">{t('meals.quantityQuestion', { grams: highQuantityWarning.next.toLocaleString(locale()) })}</h3>
             <p id="quantity-warning-description">
-              <strong>{highQuantityWarning.name}</strong> at {highQuantityWarning.next.toLocaleString()}g is over{' '}
-              {MAX_REASONABLE_QUANTITY_G.toLocaleString()}g. That may be too much for one meal. Please confirm
-              the amount is right.
+              <strong>{highQuantityWarning.name}</strong>{' '}
+              {t('meals.quantityWarning', { grams: highQuantityWarning.next.toLocaleString(locale()), max: MAX_REASONABLE_QUANTITY_G.toLocaleString(locale()) })}
             </p>
             <div className="quantity-warning-actions">
               <button type="button" className="quantity-warning-rollback" onClick={rollbackHighQuantity} autoFocus>
-                Rollback
+                {t('meals.rollback')}
               </button>
               <button type="button" className="quantity-warning-accept" onClick={acceptHighQuantity}>
-                Accept
+                {t('tip.accept')}
               </button>
             </div>
           </div>
@@ -814,13 +815,13 @@ export default function Nutrition() {
       {deletingMeal && (
         <div className="modal-backdrop">
           <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="delete-meal-title">
-            <h2 id="delete-meal-title">Delete {deletingMeal.meal_name}?</h2>
-            <p>It will be removed from this day. This cannot be undone.</p>
+            <h2 id="delete-meal-title">{t('workouts.deleteQuestion', { name: deletingMeal.meal_name })}</h2>
+            <p>{t('meals.deleteBody')}</p>
             {deleteError && <p className="form-error" role="alert">{deleteError}</p>}
             <div className="modal-actions">
-              <button className="secondary-action" type="button" onClick={() => { setDeletingMeal(null); setDeleteError(null) }} disabled={isDeletingMeal}>Cancel</button>
+              <button className="secondary-action" type="button" onClick={() => { setDeletingMeal(null); setDeleteError(null) }} disabled={isDeletingMeal}>{t('common.cancel')}</button>
               <button className="danger-action" type="button" onClick={confirmDelete} disabled={isDeletingMeal}>
-                {isDeletingMeal ? 'Deleting...' : 'Delete meal'}
+                {isDeletingMeal ? t('workouts.deleting') : t('meals.deleteMeal')}
               </button>
             </div>
           </div>

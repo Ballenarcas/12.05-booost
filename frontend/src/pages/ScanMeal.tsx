@@ -23,6 +23,7 @@ import backIcon from '../assets/scan/back.svg'
 import importIcon from '../assets/scan/import.svg'
 import frameImage from '../assets/scan/frame.svg'
 import shutterImage from '../assets/scan/shutter.svg'
+import { locale, t as tr, useT } from '../i18n'
 import '../styles/scan-meal.css'
 
 type ScanPhase = 'idle' | 'analyzing' | 'results' | 'saving' | 'error'
@@ -73,13 +74,13 @@ async function prepareImage(file: File): Promise<Blob> {
   const context = canvas.getContext('2d')
   if (!context) {
     bitmap.close()
-    throw new Error('Could not read that photo.')
+    throw new Error(tr('scan.errorRead'))
   }
   context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
   bitmap.close()
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('Could not prepare that photo.'))),
+      (blob) => (blob ? resolve(blob) : reject(new Error(tr('scan.errorPrepare')))),
       'image/jpeg',
       0.85,
     )
@@ -87,7 +88,7 @@ async function prepareImage(file: File): Promise<Blob> {
 }
 
 function todayLabel(): string {
-  return new Date().toLocaleDateString('en-US', {
+  return new Date().toLocaleDateString(locale(), {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -95,6 +96,7 @@ function todayLabel(): string {
 }
 
 export default function ScanMeal() {
+  const t = useT()
   const navigate = useNavigate()
   const user = getCurrentUser()
   const cameraInputRef = useRef<HTMLInputElement>(null)
@@ -105,7 +107,7 @@ export default function ScanMeal() {
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [imageBlob, setImageBlob] = useState<Blob | null>(null)
   const [items, setItems] = useState<EditableItem[]>([])
-  const [mealName, setMealName] = useState('Scanned meal')
+  const [mealName, setMealName] = useState(() => tr('scan.defaultName'))
   const [notes, setNotes] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
@@ -177,10 +179,10 @@ export default function ScanMeal() {
       const suggestedName = result.items.slice(0, 2).map((item) => item.name).join(' + ')
       setItems(detected)
       setNotes(result.notes)
-      setMealName((suggestedName || 'Scanned meal').slice(0, 120))
+      setMealName((suggestedName || t('scan.defaultName')).slice(0, 120))
       setPhase('results')
     } catch (err) {
-      setError(describeError(err, "We couldn't analyze that photo. Please try again."))
+      setError(describeError(err, t('scan.errorAnalyze')))
       setPhase('error')
     }
   }
@@ -189,12 +191,12 @@ export default function ScanMeal() {
     if (!file) return
     setError(null)
     if (file.type && !file.type.startsWith('image/')) {
-      setError('Choose a photo file, not a document.')
+      setError(t('scan.errorNotPhoto'))
       setPhase('idle')
       return
     }
     if (file.size > 20 * 1024 * 1024) {
-      setError('That photo is too large. Choose one under 20 MB.')
+      setError(t('scan.errorTooLarge'))
       setPhase('idle')
       return
     }
@@ -202,13 +204,13 @@ export default function ScanMeal() {
     try {
       const blob = await prepareImage(file)
       if (blob.size > 8 * 1024 * 1024) {
-        throw new Error('That photo is still too large after resizing. Choose another one.')
+        throw new Error(t('scan.errorStillLarge'))
       }
       setImageBlob(blob)
       setPreview(blob)
       await analyze(blob)
     } catch (err) {
-      setError(describeError(err, "We couldn't read that photo. Try another one."))
+      setError(describeError(err, t('scan.errorReadOther')))
       setPhase('error')
     }
   }
@@ -265,7 +267,7 @@ export default function ScanMeal() {
     const key = itemKey()
     setItems((current) => [
       ...current,
-      { key, name: 'New item', grams: '100', calories: '0', protein: '0', carbs: '0', fat: '0' },
+      { key, name: t('scan.newItem'), grams: '100', calories: '0', protein: '0', carbs: '0', fat: '0' },
     ])
     setExpandedKey(key)
   }
@@ -276,11 +278,11 @@ export default function ScanMeal() {
 
   const handleConfirm = async () => {
     if (!user?.id) {
-      setError('Sign in again before logging a meal.')
+      setError(t('scan.errorSignIn'))
       return
     }
     if (!canSave) {
-      setError('Add at least one item with a name and a weight.')
+      setError(t('scan.errorNoItems'))
       return
     }
     setPhase('saving')
@@ -303,12 +305,12 @@ export default function ScanMeal() {
       })
       await addMealLog({
         user_id: user.id,
-        name: mealName.trim().slice(0, 120) || 'Scanned meal',
+        name: mealName.trim().slice(0, 120) || t('scan.defaultName'),
         ingredients,
       })
       navigate('/nutrition', { replace: true })
     } catch (err) {
-      setError(describeError(err, "We couldn't save this meal. Please try again."))
+      setError(describeError(err, t('add.errorSave')))
       setPhase('results')
     }
   }
@@ -318,15 +320,15 @@ export default function ScanMeal() {
   return (
     <div className="screen hifi-theme scan-screen">
       <header className="scan-header">
-        <button className="scan-back" type="button" onClick={() => navigate(-1)} aria-label="Go back">
+        <button className="scan-back" type="button" onClick={() => navigate(-1)} aria-label={t('common.back')}>
           <img src={backIcon} alt="" width={36} height={37} />
         </button>
         <div className="scan-title-row">
-          <h1>{phase === 'results' || phase === 'saving' ? 'Scan results' : 'Scan'}</h1>
+          <h1>{phase === 'results' || phase === 'saving' ? t('scan.results') : t('add.scan')}</h1>
           {phase === 'idle' ? (
             <button className="scan-import" type="button" onClick={() => galleryInputRef.current?.click()}>
               <img src={importIcon} alt="" width={43.2143} height={43.2143} />
-              <span>Import</span>
+              <span>{t('scan.import')}</span>
             </button>
           ) : (
             <span className="scan-date">{todayLabel()}</span>
@@ -340,25 +342,25 @@ export default function ScanMeal() {
             <video ref={videoRef} className="scan-video" autoPlay playsInline muted aria-hidden="true" />
             <img className="scan-frame" src={frameImage} alt="" width={286} height={445} />
             <div className="scan-viewfinder-copy">
-              <h2 id="scan-capture-title">Take a photo</h2>
-              <p>{camera === 'unavailable' ? 'Tap the button to open your camera' : 'Capture an image to scan food items'}</p>
+              <h2 id="scan-capture-title">{t('scan.takePhoto')}</h2>
+              <p>{camera === 'unavailable' ? t('scan.tapToOpen') : t('scan.capture')}</p>
             </div>
           </div>
-          <button className="scan-shutter" type="button" onClick={takePhoto} aria-label="Take photo">
+          <button className="scan-shutter" type="button" onClick={takePhoto} aria-label={t('scan.takePhoto')}>
             <img src={shutterImage} alt="" width={79} height={79} />
           </button>
-          <p className="scan-privacy">Your photo is sent to the AI provider only to estimate this meal.</p>
+          <p className="scan-privacy">{t('scan.privacy')}</p>
           {error && <p className="scan-error" role="alert">{error}</p>}
         </section>
       )}
 
       {phase === 'error' && !imageUrl && (
-        <section className="scan-capture" aria-label="Photo error">
+        <section className="scan-capture" aria-label={t('scan.photoError')}>
           <div className="scan-error-card" role="alert">
             <p>{error}</p>
             <div className="scan-error-actions">
               <button type="button" className="scan-secondary" onClick={handleRetake}>
-                Choose another photo
+                {t('scan.chooseAnother')}
               </button>
             </div>
           </div>
@@ -366,19 +368,19 @@ export default function ScanMeal() {
       )}
 
       {showPreview && (
-        <section className="scan-preview" aria-label="Meal photo preview">
+        <section className="scan-preview" aria-label={t('scan.preview')}>
           <div className="scan-photo" data-scanning={phase === 'analyzing'}>
-            <img src={imageUrl ?? ''} alt="Meal to analyze" className="scan-image" />
+            <img src={imageUrl ?? ''} alt={t('scan.photoAlt')} className="scan-image" />
           </div>
           <button type="button" className="scan-retake" onClick={handleRetake}>
-            <RotateCcw size={16} aria-hidden="true" /> Retake
+            <RotateCcw size={16} aria-hidden="true" /> {t('scan.retake')}
           </button>
           {phase === 'analyzing' && (
             <div className="scan-loading" role="status">
               <Loader2 size={22} className="animate-spin" aria-hidden="true" />
               <div>
-                <strong>Analyzing your meal</strong>
-                <span>This usually takes a few seconds.</span>
+                <strong>{t('scan.analyzing')}</strong>
+                <span>{t('scan.fewSeconds')}</span>
               </div>
             </div>
           )}
@@ -388,11 +390,11 @@ export default function ScanMeal() {
               <div className="scan-error-actions">
                 {imageBlob && (
                   <button type="button" className="scan-secondary" onClick={handleTryAgain}>
-                    <Sparkles size={16} aria-hidden="true" /> Try again
+                    <Sparkles size={16} aria-hidden="true" /> {t('common.retry')}
                   </button>
                 )}
                 <button type="button" className="scan-secondary" onClick={handleRetake}>
-                  Choose another photo
+                  {t('scan.chooseAnother')}
                 </button>
               </div>
             </div>
@@ -403,7 +405,7 @@ export default function ScanMeal() {
       {(phase === 'results' || phase === 'saving') && (
         <>
           <section className="scan-name-card" aria-labelledby="scan-name-label">
-            <label id="scan-name-label" htmlFor="scan-meal-name">Meal name</label>
+            <label id="scan-name-label" htmlFor="scan-meal-name">{t('scan.mealName')}</label>
             <input
               id="scan-meal-name"
               value={mealName}
@@ -416,8 +418,8 @@ export default function ScanMeal() {
 
           <section className="scan-detected" aria-labelledby="scan-detected-title">
             <div className="scan-section-heading">
-              <h2 id="scan-detected-title">Detected items</h2>
-              <span>Tap to edit</span>
+              <h2 id="scan-detected-title">{t('scan.detected')}</h2>
+              <span>{t('scan.tapToEdit')}</span>
             </div>
             <div className="scan-items">
               {items.map((item) => {
@@ -429,21 +431,21 @@ export default function ScanMeal() {
                         className="scan-item-name"
                         value={item.name}
                         maxLength={120}
-                        aria-label={`Name for ${item.name || 'item'}`}
+                        aria-label={t('scan.nameFor', { name: item.name || t('scan.item') })}
                         onChange={(event) => updateItem(item.key, 'name', event.target.value)}
                       />
                       <button
                         type="button"
                         className="scan-remove"
                         onClick={() => removeItem(item.key)}
-                        aria-label={`Remove ${item.name || 'item'}`}
+                        aria-label={t('hydration.removeAria', { label: item.name || t('scan.item') })}
                       >
                         <Trash2 size={17} aria-hidden="true" />
                       </button>
                     </div>
                     <div className="scan-item-controls">
                       <div className="scan-stepper">
-                        <button type="button" onClick={() => stepGrams(item, -10)} aria-label={`Decrease ${item.name} weight`}>
+                        <button type="button" onClick={() => stepGrams(item, -10)} aria-label={t('scan.decrease', { name: item.name })}>
                           <Minus size={15} aria-hidden="true" />
                         </button>
                         <input
@@ -451,11 +453,11 @@ export default function ScanMeal() {
                           min="1"
                           max="5000"
                           value={item.grams}
-                          aria-label={`${item.name} weight in grams`}
+                          aria-label={t('meals.ingredientQuantity', { name: item.name })}
                           onChange={(event) => updateItem(item.key, 'grams', event.target.value)}
                         />
                         <span>g</span>
-                        <button type="button" onClick={() => stepGrams(item, 10)} aria-label={`Increase ${item.name} weight`}>
+                        <button type="button" onClick={() => stepGrams(item, 10)} aria-label={t('scan.increase', { name: item.name })}>
                           <Plus size={15} aria-hidden="true" />
                         </button>
                       </div>
@@ -465,7 +467,7 @@ export default function ScanMeal() {
                           min="0"
                           max="10000"
                           value={item.calories}
-                          aria-label={`${item.name} calories`}
+                          aria-label={t('scan.calories', { name: item.name })}
                           onChange={(event) => updateItem(item.key, 'calories', event.target.value)}
                         />
                         <span>kcal</span>
@@ -478,13 +480,13 @@ export default function ScanMeal() {
                       aria-expanded={expanded}
                     >
                       {expanded ? <ChevronUp size={15} aria-hidden="true" /> : <ChevronDown size={15} aria-hidden="true" />}
-                      Macros
+                      {t('scan.macros')}
                     </button>
                     {expanded && (
                       <div className="scan-macros">
-                        <label>Protein (g)<input type="number" min="0" value={item.protein} onChange={(event) => updateItem(item.key, 'protein', event.target.value)} /></label>
-                        <label>Carbs (g)<input type="number" min="0" value={item.carbs} onChange={(event) => updateItem(item.key, 'carbs', event.target.value)} /></label>
-                        <label>Fat (g)<input type="number" min="0" value={item.fat} onChange={(event) => updateItem(item.key, 'fat', event.target.value)} /></label>
+                        <label>{t('scan.proteinG')}<input type="number" min="0" value={item.protein} onChange={(event) => updateItem(item.key, 'protein', event.target.value)} /></label>
+                        <label>{t('scan.carbsG')}<input type="number" min="0" value={item.carbs} onChange={(event) => updateItem(item.key, 'carbs', event.target.value)} /></label>
+                        <label>{t('scan.fatG')}<input type="number" min="0" value={item.fat} onChange={(event) => updateItem(item.key, 'fat', event.target.value)} /></label>
                       </div>
                     )}
                   </article>
@@ -492,12 +494,12 @@ export default function ScanMeal() {
               })}
             </div>
             <button type="button" className="scan-add" onClick={addItem}>
-              <Plus size={17} aria-hidden="true" /> Add item
+              <Plus size={17} aria-hidden="true" /> {t('scan.addItem')}
             </button>
           </section>
 
           <div className="scan-total">
-            <span><Flame size={17} aria-hidden="true" /> Total</span>
+            <span><Flame size={17} aria-hidden="true" /> {t('scan.total')}</span>
             <strong>{totalCalories} kcal</strong>
           </div>
 
@@ -510,8 +512,8 @@ export default function ScanMeal() {
             disabled={phase === 'saving' || !canSave}
           >
             {phase === 'saving'
-              ? <><Loader2 size={19} className="animate-spin" aria-hidden="true" /> Logging meal...</>
-              : <><Check size={20} aria-hidden="true" /> Confirm &amp; log meal</>}
+              ? <><Loader2 size={19} className="animate-spin" aria-hidden="true" /> {t('scan.logging')}</>
+              : <><Check size={20} aria-hidden="true" /> {t('scan.confirm')}</>}
           </button>
         </>
       )}

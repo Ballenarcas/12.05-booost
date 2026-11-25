@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
+import { locale, t } from '../../i18n'
 import { monthWeeks, sameDay } from '../../utils/monthGrid'
 import { parseDateKey, toLocalDateKey } from '../../utils/nutritionStatistics'
 
@@ -22,7 +23,9 @@ interface StatsCalendarProps {
   tabKey: string
 }
 
-const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+// Monday first; names come from the app language (1 Jan 2024 was a Monday).
+const weekdays = () => Array.from({ length: 7 }, (_, index) =>
+  new Date(2024, 0, 1 + index).toLocaleDateString(locale(), { weekday: 'short' }).replace('.', '').toLocaleUpperCase(locale()))
 
 function monthStart(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1)
@@ -85,13 +88,13 @@ export default function StatsCalendar({
   const headerMonth = new Date(viewYear, viewMonth, 1)
   const showYear = viewYear !== today.getFullYear()
   const monthLabel = headerMonth
-    .toLocaleDateString('en-US', showYear ? { month: 'long', year: 'numeric' } : { month: 'long' })
-    .toUpperCase()
+    .toLocaleDateString(locale(), showYear ? { month: 'long', year: 'numeric' } : { month: 'long' })
+    .toLocaleUpperCase(locale())
 
   const selectedDayData = selectedKey ? daysByKey.get(selectedKey) : undefined
   const selectedDateObj = selectedKey ? parseDateKey(selectedKey) : null
   const formattedSelectedDate = selectedDateObj
-    ? selectedDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    ? selectedDateObj.toLocaleDateString(locale(), { month: 'short', day: 'numeric' })
     : null
 
   return (
@@ -105,7 +108,7 @@ export default function StatsCalendar({
               className="stats-cal-nav-btn"
               onClick={() => moveMonth(-1)}
               disabled={!canGoBack}
-              aria-label="Previous month"
+              aria-label={t('stats.prevMonth')}
             >
               <ChevronLeft size={18} aria-hidden="true" />
             </button>
@@ -114,7 +117,7 @@ export default function StatsCalendar({
               className="stats-cal-nav-btn"
               onClick={() => moveMonth(1)}
               disabled={!canGoForward}
-              aria-label="Next month"
+              aria-label={t('stats.nextMonth')}
             >
               <ChevronRight size={18} aria-hidden="true" />
             </button>
@@ -122,9 +125,9 @@ export default function StatsCalendar({
         )}
       </div>
 
-      <div className="stats-cal-grid" role="grid" aria-label={`${monthLabel} activity calendar`}>
+      <div className="stats-cal-grid" role="grid" aria-label={t('stats.calendarAria', { month: monthLabel })}>
         <div className="stats-cal-row" role="row">
-          {WEEKDAYS.map((weekday) => (
+          {weekdays().map((weekday) => (
             <span className="stats-cal-weekday" role="columnheader" key={weekday}>
               {weekday}
             </span>
@@ -139,7 +142,7 @@ export default function StatsCalendar({
               const isSelected = selectedKey === key
               const dayInfo = daysByKey.get(key)
               const hasData = Boolean(dayInfo)
-              const accessibleLabel = day.toLocaleDateString('en-US', {
+              const accessibleLabel = day.toLocaleDateString(locale(), {
                 weekday: 'long',
                 month: 'long',
                 day: 'numeric',
@@ -168,7 +171,7 @@ export default function StatsCalendar({
       </div>
 
       {selectedDayData ? (
-        <ul className="stats-cal-pills" aria-label={`Activity on ${formattedSelectedDate ?? selectedDayData.date}`}>
+        <ul className="stats-cal-pills" aria-label={t('stats.activityOn', { date: formattedSelectedDate ?? selectedDayData.date })}>
           {selectedDayData.pills.map((pill, index) => (
             <li className="stats-cal-pill" key={`${pill.label}-${index}`}>
               <span className="stats-cal-pill-label">{pill.label}</span>
@@ -178,11 +181,11 @@ export default function StatsCalendar({
         </ul>
       ) : formattedSelectedDate ? (
         <p className="stats-cal-note">
-          No {emptyDayCategory} logged on {formattedSelectedDate}.
+          {t(emptyDayCategory === 'workouts' ? 'stats.noWorkoutsOn' : 'stats.noMealsOn', { date: formattedSelectedDate })}
         </p>
       ) : (
         <p className="stats-cal-note">
-          No {emptyDayCategory} logged in this range yet.
+          {t(emptyDayCategory === 'workouts' ? 'stats.noWorkoutsRange' : 'stats.noMealsRange')}
         </p>
       )}
     </div>

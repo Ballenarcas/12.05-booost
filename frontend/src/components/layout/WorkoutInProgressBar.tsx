@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { activeWorkoutStorageKey } from '../../services/api'
 import { usePageNavigate } from '../../utils/usePageNavigate'
+import { useT } from '../../i18n'
 
 type ActiveWorkoutSummary = { name: string; startedAt: string }
 
@@ -14,7 +15,7 @@ function readActiveWorkout(): ActiveWorkoutSummary | null {
     if (!stored) return null
     const session = JSON.parse(stored) as Partial<ActiveWorkoutSummary>
     if (typeof session.startedAt !== 'string') return null
-    return { name: session.name || 'Workout in progress', startedAt: session.startedAt }
+    return { name: session.name || '', startedAt: session.startedAt }
   } catch {
     return null
   }
@@ -31,6 +32,7 @@ function formatElapsed(startedAt: string, now: number): string {
 }
 
 export default function WorkoutInProgressBar() {
+  const t = useT()
   const navigate = usePageNavigate()
   const { pathname } = useLocation()
   const [workout, setWorkout] = useState(readActiveWorkout)
@@ -50,6 +52,7 @@ export default function WorkoutInProgressBar() {
 
   // The exercise guide is read mid-workout; the bar would cover its instructions.
   if (!workout || pathname.startsWith('/workouts/active') || pathname.endsWith('/guide')) return null
+  const workoutName = workout.name || t('progressBar.inProgress')
 
   function discardWorkout() {
     const key = activeWorkoutStorageKey()
@@ -61,19 +64,19 @@ export default function WorkoutInProgressBar() {
 
   return (
     <>
-      <section className="workout-progress-bar" aria-label="Workout in progress">
-        <button className="workout-progress-resume" type="button" onClick={() => navigate('/workouts/active')} aria-label={`Resume ${workout.name}`}>
+      <section className="workout-progress-bar" aria-label={t('progressBar.inProgress')}>
+        <button className="workout-progress-resume" type="button" onClick={() => navigate('/workouts/active')} aria-label={t('progressBar.resume', { name: workoutName })}>
           <ArrowUp size={25} strokeWidth={2.5} aria-hidden="true" />
         </button>
         <div className="workout-progress-copy">
           <div className="workout-progress-heading">
             <span className="workout-progress-indicator" aria-hidden="true" />
-            <strong>{workout.name}</strong>
+            <strong>{workoutName}</strong>
           </div>
-          <small>Workout in progress</small>
+          <small>{t('progressBar.inProgress')}</small>
         </div>
-        <time className="workout-progress-time" aria-label="Workout duration">{formatElapsed(workout.startedAt, now)}</time>
-        <button className="workout-progress-discard" type="button" onClick={() => setIsDiscardOpen(true)} aria-label="Discard workout">
+        <time className="workout-progress-time" aria-label={t('progressBar.duration')}>{formatElapsed(workout.startedAt, now)}</time>
+        <button className="workout-progress-discard" type="button" onClick={() => setIsDiscardOpen(true)} aria-label={t('progressBar.discard')}>
           <Trash2 size={18} aria-hidden="true" />
         </button>
       </section>
@@ -81,15 +84,15 @@ export default function WorkoutInProgressBar() {
       {isDiscardOpen && (
         <div className="modal-backdrop">
           <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="discard-workout-title">
-            <p className="eyebrow">Workout in progress</p>
-            <h2 id="discard-workout-title">Discard this workout?</h2>
-            <p>{workout.name} and its sets will be removed. This cannot be undone.</p>
+            <p className="eyebrow">{t('progressBar.inProgress')}</p>
+            <h2 id="discard-workout-title">{t('progressBar.discardQuestion')}</h2>
+            <p>{t('progressBar.discardBody', { name: workoutName })}</p>
             <div className="modal-actions">
               <button className="secondary-action" type="button" onClick={() => setIsDiscardOpen(false)}>
-                Keep workout
+                {t('progressBar.keep')}
               </button>
               <button className="danger-action" type="button" onClick={discardWorkout}>
-                Discard workout
+                {t('progressBar.discard')}
               </button>
             </div>
           </div>

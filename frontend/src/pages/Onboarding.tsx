@@ -5,6 +5,7 @@ import { submitUserOnboarding } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import { MAX_BODY_WEIGHT_KG, MIN_BODY_WEIGHT_KG } from '../utils/bodyLimits'
 import type { FitnessGoal, UserOnboardingFormData } from '../types'
+import { useT } from '../i18n'
 import '../styles/onboarding.css'
 
 const initialFormData: UserOnboardingFormData = {
@@ -22,6 +23,7 @@ const initialFormData: UserOnboardingFormData = {
 }
 
 function Onboarding() {
+  const t = useT()
   const navigate = usePageNavigate()
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [formData, setFormData] = useState<UserOnboardingFormData>(initialFormData)
@@ -48,39 +50,39 @@ function Onboarding() {
 
     const trimmedFirstName = formData.firstName.trim()
     if (!trimmedFirstName) {
-      newErrors.firstName = 'First name is required'
+      newErrors.firstName = t('signup.errorFirstName')
     } else if (trimmedFirstName.length > 15) {
-      newErrors.firstName = 'First name cannot exceed 15 characters'
+      newErrors.firstName = t('signup.errorFirstNameLong')
     }
 
     const trimmedLastName = formData.lastName.trim()
     if (!trimmedLastName) {
-      newErrors.lastName = 'Last name is required'
+      newErrors.lastName = t('signup.errorLastName')
     } else if (trimmedLastName.length > 25) {
-      newErrors.lastName = 'Last name cannot exceed 25 characters'
+      newErrors.lastName = t('signup.errorLastNameLong')
     }
 
     const trimmedEmail = formData.email.trim()
     if (!trimmedEmail) {
-      newErrors.email = 'Email is required'
+      newErrors.email = t('signup.errorEmail')
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      newErrors.email = 'Please enter a valid email address'
+      newErrors.email = t('signup.errorEmailInvalid')
     }
 
     if (!formData.password) {
-      newErrors.password = 'Password is required'
+      newErrors.password = t('signup.errorPassword')
     } else if (formData.password.length < 12) {
-      newErrors.password = 'Password must be at least 12 characters'
+      newErrors.password = t('signup.errorPasswordShort')
     }
 
     if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Confirm your password'
+      newErrors.confirmPassword = t('signup.errorConfirm')
     } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match'
+      newErrors.confirmPassword = t('signup.errorMismatch')
     }
 
     if (!formData.agreedToTerms) {
-      newErrors.agreedToTerms = 'You must agree to the Terms and Conditions to continue'
+      newErrors.agreedToTerms = t('signup.errorTerms')
     }
 
     setErrors(newErrors)
@@ -92,13 +94,13 @@ function Onboarding() {
     const newErrors: Record<string, string> = {}
 
     if (!formData.birthDate) {
-      newErrors.birthDate = 'Birth date is required'
+      newErrors.birthDate = t('signup.errorBirthDate')
     } else {
       const [year, month, day] = formData.birthDate.split('-').map(Number)
       const birth = new Date(year, month - 1, day)
       const today = new Date()
       if (isNaN(birth.getTime()) || birth > today) {
-        newErrors.birthDate = 'Please enter a valid birth date'
+        newErrors.birthDate = t('signup.errorBirthDateInvalid')
       } else {
         let calculatedAge = today.getFullYear() - birth.getFullYear()
         const monthDiff = today.getMonth() - birth.getMonth()
@@ -106,41 +108,41 @@ function Onboarding() {
           calculatedAge--
         }
         if (isNaN(calculatedAge) || calculatedAge < 12 || calculatedAge > 120) {
-          newErrors.birthDate = 'Age must be between 12 and 120 years'
+          newErrors.birthDate = t('signup.errorAge')
         }
       }
     }
 
     if (!formData.gender) {
-      newErrors.gender = 'Gender is required'
+      newErrors.gender = t('signup.errorGender')
     }
 
     const trimmedWeight = formData.weight.trim()
     if (!trimmedWeight) {
-      newErrors.weight = 'Weight is required'
+      newErrors.weight = t('signup.errorWeight')
     } else {
       const parsedWeight = parseFloat(trimmedWeight)
       if (isNaN(parsedWeight) || !/^\d+(\.\d+)?$/.test(trimmedWeight)) {
-        newErrors.weight = 'Weight must be a valid number'
+        newErrors.weight = t('signup.errorWeightNumber')
       } else if (parsedWeight < MIN_BODY_WEIGHT_KG || parsedWeight > MAX_BODY_WEIGHT_KG) {
-        newErrors.weight = `Weight must be between ${MIN_BODY_WEIGHT_KG} and ${MAX_BODY_WEIGHT_KG} kg`
+        newErrors.weight = t('profile.errorWeight', { min: MIN_BODY_WEIGHT_KG, max: MAX_BODY_WEIGHT_KG })
       }
     }
 
     const trimmedHeight = formData.height.trim()
     if (!trimmedHeight) {
-      newErrors.height = 'Height is required'
+      newErrors.height = t('signup.errorHeight')
     } else {
       const parsedHeight = parseInt(trimmedHeight, 10)
       if (isNaN(parsedHeight) || !/^\d+$/.test(trimmedHeight)) {
-        newErrors.height = 'Height must be a valid whole number'
+        newErrors.height = t('signup.errorHeightNumber')
       } else if (parsedHeight < 80 || parsedHeight > 250) {
-        newErrors.height = 'Height must be between 80 and 250 cm'
+        newErrors.height = t('signup.errorHeightRange')
       }
     }
 
     if (!formData.mainGoal) {
-      newErrors.mainGoal = 'Main goal is required'
+      newErrors.mainGoal = t('signup.errorGoal')
     }
 
     setErrors(newErrors)
@@ -168,7 +170,7 @@ function Onboarding() {
         navigate('/')
       }, 1600)
     } catch (err: unknown) {
-      const message = describeError(err, "We couldn't save your profile. Please try again.")
+      const message = describeError(err, t('signup.errorSave'))
       setSubmitError(message)
     } finally {
       setIsSubmitting(false)
@@ -194,9 +196,9 @@ function Onboarding() {
           <div className="completion-icon-wrapper">
             <Check size={34} aria-hidden="true" />
           </div>
-          <h1 className="onboarding-title">Welcome, {formData.firstName}!</h1>
+          <h1 className="onboarding-title">{t('login.welcomeName', { name: formData.firstName })}</h1>
           <p className="onboarding-subtitle">
-            Your personalized training &amp; nutrition plan is ready.
+            {t('login.planReady')}
           </p>
         </div>
       )}
@@ -213,7 +215,7 @@ function Onboarding() {
               />
             </div>
             <span className="onboarding-step-counter">
-              Step {step} of 2
+              {t('signup.step', { step, total: 2 })}
             </span>
           </div>
 
@@ -221,22 +223,22 @@ function Onboarding() {
           {step === 1 && (
             <>
               <header className="onboarding-header">
-                <h1 className="onboarding-title">Create Account</h1>
-                <p className="onboarding-subtitle">Sign up to get started</p>
+                <h1 className="onboarding-title">{t('signup.title')}</h1>
+                <p className="onboarding-subtitle">{t('signup.subtitle')}</p>
               </header>
 
               <form className="onboarding-form" onSubmit={handleNext} noValidate>
                 {/* First Name */}
                 <div className="form-field">
                   <label htmlFor="firstName" className="form-label">
-                    First Name <span className="required-star" aria-hidden="true">*</span>
+                    {t('signup.firstName')} <span className="required-star" aria-hidden="true">*</span>
                   </label>
                   <input
                     id="firstName"
                     type="text"
                     maxLength={15}
                     className={`form-input${errors.firstName ? ' has-error' : ''}`}
-                    placeholder="e.g. Alex"
+                    placeholder={t('signup.firstNamePlaceholder')}
                     value={formData.firstName}
                     onChange={(e) => handleInputChange('firstName', e.target.value)}
                     autoComplete="given-name"
@@ -247,14 +249,14 @@ function Onboarding() {
                 {/* Last Name */}
                 <div className="form-field">
                   <label htmlFor="lastName" className="form-label">
-                    Last Name <span className="required-star" aria-hidden="true">*</span>
+                    {t('signup.lastName')} <span className="required-star" aria-hidden="true">*</span>
                   </label>
                   <input
                     id="lastName"
                     type="text"
                     maxLength={25}
                     className={`form-input${errors.lastName ? ' has-error' : ''}`}
-                    placeholder="e.g. Rivera"
+                    placeholder={t('signup.lastNamePlaceholder')}
                     value={formData.lastName}
                     onChange={(e) => handleInputChange('lastName', e.target.value)}
                     autoComplete="family-name"
@@ -265,13 +267,13 @@ function Onboarding() {
                 {/* Email */}
                 <div className="form-field">
                   <label htmlFor="email" className="form-label">
-                    Email <span className="required-star" aria-hidden="true">*</span>
+                    {t('login.email')} <span className="required-star" aria-hidden="true">*</span>
                   </label>
                   <input
                     id="email"
                     type="email"
                     className={`form-input${errors.email ? ' has-error' : ''}`}
-                    placeholder="name@example.com"
+                    placeholder={t('login.emailPlaceholder')}
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     autoComplete="email"
@@ -282,14 +284,14 @@ function Onboarding() {
                 {/* Password */}
                 <div className="form-field">
                   <label htmlFor="password" className="form-label">
-                    Password <span className="required-star" aria-hidden="true">*</span>
+                    {t('login.password')} <span className="required-star" aria-hidden="true">*</span>
                   </label>
                   <div className="input-wrapper">
                     <input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
                       className={`form-input${errors.password ? ' has-error' : ''}`}
-                      placeholder="At least 12 characters"
+                      placeholder={t('signup.passwordPlaceholder')}
                       value={formData.password}
                       onChange={(e) => handleInputChange('password', e.target.value)}
                       autoComplete="new-password"
@@ -298,7 +300,7 @@ function Onboarding() {
                       type="button"
                       className="password-toggle-btn"
                       onClick={() => setShowPassword(!showPassword)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
                     >
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -309,14 +311,14 @@ function Onboarding() {
                 {/* Confirm Password */}
                 <div className="form-field">
                   <label htmlFor="confirmPassword" className="form-label">
-                    Confirm Password <span className="required-star" aria-hidden="true">*</span>
+                    {t('signup.confirmPassword')} <span className="required-star" aria-hidden="true">*</span>
                   </label>
                   <div className="input-wrapper">
                     <input
                       id="confirmPassword"
                       type={showConfirmPassword ? 'text' : 'password'}
                       className={`form-input${errors.confirmPassword ? ' has-error' : ''}`}
-                      placeholder="Repeat your password"
+                      placeholder={t('signup.confirmPlaceholder')}
                       value={formData.confirmPassword}
                       onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
                       autoComplete="new-password"
@@ -325,7 +327,7 @@ function Onboarding() {
                       type="button"
                       className="password-toggle-btn"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                      aria-label={showConfirmPassword ? t('signup.hideConfirm') : t('signup.showConfirm')}
                     >
                       {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -349,7 +351,7 @@ function Onboarding() {
                       </div>
                     </div>
                     <span className="terms-text">
-                      I agree to the <span className="terms-link">Terms and Conditions</span>{' '}
+                      {t('signup.agree')} <span className="terms-link">{t('signup.terms')}</span>{' '}
                       <span className="required-star" aria-hidden="true">*</span>
                     </span>
                   </label>
@@ -361,10 +363,10 @@ function Onboarding() {
                 {/* Screen 1 Actions */}
                 <div className="onboarding-actions">
                   <button type="submit" className="btn-primary-outline">
-                    Next
+                    {t('signup.next')}
                   </button>
                   <button type="button" className="btn-secondary-outline" onClick={handleCancel}>
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                 </div>
               </form>
@@ -375,9 +377,9 @@ function Onboarding() {
           {step === 2 && (
             <>
               <header className="onboarding-header">
-                <h1 className="onboarding-title">Personalize Your Plan</h1>
+                <h1 className="onboarding-title">{t('signup.personalizeTitle')}</h1>
                 <p className="onboarding-subtitle">
-                  We need some details to adjust your workouts
+                  {t('signup.personalizeSubtitle')}
                 </p>
               </header>
 
@@ -385,7 +387,7 @@ function Onboarding() {
                 {/* Birth Date */}
                 <div className="form-field">
                   <label htmlFor="birthDate" className="form-label">
-                    Birth Date <span className="required-star" aria-hidden="true">*</span>
+                    {t('signup.birthDate')} <span className="required-star" aria-hidden="true">*</span>
                   </label>
                   <input
                     id="birthDate"
@@ -401,12 +403,12 @@ function Onboarding() {
                 {/* Gender */}
                 <div className="form-field">
                   <label className="form-label">
-                    Gender <span className="required-star" aria-hidden="true">*</span>
+                    {t('profile.gender')} <span className="required-star" aria-hidden="true">*</span>
                   </label>
                   <p className="field-hint">
-                    Used strictly to accurately estimate your basal metabolic rate (BMR) and daily energy expenditure.
+                    {t('signup.genderHint')}
                   </p>
-                  <div className="segmented-control" role="radiogroup" aria-label="Gender selection">
+                  <div className="segmented-control" role="radiogroup" aria-label={t('signup.genderSelection')}>
                     {(['Male', 'Female', 'Other'] as const).map((genderOption) => (
                       <button
                         key={genderOption}
@@ -418,7 +420,7 @@ function Onboarding() {
                         }`}
                         onClick={() => handleInputChange('gender', genderOption)}
                       >
-                        {genderOption}
+                        {t(`gender.${genderOption}`)}
                       </button>
                     ))}
                   </div>
@@ -430,7 +432,7 @@ function Onboarding() {
                   {/* Weight (kg) */}
                   <div className="form-field">
                     <label htmlFor="weight" className="form-label">
-                      Weight (kg) <span className="required-star" aria-hidden="true">*</span>
+                      {t('signup.weightKg')} <span className="required-star" aria-hidden="true">*</span>
                     </label>
                     <input
                       id="weight"
@@ -438,7 +440,7 @@ function Onboarding() {
                       step="0.1"
                       inputMode="decimal"
                       className={`form-input${errors.weight ? ' has-error' : ''}`}
-                      placeholder="e.g. 74.5"
+                      placeholder={t('signup.weightPlaceholder')}
                       value={formData.weight}
                       onChange={(e) => handleInputChange('weight', e.target.value)}
                     />
@@ -448,14 +450,14 @@ function Onboarding() {
                   {/* Height (cm) */}
                   <div className="form-field">
                     <label htmlFor="height" className="form-label">
-                      Height (cm) <span className="required-star" aria-hidden="true">*</span>
+                      {t('signup.heightCm')} <span className="required-star" aria-hidden="true">*</span>
                     </label>
                     <input
                       id="height"
                       type="number"
                       inputMode="numeric"
                       className={`form-input${errors.height ? ' has-error' : ''}`}
-                      placeholder="e.g. 178"
+                      placeholder={t('signup.heightPlaceholder')}
                       value={formData.height}
                       onChange={(e) => handleInputChange('height', e.target.value)}
                     />
@@ -466,7 +468,7 @@ function Onboarding() {
                 {/* Main Goal */}
                 <div className="form-field">
                   <label htmlFor="mainGoal" className="form-label">
-                    Main Goal <span className="required-star" aria-hidden="true">*</span>
+                    {t('profile.mainGoal')} <span className="required-star" aria-hidden="true">*</span>
                   </label>
                   <select
                     id="mainGoal"
@@ -474,9 +476,9 @@ function Onboarding() {
                     value={formData.mainGoal}
                     onChange={(e) => handleInputChange('mainGoal', e.target.value as FitnessGoal)}
                   >
-                    <option value="Lose Weight">Lose Weight</option>
-                    <option value="Strength">Strength</option>
-                    <option value="Hypertrophy">Hypertrophy</option>
+                    <option value="Lose Weight">{t('goal.Lose Weight')}</option>
+                    <option value="Strength">{t('goal.Strength')}</option>
+                    <option value="Hypertrophy">{t('goal.Hypertrophy')}</option>
                   </select>
                   {errors.mainGoal && <span className="error-text">{errors.mainGoal}</span>}
                 </div>
@@ -494,7 +496,7 @@ function Onboarding() {
                     className="btn-primary-outline"
                     disabled={isSubmitting}
                   >
-                    {isSubmitting ? 'Creating Plan...' : 'Complete Sign Up'}
+                    {isSubmitting ? t('signup.creating') : t('signup.complete')}
                   </button>
                   <button
                     type="button"
@@ -502,7 +504,7 @@ function Onboarding() {
                     onClick={handleBack}
                     disabled={isSubmitting}
                   >
-                    Back
+                    {t('common.back')}
                   </button>
                 </div>
               </form>

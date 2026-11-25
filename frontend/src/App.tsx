@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import MainLayout from './components/layout/MainLayout'
 import { getCurrentUser, prefetchMainPages } from './services/api'
+import { useT } from './i18n'
 
 const pages = {
   Home: () => import('./pages/Home'),
@@ -73,9 +74,10 @@ function ProtectedLayout() {
 }
 
 function App() {
+  const t = useT()
   return (
     <BrowserRouter>
-      <Suspense fallback={<p className="visually-hidden" role="status" data-page-loading>Loading screen…</p>}>
+      <Suspense fallback={<p className="visually-hidden" role="status" data-page-loading>{t('common.loading')}</p>}>
         <Routes>
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/login" element={<Login />} />

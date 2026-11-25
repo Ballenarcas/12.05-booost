@@ -7,6 +7,7 @@ import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { createRoutine, updateRoutine } from '../services/api'
 import type { Exercise } from '../types'
 import type { Routine } from '../types/workout'
+import { useT } from '../i18n'
 
 type RoutineExerciseDraft = {
   exercise_id: string
@@ -21,6 +22,7 @@ function normalizeExerciseName(name: string): string {
 }
 
 function CreateRoutine() {
+  const t = useT()
   const navigate = usePageNavigate()
   const location = useLocation()
   const routineToEdit = (location.state as { routine?: Routine } | null)?.routine
@@ -115,7 +117,7 @@ function CreateRoutine() {
     setError(null)
     setSuccessMessage(null)
     if (!name.trim()) {
-      setNameError('Please enter a name for your routine.')
+      setNameError(t('routine.errorName'))
       nameInputRef.current?.focus()
       return
     }
@@ -136,11 +138,11 @@ function CreateRoutine() {
       } else {
         await createRoutine(payload)
       }
-      setSuccessMessage(routineToEdit ? 'Routine updated successfully.' : 'Routine saved successfully.')
+      setSuccessMessage(routineToEdit ? t('routine.updatedOk') : t('routine.savedOk'))
       await new Promise((resolve) => window.setTimeout(resolve, 900))
       navigate('/workouts', { replace: true })
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to save routine')
+      setError(requestError instanceof Error ? requestError.message : t('routine.errorSave'))
     } finally {
       setIsSaving(false)
     }
@@ -151,16 +153,16 @@ function CreateRoutine() {
   return (
     <div className="screen hifi-theme routine-builder-screen">
       <header className="routine-builder-header">
-        <button className="icon-button" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts">
+        <button className="icon-button" type="button" onClick={() => navigate('/workouts')} aria-label={t('aw.backToWorkouts')}>
           <ArrowLeft size={20} aria-hidden="true" />
         </button>
-        <div><p className="eyebrow">{routineToEdit ? 'Update your training plan' : 'Build your training plan'}</p><h1>{routineToEdit ? 'Edit Routine' : 'Create Routine'}</h1></div>
+        <div><p className="eyebrow">{routineToEdit ? t('routine.updatePlan') : t('routine.buildPlan')}</p><h1>{routineToEdit ? t('routine.editTitle') : t('routine.createTitle')}</h1></div>
         <PremiumUpsellButton compact />
       </header>
 
 
       <div className="card routine-builder-fields">
-        <label htmlFor="routine-name">Routine name</label>
+        <label htmlFor="routine-name">{t('routine.name')}</label>
         <input
           ref={nameInputRef}
           id="routine-name"
@@ -170,7 +172,7 @@ function CreateRoutine() {
             if (event.target.value.trim()) setNameError(null)
           }}
           maxLength={100}
-          placeholder="e.g. Upper body strength"
+          placeholder={t('routine.namePlaceholder')}
           autoComplete="off"
           aria-invalid={nameError ? 'true' : undefined}
           aria-describedby={nameError ? 'routine-name-error' : undefined}
@@ -181,8 +183,8 @@ function CreateRoutine() {
 
       <section aria-labelledby="routine-exercises-title">
         <div className="routine-builder-section-heading">
-          <h2 id="routine-exercises-title">Choose exercises</h2>
-          <span>{selectedExercises.length} selected</span>
+          <h2 id="routine-exercises-title">{t('routine.chooseExercises')}</h2>
+          <span>{t('routine.selectedCount', { count: selectedExercises.length })}</span>
           <button
             className="secondary-action"
             type="button"
@@ -190,12 +192,12 @@ function CreateRoutine() {
             onClick={() => setIsExercisePickerOpen(true)}
           >
             <Plus size={16} aria-hidden="true" />
-            Add Exercise
+            {t('aw.addExercise')}
           </button>
         </div>
       </section>
 
-      <section className="routine-builder-selected" aria-label="Selected routine exercises">
+      <section className="routine-builder-selected" aria-label={t('routine.selectedAria')}>
         {selectedExercises.map((exercise, index) => (
           <article
             className={`card routine-exercise-config${draggedExerciseId === exercise.exercise_id ? ' is-dragging' : ''}`}
@@ -228,7 +230,7 @@ function CreateRoutine() {
                       moveExercise(index, index + 1)
                     }
                   }}
-                  aria-label={`Drag ${exercise.name} to reorder`}
+                  aria-label={t('routine.dragAria', { name: exercise.name })}
                   onDragStart={(event) => {
                     setDraggedExerciseId(exercise.exercise_id)
                     event.dataTransfer.effectAllowed = 'move'
@@ -241,16 +243,16 @@ function CreateRoutine() {
                 <h3>{exercise.name}</h3>
               </div>
               <div className="routine-exercise-actions">
-                <button className="routine-reorder-button" type="button" aria-label={`Move ${exercise.name} up`} onClick={() => moveExercise(index, index - 1)} disabled={index === 0}>
+                <button className="routine-reorder-button" type="button" aria-label={t('routine.moveUpAria', { name: exercise.name })} onClick={() => moveExercise(index, index - 1)} disabled={index === 0}>
                   <ArrowUp size={16} aria-hidden="true" />
                 </button>
-                <button className="routine-reorder-button" type="button" aria-label={`Move ${exercise.name} down`} onClick={() => moveExercise(index, index + 1)} disabled={index === selectedExercises.length - 1}>
+                <button className="routine-reorder-button" type="button" aria-label={t('routine.moveDownAria', { name: exercise.name })} onClick={() => moveExercise(index, index + 1)} disabled={index === selectedExercises.length - 1}>
                   <ArrowDown size={16} aria-hidden="true" />
                 </button>
                 <button
                   className="routine-reorder-button"
                   type="button"
-                  aria-label={`Replace ${exercise.name}`}
+                  aria-label={t('routine.replaceAria', { name: exercise.name })}
                   onClick={() => {
                     setReplacementIndex(index)
                     setIsExercisePickerOpen(true)
@@ -261,7 +263,7 @@ function CreateRoutine() {
                 <button
                   className="routine-remove-exercise"
                   type="button"
-                  aria-label={`Remove ${exercise.name}`}
+                  aria-label={t('hydration.removeAria', { label: exercise.name })}
                   onClick={() => setSelectedExercises((current) => current.filter((item) => item.exercise_id !== exercise.exercise_id))}
                 >
                   <Trash2 size={16} aria-hidden="true" />
@@ -274,7 +276,7 @@ function CreateRoutine() {
                 <div className="set-row routine-target-row" key={setIndex}>
                   <span className="routine-target-number">{setIndex + 1}</span>
                   <input
-                    aria-label={`Target reps for ${exercise.name}, set ${setIndex + 1}`}
+                    aria-label={t('routine.targetRepsAria', { name: exercise.name, n: setIndex + 1 })}
                     type="number"
                     min="1"
                     max="30"
@@ -284,7 +286,7 @@ function CreateRoutine() {
                   <button
                     className="routine-target-remove"
                     type="button"
-                    aria-label={`Remove set ${setIndex + 1} from ${exercise.name}`}
+                    aria-label={t('routine.removeSetAria', { name: exercise.name, n: setIndex + 1 })}
                     disabled={exercise.target_sets <= 1}
                     onClick={() => updateSetCount(index, exercise.target_sets - 1)}
                   >
@@ -298,12 +300,12 @@ function CreateRoutine() {
                 onClick={() => updateSetCount(index, exercise.target_sets + 1)}
                 disabled={exercise.target_sets >= 30}
               >
-                <Plus size={16} aria-hidden="true" /> Add Set
+                <Plus size={16} aria-hidden="true" /> {t('aw.addSet')}
               </button>
             </div>
           </article>
         ))}
-        {selectedExercises.length === 0 && <div className="routine-builder-empty">Add at least one exercise to start building your routine.</div>}
+        {selectedExercises.length === 0 && <div className="routine-builder-empty">{t('routine.empty')}</div>}
       </section>
 
       {error && <p className="routine-builder-error" role="alert">{error}</p>}
@@ -328,15 +330,15 @@ function CreateRoutine() {
             tabIndex={-1}
           >
             <span className="routine-save-icon"><CheckCircle2 size={34} aria-hidden="true" /></span>
-            <h2 id="routine-save-title">{routineToEdit ? 'Routine updated!' : 'Routine saved!'}</h2>
-            <p>{successMessage} Returning to Workouts...</p>
+            <h2 id="routine-save-title">{routineToEdit ? t('routine.updated') : t('routine.saved')}</h2>
+            <p>{successMessage} {t('routine.returning')}</p>
           </div>
         </div>
       )}
       <div className="routine-builder-footer">
-        <button className="secondary-action" type="button" onClick={() => navigate('/workouts')}>Cancel</button>
+        <button className="secondary-action" type="button" onClick={() => navigate('/workouts')}>{t('common.cancel')}</button>
         <button className="primary-button routine-builder-submit" type="button" onClick={saveRoutine} disabled={!canSave}>
-          {isSaving ? 'Saving...' : routineToEdit ? 'Update Routine' : 'Save Routine'}
+          {isSaving ? t('common.saving') : routineToEdit ? t('routine.update') : t('routine.save')}
         </button>
       </div>
     </div>

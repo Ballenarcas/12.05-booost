@@ -23,6 +23,7 @@ from typing import Any
 from uuid import UUID
 
 from app.core.config import get_settings
+from app.core.i18n import get_language, normalize_language, pick, translate_muscle, translate_objective
 from app.core.local_day import LocalDay, utc_day
 from app.db.supabase_client import get_supabase
 from app.services.ai_service import phrase_tip
@@ -157,34 +158,74 @@ def is_safe_wording(tip: dict[str, Any], wording: Any, facts: tuple[str, ...] | 
     return "one set" in lowered and str(action["name"]).lower() in lowered
 
 
-def _follow_ups(state: dict[str, Any], agreed: dict[str, dict[str, Any]], reading: str) -> list[dict[str, Any]]:
+def _follow_ups(
+    state: dict[str, Any],
+    agreed: dict[str, dict[str, Any]],
+    reading: str,
+    lang: str = "en",
+) -> list[dict[str, Any]]:
     """Check how a tip the user accepted on an earlier day turned out."""
+    is_es = lang == "es"
     tips: list[dict[str, Any]] = []
     yesterday = state.get("yesterday")
     protein_goal = round(float(state["protein_goal"]))
     if yesterday and protein_goal > 0 and any(kind in agreed for kind in PROTEIN_KINDS):
         reached = yesterday["protein"] >= protein_goal
+        if is_es:
+            message = (
+                f"Aceptaste subir la proteína y ayer llegaste a tu objetivo de {protein_goal} g con {yesterday['protein']} g."
+                if reached
+                else f"Aceptaste subir la proteína y ayer llegaste a {yesterday['protein']} de {protein_goal} g."
+            )
+            next_step = (
+                "Mantén esas comidas en tu rutina."
+                if reached
+                else "Incluye una fuente de proteína en tu primera comida de hoy."
+            )
+            reasoning = "Aceptaste un consejo de proteína hace poco, así que revisé cómo fue ayer."
+        else:
+            message = (
+                f"You said yes to more protein, and you reached your {protein_goal} g target yesterday with {yesterday['protein']} g."
+                if reached
+                else f"You said yes to more protein, and yesterday you reached {yesterday['protein']} of {protein_goal} g."
+            )
+            next_step = (
+                "Keep those meals in your routine."
+                if reached
+                else "Put a protein source in your first meal today."
+            )
+            reasoning = "You accepted a protein tip recently, so I checked how yesterday went."
         tips.append({
             "kind": "follow_up_protein",
             "state_key": reading,
-            "message": (
-                f"You said yes to more protein, and you reached your {protein_goal} g target yesterday with {yesterday['protein']} g."
-                if reached else f"You said yes to more protein, and yesterday you reached {yesterday['protein']} of {protein_goal} g."
-            ),
-            "next_step": "Keep those meals in your routine." if reached else "Put a protein source in your first meal today.",
-            "reasoning": "You accepted a protein tip recently, so I checked how yesterday went.",
+            "message": message,
+            "next_step": next_step,
+            "reasoning": reasoning,
             "action": None,
         })
     muscle_tip = agreed.get("muscle_gap")
     if muscle_tip and muscle_tip.get("muscle"):
         muscle = muscle_tip["muscle"]
         if state.get("muscle_ages", {}).get(muscle, 99) < muscle_tip["days_ago"]:
+            muscle_label = translate_muscle(muscle, lang)
             tips.append({
                 "kind": "follow_up_muscle",
                 "state_key": reading,
-                "message": f"You said yes to training {muscle}, and you did it.",
-                "next_step": f"Keep {muscle} in your weekly rotation.",
-                "reasoning": f"You accepted a {muscle} tip recently, and your log shows you trained it since then.",
+                "message": (
+                    f"Aceptaste entrenar {muscle_label}, y lo cumpliste."
+                    if is_es
+                    else f"You said yes to training {muscle}, and you did it."
+                ),
+                "next_step": (
+                    f"Mantén {muscle_label} en tu rotación semanal."
+                    if is_es
+                    else f"Keep {muscle} in your weekly rotation."
+                ),
+                "reasoning": (
+                    f"Aceptaste un consejo de {muscle_label} hace poco y tu registro muestra que ya lo entrenaste."
+                    if is_es
+                    else f"You accepted a {muscle} tip recently, and your log shows you trained it since then."
+                ),
                 "action": None,
             })
     training_tip = agreed.get("training_gap")
@@ -193,16 +234,30 @@ def _follow_ups(state: dict[str, Any], agreed: dict[str, dict[str, Any]], readin
         tips.append({
             "kind": "follow_up_training",
             "state_key": reading,
-            "message": "You said you'd get back to training, and you did.",
-            "next_step": "Plan your next session for this week.",
-            "reasoning": "You accepted a training tip recently, and your log shows a workout since then.",
+            "message": (
+                "Dijiste que volverías a entrenar, y lo hiciste."
+                if is_es
+                else "You said you'd get back to training, and you did."
+            ),
+            "next_step": (
+                "Planifica tu próxima sesión para esta semana."
+                if is_es
+                else "Plan your next session for this week."
+            ),
+            "reasoning": (
+                "Aceptaste un consejo de entrenamiento hace poco y tu registro muestra una sesión desde entonces."
+                if is_es
+                else "You accepted a training tip recently, and your log shows a workout since then."
+            ),
             "action": None,
         })
     return tips
 
 
-def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
+def build_candidates(state: dict[str, Any], lang: str | None = None) -> list[dict[str, Any]]:
     """Return possible tips, best first. Pure: no database access."""
+    active_lang = normalize_language(lang) if lang is not None else get_language()
+    is_es = active_lang == "es"
     goal = int(state["goal"])
     eaten = round(state["eaten_kcal"])
     meals = int(state["meals_count"])
@@ -219,9 +274,17 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "workout_done_kcal",
             "state_key": "day",
-            "message": f"Good job in your training! Add {bonus} kcal to today's plan?",
+            "message": (
+                f"¡Buen entrenamiento hoy! ¿Añadimos {bonus} kcal al plan de hoy?"
+                if is_es
+                else f"Good job in your training! Add {bonus} kcal to today's plan?"
+            ),
             "reasoning": (
-                f"You finished a workout today, so you burned extra energy. Adding {bonus} kcal, "
+                f"Terminaste un entrenamiento hoy y quemaste energía extra. Añadir {bonus} kcal, "
+                "según el tiempo que entrenaste, ayuda a recuperarte sin aumentar tu déficit. "
+                "Solo cambia el objetivo de hoy."
+                if is_es
+                else f"You finished a workout today, so you burned extra energy. Adding {bonus} kcal, "
                 "based on how long you trained, helps you recover and never makes your deficit "
                 "bigger. It only changes today's goal."
             ),
@@ -236,9 +299,17 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "add_set",
             "state_key": "day",
-            "message": f"You've been consistent lately. Add one set of {first['name']} to today's workout?",
+            "message": (
+                f"Has sido muy constante últimamente. ¿Añadimos una serie de {first['name']} al entreno de hoy?"
+                if is_es
+                else f"You've been consistent lately. Add one set of {first['name']} to today's workout?"
+            ),
             "reasoning": (
-                f"Over the last 7 days you did {state['sets_last_7d']} sets and today's plan has "
+                f"En los últimos 7 días hiciste {state['sets_last_7d']} series y hoy tienes "
+                f"{state['planned_sets_today']}. Una serie más suma {total}, dentro del 10 % respecto a las "
+                f"{state['sets_prev_7d']} series de la semana anterior, para progresar de forma gradual."
+                if is_es
+                else f"Over the last 7 days you did {state['sets_last_7d']} sets and today's plan has "
                 f"{state['planned_sets_today']}. One more set makes {total}, still within 10% of the "
                 f"{state['sets_prev_7d']} sets you did the week before, so the increase stays gradual."
             ),
@@ -251,10 +322,21 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "lift_progress",
             "state_key": reading,
-            "message": f"New best on {lift['exercise']}: {lift['after']} kg, up from {lift['before']} kg.",
-            "next_step": "Stay at this weight next session until it feels solid.",
+            "message": (
+                f"Nueva marca en {lift['exercise']}: {lift['after']} kg, subiendo desde {lift['before']} kg."
+                if is_es
+                else f"New best on {lift['exercise']}: {lift['after']} kg, up from {lift['before']} kg."
+            ),
+            "next_step": (
+                "Mantén este peso en la próxima sesión hasta que se sienta sólido."
+                if is_es
+                else "Stay at this weight next session until it feels solid."
+            ),
             "reasoning": (
-                f"Your heaviest {lift['exercise']} set today was {lift['after']} kg. Your best in the "
+                f"Tu serie más pesada de {lift['exercise']} hoy fue de {lift['after']} kg. Tu mejor marca en los "
+                f"30 días anteriores era {lift['before']} kg."
+                if is_es
+                else f"Your heaviest {lift['exercise']} set today was {lift['after']} kg. Your best in the "
                 f"previous 30 days was {lift['before']} kg."
             ),
             "action": None,
@@ -264,9 +346,21 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "hard_session",
             "state_key": reading,
-            "message": f"That was a tough one, with an average effort of {effort} out of 10.",
-            "next_step": "Have a protein-rich meal and get a good night's sleep.",
-            "reasoning": "You rated today's sets as very hard. Your body rebuilds after the session, so recovery is part of the work.",
+            "message": (
+                f"Fue una sesión exigente, con un esfuerzo medio de {effort} sobre 10."
+                if is_es
+                else f"That was a tough one, with an average effort of {effort} out of 10."
+            ),
+            "next_step": (
+                "Haz una comida rica en proteína y descansa bien esta noche."
+                if is_es
+                else "Have a protein-rich meal and get a good night's sleep."
+            ),
+            "reasoning": (
+                "Valoraste las series de hoy como muy duras. Tu cuerpo se recupera tras la sesión, así que descansar forma parte del trabajo."
+                if is_es
+                else "You rated today's sets as very hard. Your body rebuilds after the session, so recovery is part of the work."
+            ),
             "action": None,
         })
 
@@ -275,10 +369,21 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "protein_behind",
             "state_key": reading,
-            "message": f"Protein is a bit low today: {round(protein)} of {round(protein_goal)} g.",
-            "next_step": "Make protein the focus of your next meal.",
+            "message": (
+                f"La proteína va un poco baja hoy: {round(protein)} de {round(protein_goal)} g."
+                if is_es
+                else f"Protein is a bit low today: {round(protein)} of {round(protein_goal)} g."
+            ),
+            "next_step": (
+                "Haz que la proteína sea la protagonista de tu próxima comida."
+                if is_es
+                else "Make protein the focus of your next meal."
+            ),
             "reasoning": (
-                f"You have eaten {eaten} of {goal} kcal but only {round(protein)} g of your "
+                f"Llevas {eaten} de {goal} kcal, pero solo {round(protein)} g de tu objetivo de "
+                f"{round(protein_goal)} g de proteína. La proteína ayuda a recuperar el músculo."
+                if is_es
+                else f"You have eaten {eaten} of {goal} kcal but only {round(protein)} g of your "
                 f"{round(protein_goal)} g protein target. Protein supports muscle recovery."
             ),
             "action": None,
@@ -287,35 +392,78 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "over_target",
             "state_key": reading,
-            "message": f"You're {eaten - goal} kcal over today's goal, and that's fine.",
-            "next_step": "Go back to your normal plan tomorrow, with no need to make up for it.",
-            "reasoning": "One day above target rarely changes your progress. Your weekly average matters more than a single day.",
+            "message": (
+                f"Estás {eaten - goal} kcal por encima del objetivo de hoy, y no pasa nada."
+                if is_es
+                else f"You're {eaten - goal} kcal over today's goal, and that's fine."
+            ),
+            "next_step": (
+                "Vuelve a tu plan habitual mañana, sin necesidad de compensarlo."
+                if is_es
+                else "Go back to your normal plan tomorrow, with no need to make up for it."
+            ),
+            "reasoning": (
+                "Un día por encima del objetivo rara vez cambia tu progreso. Tu media semanal importa más que un solo día."
+                if is_es
+                else "One day above target rarely changes your progress. Your weekly average matters more than a single day."
+            ),
             "action": None,
         })
     if meals and eaten < goal:
         last_meal = state.get("last_meal")
-        message = f"Nice, {meals} meal{'s' if meals != 1 else ''} logged and {goal - eaten} kcal left today."
-        if last_meal:
-            message = f"{last_meal['name']} gave you {last_meal['protein']} g of protein, and you have {goal - eaten} kcal left."
+        if is_es:
+            meal_word = "comida registrada" if meals == 1 else "comidas registradas"
+            message = f"Bien, {meals} {meal_word} y te quedan {goal - eaten} kcal hoy."
+            if last_meal:
+                message = f"{last_meal['name']} te aportó {last_meal['protein']} g de proteína y te quedan {goal - eaten} kcal."
+        else:
+            message = f"Nice, {meals} meal{'s' if meals != 1 else ''} logged and {goal - eaten} kcal left today."
+            if last_meal:
+                message = f"{last_meal['name']} gave you {last_meal['protein']} g of protein, and you have {goal - eaten} kcal left."
         protein_left = round(protein_goal - protein)
         tips.append({
             "kind": "on_track",
             "state_key": reading,
             "message": message,
             "next_step": (
-                f"Aim for {protein_left} g more protein in your remaining meals." if protein_left > 0
-                else "Protein is done for today, so just keep logging your meals."
+                (
+                    f"Apunta a {protein_left} g más de proteína en tus comidas restantes."
+                    if is_es
+                    else f"Aim for {protein_left} g more protein in your remaining meals."
+                )
+                if protein_left > 0
+                else (
+                    "Objetivo de proteína cubierto hoy; sigue registrando tus comidas."
+                    if is_es
+                    else "Protein is done for today, so just keep logging your meals."
+                )
             ),
-            "reasoning": f"Based on {eaten} kcal eaten so far against your {goal} kcal goal.",
+            "reasoning": (
+                f"Calculado con las {eaten} kcal registradas hasta ahora frente a tu objetivo de {goal} kcal."
+                if is_es
+                else f"Based on {eaten} kcal eaten so far against your {goal} kcal goal."
+            ),
             "action": None,
         })
     elif meals and eaten <= goal * OVER_TARGET_RATIO:
         tips.append({
             "kind": "goal_reached",
             "state_key": reading,
-            "message": "You've reached today's calorie goal.",
-            "next_step": "That's today done, so just log anything else you eat.",
-            "reasoning": f"You have eaten {eaten} kcal against your {goal} kcal goal.",
+            "message": (
+                "Has alcanzado tu objetivo de calorías de hoy."
+                if is_es
+                else "You've reached today's calorie goal."
+            ),
+            "next_step": (
+                "Con esto cierras el día; solo registra cualquier otra comida que hagas."
+                if is_es
+                else "That's today done, so just log anything else you eat."
+            ),
+            "reasoning": (
+                f"Llevas {eaten} kcal frente a tu objetivo de {goal} kcal."
+                if is_es
+                else f"You have eaten {eaten} kcal against your {goal} kcal goal."
+            ),
             "action": None,
         })
     # Below the meal tips on purpose: logging food must always change what is shown.
@@ -323,7 +471,7 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
     for item in state.get("accepted_recent", []):
         if item["days_ago"] <= FOLLOW_UP_DAYS:
             agreed.setdefault(item["kind"], item)
-    tips.extend(_follow_ups(state, agreed, reading))
+    tips.extend(_follow_ups(state, agreed, reading, active_lang))
 
     week_days = state.get("week_days_logged", 0)
     week_protein = state.get("week_protein_avg")
@@ -331,13 +479,25 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
     if (week_days >= MIN_DAYS_FOR_WEEK_TIPS and protein_goal > 0 and not protein_agreed
             and week_protein < protein_goal * LOW_WEEK_PROTEIN_RATIO):
         objective = state.get("objective")
+        objective_es = translate_objective(objective, "es") if objective else None
         tips.append({
             "kind": "protein_week",
             "state_key": reading,
-            "message": f"Your protein averaged {week_protein} g this week, under your {round(protein_goal)} g target.",
-            "next_step": "Add one protein source to a meal each day.",
+            "message": (
+                f"Tu media de proteína fue de {week_protein} g esta semana, por debajo de tu objetivo de {round(protein_goal)} g."
+                if is_es
+                else f"Your protein averaged {week_protein} g this week, under your {round(protein_goal)} g target."
+            ),
+            "next_step": (
+                "Añade una fuente de proteína a una comida cada día."
+                if is_es
+                else "Add one protein source to a meal each day."
+            ),
             "reasoning": (
-                f"This comes from the {week_days} days you logged in the past week."
+                f"Calculado con los {week_days} días que registraste la última semana."
+                + (f" Llegar a la proteína es clave para tu objetivo de {objective_es}." if objective_es else "")
+                if is_es
+                else f"This comes from the {week_days} days you logged in the past week."
                 + (f" Enough protein matters for your {objective} goal." if objective else "")
             ),
             "action": None,
@@ -346,19 +506,44 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "calorie_week",
             "state_key": reading,
-            "message": f"You hit your calorie goal on {state['week_days_on_goal']} of the last 7 days.",
-            "next_step": "Plan today's meals the same way to keep that going.",
-            "reasoning": "Those days landed within 10% of your calorie goal. Steady weeks matter more than any single day.",
+            "message": (
+                f"Cumpliste tu objetivo de calorías {state['week_days_on_goal']} de los últimos 7 días."
+                if is_es
+                else f"You hit your calorie goal on {state['week_days_on_goal']} of the last 7 days."
+            ),
+            "next_step": (
+                "Planifica las comidas de hoy igual para mantener la racha."
+                if is_es
+                else "Plan today's meals the same way to keep that going."
+            ),
+            "reasoning": (
+                "Esos días quedaron dentro del 10 % de tu objetivo calórico. Las semanas constantes importan más que un día suelto."
+                if is_es
+                else "Those days landed within 10% of your calorie goal. Steady weeks matter more than any single day."
+            ),
             "action": None,
         })
     gap = state.get("muscle_gap")
     if gap and "muscle_gap" not in agreed:
+        muscle_label = translate_muscle(gap["muscle"], active_lang)
         tips.append({
             "kind": "muscle_gap",
             "state_key": reading,
-            "message": f"You haven't trained {gap['muscle']} in {gap['days']} days.",
-            "next_step": f"Put a {gap['muscle']} exercise in your next workout.",
-            "reasoning": "It's the muscle group you've gone longest without training in the past 30 days.",
+            "message": (
+                f"Llevas {gap['days']} días sin entrenar {muscle_label}."
+                if is_es
+                else f"You haven't trained {gap['muscle']} in {gap['days']} days."
+            ),
+            "next_step": (
+                f"Incluye un ejercicio de {muscle_label} en tu próximo entrenamiento."
+                if is_es
+                else f"Put a {gap['muscle']} exercise in your next workout."
+            ),
+            "reasoning": (
+                "Es el grupo muscular que más tiempo llevas sin entrenar en los últimos 30 días."
+                if is_es
+                else "It's the muscle group you've gone longest without training in the past 30 days."
+            ),
             "action": {"type": "focus_muscle", "muscle": gap["muscle"]},
         })
     since = state.get("days_since_workout")
@@ -366,18 +551,42 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "training_gap",
             "state_key": reading,
-            "message": f"It's been {since} days since your last workout.",
-            "next_step": "Plan a short session in the next day or two.",
-            "reasoning": "Regular training matters more than any single big session, so a short workout still counts.",
+            "message": (
+                f"Han pasado {since} días desde tu último entrenamiento."
+                if is_es
+                else f"It's been {since} days since your last workout."
+            ),
+            "next_step": (
+                "Planifica una sesión corta en los próximos uno o dos días."
+                if is_es
+                else "Plan a short session in the next day or two."
+            ),
+            "reasoning": (
+                "La regularidad importa más que una gran sesión aislada, así que un entrenamiento corto también cuenta."
+                if is_es
+                else "Regular training matters more than any single big session, so a short workout still counts."
+            ),
             "action": None,
         })
     if is_rest_day and not workouts_today:
         tips.append({
             "kind": "rest_day",
             "state_key": reading,
-            "message": "It's a rest day, and recovery is part of your training.",
-            "next_step": "Go for a walk or stretch a little if you feel like moving.",
-            "reasoning": "Your plan has no workout today. Muscles get stronger while you rest, not only while you train.",
+            "message": (
+                "Hoy toca descanso, y recuperarte también forma parte del entrenamiento."
+                if is_es
+                else "It's a rest day, and recovery is part of your training."
+            ),
+            "next_step": (
+                "Sal a caminar o estira un poco si te apetece moverte."
+                if is_es
+                else "Go for a walk or stretch a little if you feel like moving."
+            ),
+            "reasoning": (
+                "Tu plan no tiene entrenamiento hoy. Los músculos se fortalecen cuando descansas, no solo cuando entrenas."
+                if is_es
+                else "Your plan has no workout today. Muscles get stronger while you rest, not only while you train."
+            ),
             "action": None,
         })
     streak = state.get("streak_days", 0)
@@ -385,9 +594,21 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "logging_streak",
             "state_key": reading,
-            "message": f"{streak} days of logging in a row.",
-            "next_step": "Log your next meal to keep it going.",
-            "reasoning": f"You logged meals on each of the last {streak} days. Staying consistent makes my tips more useful.",
+            "message": (
+                f"Llevas {streak} días seguidos registrando tus comidas."
+                if is_es
+                else f"{streak} days of logging in a row."
+            ),
+            "next_step": (
+                "Registra tu próxima comida para mantener la racha."
+                if is_es
+                else "Log your next meal to keep it going."
+            ),
+            "reasoning": (
+                f"Has registrado comidas cada uno de los últimos {streak} días. Ser constante hace mis consejos más útiles."
+                if is_es
+                else f"You logged meals on each of the last {streak} days. Staying consistent makes my tips more useful."
+            ),
             "action": None,
         })
     yesterday = state.get("yesterday")
@@ -397,23 +618,57 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
             "kind": "yesterday_recap",
             "state_key": reading,
             "message": (
-                f"You were {protein_short} g short on protein yesterday." if protein_short > 0
-                else f"You reached {yesterday['protein']} g of protein yesterday."
+                (
+                    f"Ayer te faltaron {protein_short} g de proteína."
+                    if is_es
+                    else f"You were {protein_short} g short on protein yesterday."
+                )
+                if protein_short > 0
+                else (
+                    f"Ayer alcanzaste {yesterday['protein']} g de proteína."
+                    if is_es
+                    else f"You reached {yesterday['protein']} g of protein yesterday."
+                )
             ),
             "next_step": (
-                "Make your first meal today rich in protein." if protein_short > 0
-                else "Log your first meal to start today the same way."
+                (
+                    "Haz que tu primera comida de hoy sea rica en proteína."
+                    if is_es
+                    else "Make your first meal today rich in protein."
+                )
+                if protein_short > 0
+                else (
+                    "Registra tu primera comida para empezar hoy igual de bien."
+                    if is_es
+                    else "Log your first meal to start today the same way."
+                )
             ),
-            "reasoning": f"Yesterday you logged {yesterday['kcal']} kcal and {yesterday['protein']} g of protein.",
+            "reasoning": (
+                f"Ayer registraste {yesterday['kcal']} kcal y {yesterday['protein']} g de proteína."
+                if is_es
+                else f"Yesterday you logged {yesterday['kcal']} kcal and {yesterday['protein']} g of protein."
+            ),
             "action": None,
         })
     if not meals:
         tips.append({
             "kind": "nothing_logged",
             "state_key": reading,
-            "message": "You haven't logged any meals yet today.",
-            "next_step": "Log your first meal so I can tailor today's tips.",
-            "reasoning": "There are no meals logged for today yet, so there is nothing to base a tip on.",
+            "message": (
+                "Todavía no has registrado ninguna comida hoy."
+                if is_es
+                else "You haven't logged any meals yet today."
+            ),
+            "next_step": (
+                "Registra tu primera comida para poder adaptar los consejos de hoy."
+                if is_es
+                else "Log your first meal so I can tailor today's tips."
+            ),
+            "reasoning": (
+                "Aún no hay comidas registradas hoy, así que todavía no tengo datos para personalizar un consejo."
+                if is_es
+                else "There are no meals logged for today yet, so there is nothing to base a tip on."
+            ),
             "action": None,
         })
     return tips
@@ -531,9 +786,17 @@ def _public(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _with_model_wording(
-    tip: dict[str, Any], user_id: UUID, seen_keys: set[str], state: dict[str, Any], session: Any,
+    tip: dict[str, Any],
+    user_id: UUID,
+    seen_keys: set[str],
+    state: dict[str, Any],
+    session: Any,
+    lang: str = "en",
 ) -> dict[str, Any]:
     """Make a new tip personal if allowed. Any failure keeps the rule's text, so Home never depends on the model."""
+    # Safety gate: is_safe_wording only understands English wording, so non-English users always get rule-written tips.
+    if lang != "en":
+        return tip
     settings = get_settings()
     if not settings.ai_tips_model_enabled or not settings.ai_api_key:
         return tip
@@ -554,8 +817,14 @@ def _with_model_wording(
     return {**tip, "message": wording["message"].strip(), "reasoning": wording["reasoning"].strip(), "source": "model"}
 
 
-def get_current_tip(user_id: UUID, day: LocalDay | None = None, session: Any = None) -> dict[str, Any] | None:
+def get_current_tip(
+    user_id: UUID,
+    day: LocalDay | None = None,
+    session: Any = None,
+    lang: str | None = None,
+) -> dict[str, Any] | None:
     """First candidate the user has not answered. Stored on first display so it can be decided later."""
+    active_lang = normalize_language(lang) if lang is not None else get_language()
     session = session or get_supabase(admin=True)
     day = day or utc_day()
     tip_date = day.local_date.isoformat()
@@ -564,15 +833,20 @@ def get_current_tip(user_id: UUID, day: LocalDay | None = None, session: Any = N
     seen_keys = {row["state_key"] for row in rows}
     answered_kinds = {row["kind"] for row in rows if row["status"] != "pending"}
     state = collect_state(session, user_id, day)
-    for tip in build_candidates(state):
+    for tip in build_candidates(state, lang=active_lang):
         if tip["kind"] in answered_kinds and tip["kind"] not in REACTIVE_KINDS and tip["state_key"] != "day":
             continue  # an insight the user already answered stays gone for the day
+        rule_message = f"{tip['message']} {tip['next_step']}" if tip["next_step"] else tip["message"]
         row = stored.get((tip["kind"], tip["state_key"]))
         if row:
             if row["status"] == "pending":
+                # Keep model-written English tips untouched, but always render rule-written text
+                # in the active language (and always rule-written for Spanish).
+                if active_lang != "en" or row.get("source") != "model":
+                    return {**_public(row), "message": rule_message, "reasoning": tip["reasoning"]}
                 return _public(row)
             continue
-        tip = _with_model_wording(tip, user_id, seen_keys, state, session)
+        tip = _with_model_wording(tip, user_id, seen_keys, state, session, lang=active_lang)
         next_step = tip.pop("next_step")
         message = f"{tip['message']} {next_step}" if next_step else tip["message"]
         try:
@@ -587,6 +861,8 @@ def get_current_tip(user_id: UUID, day: LocalDay | None = None, session: Any = N
             if inserted and inserted[0]["status"] != "pending":
                 continue
         if inserted:
+            if active_lang != "en":
+                return {**_public(inserted[0]), "message": rule_message, "reasoning": tip["reasoning"]}
             return _public(inserted[0])
     return None
 
@@ -613,15 +889,24 @@ def _change_planned_sets(
     return True
 
 
-def _confirmation(tip: dict[str, Any]) -> str:
+def _not_available(lang: str) -> str:
+    return pick(NOT_AVAILABLE, "Ese cambio ya no está disponible, así que no se modificó nada.", lang)
+
+
+def _confirmation(tip: dict[str, Any], lang: str | None = None) -> str:
     action = tip.get("action") or {}
     if action.get("type") == "add_set":
-        return "Added one set to today's workout."
+        return pick("Added one set to today's workout.", "Se añadió una serie al entrenamiento de hoy.", lang)
     if action.get("type") == "add_kcal":
-        return f"Added {action.get('kcal')} kcal to today's goal."
+        kcal = action.get("kcal")
+        return pick(f"Added {kcal} kcal to today's goal.", f"Se añadieron {kcal} kcal al objetivo de hoy.", lang)
     if action.get("type") == "focus_muscle" or tip["kind"] in PLAN_NOTES:
-        return "Got it, I'll use this in your next workout plan."
-    return "Got it, I'll follow up on this."
+        return pick(
+            "Got it, I'll use this in your next workout plan.",
+            "Entendido, lo tendré en cuenta en tu próximo plan de entrenamiento.",
+            lang,
+        )
+    return pick("Got it, I'll follow up on this.", "Entendido, haré seguimiento de esto.", lang)
 
 
 def accepted_training_notes(user_id: UUID, day_start: datetime, session: Any) -> list[str]:
@@ -659,11 +944,17 @@ def _is_today(tip: dict[str, Any], day: LocalDay) -> bool:
 
 
 def decide_tip(
-    user_id: UUID, tip_id: UUID, status: str, day: LocalDay | None = None, session: Any = None,
+    user_id: UUID,
+    tip_id: UUID,
+    status: str,
+    day: LocalDay | None = None,
+    session: Any = None,
+    lang: str | None = None,
 ) -> dict[str, Any]:
     """Dismiss or accept a tip, then return the next one. Repeating a decision changes nothing."""
     if status not in ("accepted", "dismissed"):
         raise ValueError("Invalid decision status")
+    active_lang = normalize_language(lang) if lang is not None else get_language()
     session = session or get_supabase(admin=True)
     day = day or utc_day()
     tip = _find_tip(session, user_id, tip_id)
@@ -674,7 +965,7 @@ def decide_tip(
     # Claim the tip before applying it, so a double tap cannot apply it twice.
     if tip["status"] == "pending" and _set_status(session, str(tip_id), "dismissed" if is_stale else status, "pending"):
         if status == "accepted" and is_stale:
-            notice = NOT_AVAILABLE
+            notice = _not_available(active_lang)
         elif status == "accepted" and action.get("type") == "add_set":
             try:
                 applied = _change_planned_sets(session, user_id, str(action.get("exercise_id")), day, 1)
@@ -683,19 +974,26 @@ def decide_tip(
                 raise
             if not applied:
                 _set_status(session, str(tip_id), "dismissed", status)
-                notice = NOT_AVAILABLE
+                notice = _not_available(active_lang)
         elif status == "accepted":
             applied = True
     return {
         "applied": applied,
         "notice": notice,
-        "confirmation": _confirmation(tip) if applied else None,
-        "tip": get_current_tip(user_id, day, session),
+        "confirmation": _confirmation(tip, active_lang) if applied else None,
+        "tip": get_current_tip(user_id, day, session, lang=active_lang),
     }
 
 
-def undo_tip(user_id: UUID, tip_id: UUID, day: LocalDay | None = None, session: Any = None) -> dict[str, Any]:
+def undo_tip(
+    user_id: UUID,
+    tip_id: UUID,
+    day: LocalDay | None = None,
+    session: Any = None,
+    lang: str | None = None,
+) -> dict[str, Any]:
     """Reverse an accepted tip from today and offer it again. Repeating an undo changes nothing."""
+    active_lang = normalize_language(lang) if lang is not None else get_language()
     session = session or get_supabase(admin=True)
     day = day or utc_day()
     tip = _find_tip(session, user_id, tip_id)
@@ -714,7 +1012,11 @@ def undo_tip(user_id: UUID, tip_id: UUID, day: LocalDay | None = None, session: 
                 _set_status(session, str(tip_id), "accepted", "pending")
     return {
         "applied": undone,
-        "notice": "Change undone." if undone else "That change can no longer be undone.",
+        "notice": (
+            pick("Change undone.", "Cambio deshecho.", active_lang)
+            if undone
+            else pick("That change can no longer be undone.", "Ese cambio ya no se puede deshacer.", active_lang)
+        ),
         "confirmation": None,
-        "tip": get_current_tip(user_id, day, session),
+        "tip": get_current_tip(user_id, day, session, lang=active_lang),
     }

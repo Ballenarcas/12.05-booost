@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from app.core.auth import issue_access_token, revoke_user_sessions
 from app.core.config import get_settings
+from app.core.i18n import pick
 from app.core.reset_quota import allow_reset_email
 from app.core.security import hash_password, verify_password
 from app.db.supabase_client import get_supabase
@@ -108,7 +109,8 @@ class OnboardingFacade:
         token, expires_at = issue_access_token(str(user_id))
         return UserOnboardingResponse(status="success", user_id=user_id, name=payload.name,
             surname=payload.surname, email=email, calorie_goal=calorie_goal,
-            message=f"Welcome to BOOOST, {payload.name}!", saved_to_supabase=True,
+            message=pick(f"Welcome to BOOOST, {payload.name}!", f"¡Bienvenido a BOOOST, {payload.name}!"),
+            saved_to_supabase=True,
             access_token=token, token_expires_at=_expires_at(expires_at))
 
     def login(self, payload: UserLoginRequest) -> UserLoginResponse:
