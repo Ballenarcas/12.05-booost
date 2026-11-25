@@ -1,6 +1,7 @@
-import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, GripVertical, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, GripVertical, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 import { SelectExerciseModal } from '../components/layout/SelectExerciseModal'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { createRoutine, updateRoutine } from '../services/api'
@@ -20,7 +21,7 @@ function normalizeExerciseName(name: string): string {
 }
 
 function CreateRoutine() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const location = useLocation()
   const routineToEdit = (location.state as { routine?: Routine } | null)?.routine
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -148,7 +149,7 @@ function CreateRoutine() {
   const canSave = selectedExercises.length > 0 && !isSaving
 
   return (
-    <div className="screen routine-builder-screen">
+    <div className="screen hifi-theme routine-builder-screen">
       <header className="routine-builder-header">
         <button className="icon-button" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts">
           <ArrowLeft size={20} aria-hidden="true" />
@@ -157,10 +158,6 @@ function CreateRoutine() {
         <PremiumUpsellButton compact />
       </header>
 
-      <section className="routine-builder-intro">
-        <strong>{routineToEdit ? 'Refine your training plan.' : 'Make every session count.'}</strong>
-        <p>{routineToEdit ? 'Change the name, exercises, order, sets, or reps. Your existing routine will be updated.' : 'Name your routine, choose exercises, and set your target volume. You can adjust your plan any time.'}</p>
-      </section>
 
       <div className="card routine-builder-fields">
         <label htmlFor="routine-name">Routine name</label>
@@ -306,7 +303,7 @@ function CreateRoutine() {
             </div>
           </article>
         ))}
-        {selectedExercises.length === 0 && <div className="routine-builder-empty routine-builder-empty-error">Add at least one exercise to start building your routine.</div>}
+        {selectedExercises.length === 0 && <div className="routine-builder-empty">Add at least one exercise to start building your routine.</div>}
       </section>
 
       {error && <p className="routine-builder-error" role="alert">{error}</p>}
@@ -339,7 +336,7 @@ function CreateRoutine() {
       <div className="routine-builder-footer">
         <button className="secondary-action" type="button" onClick={() => navigate('/workouts')}>Cancel</button>
         <button className="primary-button routine-builder-submit" type="button" onClick={saveRoutine} disabled={!canSave}>
-          {isSaving ? 'Saving...' : routineToEdit ? 'Update Routine' : 'Save Routine'} {!isSaving && <Sparkles size={16} aria-hidden="true" />}
+          {isSaving ? 'Saving...' : routineToEdit ? 'Update Routine' : 'Save Routine'}
         </button>
       </div>
     </div>

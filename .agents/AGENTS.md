@@ -1,4 +1,4 @@
-# SET&PLATE Engineering Guide
+# BOOOST Engineering Guide
 
 Use this guide with the concise repository-level `AGENTS.md`. Prefer accurate, focused changes over broad rewrites.
 

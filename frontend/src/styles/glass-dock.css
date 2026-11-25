@@ -1,73 +1,76 @@
+/* NavBar from the Figma mockup: a frosted bar along the bottom edge with rounded top corners. */
 .gdock {
-  --dock-ink: #fff;
+  --dock-active: #1563a6;
+  --dock-idle: #8dcfe8;
   position: fixed;
   z-index: 10;
-  right: max(1rem, env(safe-area-inset-right));
-  bottom: max(1rem, env(safe-area-inset-bottom));
-  left: max(1rem, env(safe-area-inset-left));
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
-  width: min(17rem, calc(100vw - 2rem));
-  max-width: calc(100vw - 2rem);
-  align-items: flex-end;
-  justify-content: space-around;
-  gap: 0.1rem;
+  width: min(100%, 28rem);
+  min-height: calc(68px + env(safe-area-inset-bottom));
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
   margin: 0 auto;
-  padding: 0.24rem 0.45rem;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 1.2rem;
-  color: var(--dock-ink);
-  background: rgba(39, 39, 39, 0.78);
-  box-shadow: 0 0.7rem 2rem rgba(0, 0, 0, 0.28), inset 0 1px rgba(255, 255, 255, 0.18);
+  padding: 0 1rem env(safe-area-inset-bottom);
+  border-radius: 50px 50px 0 0;
+  background: color-mix(in srgb, var(--background) 40%, transparent);
+  box-shadow: 0 -2px 8px rgba(131, 131, 131, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.6);
   -webkit-backdrop-filter: blur(18px) saturate(150%);
   backdrop-filter: blur(18px) saturate(150%);
   isolation: isolate;
+}
+:root[data-theme="dark"] .gdock {
+  --dock-active: #6fb2ec;
+  --dock-idle: #4a7d93;
+  background: color-mix(in srgb, var(--background) 70%, transparent);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .workout-progress-bar {
   position: fixed;
   z-index: 11;
-  right: max(1rem, env(safe-area-inset-right));
-  bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 3.85rem);
-  left: max(1rem, env(safe-area-inset-left));
+  right: 0.75rem;
+  bottom: calc(68px + env(safe-area-inset-bottom) + 0.5rem);
+  left: 0.75rem;
   display: flex;
-  width: min(26rem, calc(100vw - 2rem));
-  min-height: 4rem;
+  width: min(26.5rem, calc(100vw - 1.5rem));
+  min-height: 3.5rem;
   align-items: center;
   gap: 0.4rem;
   margin-inline: auto;
-  padding: 0.4rem 0.45rem 0.4rem 0.5rem;
-  border: 1px solid rgba(154, 210, 160, 0.34);
-  border-radius: 1rem;
-  color: #fff;
-  background: rgba(24, 32, 25, 0.94);
-  box-shadow: 0 0.65rem 1.8rem rgba(0, 0, 0, 0.35), inset 0 1px rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(18px) saturate(145%);
-  backdrop-filter: blur(18px) saturate(145%);
-  animation: workout-progress-enter 220ms ease-out both;
+  padding: 0.35rem 0.35rem 0.35rem 0.4rem;
+  border-radius: var(--radius-card);
+  color: var(--text);
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  animation: workout-progress-enter 200ms ease-out both;
 }
 
 .workout-progress-resume {
   display: grid;
-  width: 3.25rem;
-  height: 3.25rem;
-  flex: 0 0 3.25rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 2.75rem;
   place-items: center;
   padding: 0;
-  border: 1px solid rgba(145, 211, 151, 0.27);
-  border-radius: 0.8rem;
-  color: #b9efbd;
-  background: rgba(99, 183, 109, 0.13);
+  border: 0;
+  border-radius: 50%;
+  color: var(--on-primary);
+  background: var(--primary);
   cursor: pointer;
 }
 
-.workout-progress-indicator { width: 0.5rem; height: 0.5rem; flex: 0 0 0.5rem; border-radius: 50%; background: var(--green); box-shadow: 0 0 0.7rem rgba(111, 220, 128, 0.7); }
+.workout-progress-indicator { width: 0.5rem; height: 0.5rem; flex: 0 0 0.5rem; border-radius: 50%; background: var(--green); }
 .workout-progress-copy { display: grid; min-width: 0; flex: 1; gap: 0.22rem; }
 .workout-progress-heading { display: flex; min-width: 0; align-items: center; gap: 0.42rem; }
-.workout-progress-heading strong { overflow: hidden; font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
-.workout-progress-copy small { color: #aeb9ae; font-size: 0.62rem; }
-.workout-progress-time { color: #d7e8d8; font-size: 0.75rem; font-variant-numeric: tabular-nums; font-weight: 750; }
-.workout-progress-discard { display: grid; width: 2.55rem; height: 2.55rem; flex: 0 0 2.55rem; place-items: center; border: 1px solid rgba(255, 110, 110, 0.24); border-radius: 0.72rem; color: #ff9a9a; background: rgba(255, 85, 85, 0.08); cursor: pointer; }
-.workout-progress-resume:focus-visible, .workout-progress-discard:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.workout-progress-heading strong { overflow: hidden; font-size: 0.875rem; text-overflow: ellipsis; white-space: nowrap; }
+.workout-progress-copy small { color: var(--text-muted); font-size: 0.8rem; }
+.workout-progress-time { color: var(--text); font-size: 0.875rem; font-variant-numeric: tabular-nums; font-weight: 600; }
+.workout-progress-discard { display: grid; width: 2.75rem; height: 2.75rem; flex: 0 0 2.75rem; place-items: center; border: 0; border-radius: var(--radius-control); color: var(--text-muted); background: transparent; cursor: pointer; }
+.workout-progress-resume:focus-visible, .workout-progress-discard:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 .workout-progress-resume:active { transform: scale(0.96); }
 
 @keyframes workout-progress-enter {
@@ -76,32 +79,26 @@
 }
 
 .gdock-item {
-  position: relative;
-  display: flex;
-  min-width: 2.9rem;
-  min-height: 2.9rem;
-  flex: 0 1 2.9rem;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 0.75rem;
-  color: var(--dock-ink);
+  border-radius: 14px;
+  color: var(--dock-idle);
   background: transparent;
-  opacity: 0.48;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: opacity 180ms ease, transform 160ms ease;
+  transition: color 180ms ease, transform 160ms ease;
 }
 
-.gdock-item[data-active="true"] { opacity: 1; }
+.gdock-item[data-active="true"] { color: var(--dock-active); }
 .gdock-item:active { transform: scale(0.96); }
-.gdock-item:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.gdock-item:focus-visible { outline: 2px solid var(--dock-active); outline-offset: 2px; }
 .gdock-glyph { display: grid; place-items: center; }
-.gdock-dot { position: absolute; bottom: 0.22rem; width: 0.22rem; height: 0.22rem; border-radius: 50%; background: var(--green); opacity: 0; transform: scale(0.4); transition: opacity 180ms ease, transform 240ms ease; }
-.gdock-item[data-active="true"] .gdock-dot { opacity: 1; transform: scale(1); }
 
 @media (prefers-reduced-motion: reduce) {
-  .gdock-item, .gdock-dot { transition-duration: 0.01ms; }
+  .gdock-item { transition-duration: 0.01ms; }
   .workout-progress-bar { animation-duration: 0.01ms; }
 }

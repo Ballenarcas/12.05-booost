@@ -31,7 +31,7 @@ Supabase stays external. There is no database container and no persistent volume
 
 1. Push this repository to GitHub, GitLab, or another Git host that the NAS can reach.
 2. In Portainer, open **Stacks -> Add stack**.
-3. Name the stack `set-and-plate`.
+3. Name the stack `booost`.
 4. Choose **Repository** as the build method.
    - Repository URL: your clone URL.
    - Reference: `refs/heads/master`.
@@ -52,7 +52,7 @@ Supabase stays external. There is no database container and no persistent volume
    AI_API_KEY=
    AI_MODEL=openai/gpt-oss-20b
    RESEND_API_KEY=
-   EMAIL_FROM=SET&PLATE <no-reply@your-domain.com>
+   EMAIL_FROM=BOOOST <no-reply@your-domain.com>
    APP_URL=https://zimaos.tailxxxx.ts.net
    WEB_CONCURRENCY=1
    ```
@@ -116,8 +116,8 @@ docker compose --env-file .env.homelab up -d
 Both pull the new images from GHCR. Building locally is only needed if you changed a Dockerfile and did not push to GitHub:
 
 ```sh
-docker build -t ghcr.io/ballenarcas/set-plate-backend:latest ./backend
-docker build -t ghcr.io/ballenarcas/set-plate-frontend:latest ./frontend
+docker build -t ghcr.io/ballenarcas/booost-backend:latest ./backend
+docker build -t ghcr.io/ballenarcas/booost-frontend:latest ./frontend
 docker compose --env-file .env.homelab up -d
 ```
 
@@ -134,7 +134,7 @@ Stack webhooks are a Portainer **Business Edition** feature, so this drives the 
 
 One-time setup:
 
-1. **Make the packages pullable.** The NAS pulls anonymously, so both GHCR packages have to be public: **GitHub -> your avatar -> Your packages -> `set-plate-backend` -> Package settings -> Change visibility -> Public**, and the same for `set-plate-frontend`. They appear after the first green push. If you would rather keep them private, add the registry in Portainer (**Registries -> Add registry -> Custom**: `ghcr.io`, your GitHub username, and a PAT with `read:packages`) and select it when deploying the stack.
+1. **Make the packages pullable.** The NAS pulls anonymously, so both GHCR packages have to be public: **GitHub -> your avatar -> Your packages -> `booost-backend` -> Package settings -> Change visibility -> Public**, and the same for `booost-frontend`. They appear after the first green push. If you would rather keep them private, add the registry in Portainer (**Registries -> Add registry -> Custom**: `ghcr.io`, your GitHub username, and a PAT with `read:packages`) and select it when deploying the stack.
 2. **Track master**: **Stacks -> the stack -> Repository reference** set to `refs/heads/master`. The redeploy uses the branch configured in the stack, not the branch that triggered CI.
 3. **Create a Portainer API token**: **My account -> Access tokens -> Add access token**. It is shown once and expires when you say so; `PORTAINER_API_TOKEN` is that value.
 4. **Create a Tailscale OAuth client**: admin console -> **Settings -> Trust credentials** (the page was called *OAuth clients* before the rename) -> generate one with the **`auth_keys` write scope** and the `tag:ci` tag. The tag also needs an owner in the policy file (`"tagOwners": { "tag:ci": ["autogroup:admin"] }`) and a grant to reach the NAS on the Portainer port:
@@ -180,10 +180,10 @@ After the call it does not trust the `200`: it waits up to ten minutes for `/hea
 To confirm by hand which image the frontend is running:
 
 ```sh
-docker inspect --format '{{.Config.Image}} {{.Created}}' set_plate-frontend-1
+docker inspect --format '{{.Config.Image}} {{.Created}}' booost-frontend-1
 ```
 
-The `Created` timestamp must be recent, and the image must be `ghcr.io/ballenarcas/set-plate-frontend:latest`.
+The `Created` timestamp must be recent, and the image must be `ghcr.io/ballenarcas/booost-frontend:latest`.
 
 ## Remote access for testers
 
@@ -217,7 +217,7 @@ Avoid it for this demo. If you must use it, put a reverse proxy with authenticat
 | `400 Invalid host header` | The host you opened is missing from `ALLOWED_HOSTS` (no scheme, no port). Restart the backend after editing it. |
 | Frontend never starts, backend `unhealthy` | `ALLOWED_HOSTS` must include `127.0.0.1` and `localhost`: the healthcheck calls `/health` on loopback. |
 | `AUTH_SECRET_KEY is required` on deploy | The `:?` guards reject an empty value. Generate one with the command in `.env.homelab.example`. |
-| `required variable <X> is missing a value`, and `<X>` changes on every attempt | Compose reports a random missing variable because it walks a Go map. Either the stack really has none of them, or the API call sent an empty `Env` (Portainer CE 2.19-2.21 replace `stack.Env` with the payload's, even when it is absent). The workflow now reads the stack and sends its `Env` back, so this means the values are genuinely absent or empty: edit **Stacks -> set_plate -> Environment variables** and click **Update the stack**. |
+| `required variable <X> is missing a value`, and `<X>` changes on every attempt | Compose reports a random missing variable because it walks a Go map. Either the stack really has none of them, or the API call sent an empty `Env` (Portainer CE 2.19-2.21 replace `stack.Env` with the payload's, even when it is absent). The workflow now reads the stack and sends its `Env` back, so this means the values are genuinely absent or empty: edit **Stacks -> booost -> Environment variables** and click **Update the stack**. |
 | Everyone is logged out after a redeploy | `AUTH_SECRET_KEY` changed. Keep it stable or accept the re-login. |
 | `429` on login | nginx allows 5 attempts per minute per IP by design. Wait a minute. |
 | Blank page or 404 after refresh | Rebuild the frontend and confirm `frontend/nginx.conf` was copied into the image. |
@@ -229,7 +229,7 @@ Avoid it for this demo. If you must use it, put a reverse proxy with authenticat
 | Deploy fails with `HTTP 400` from the Portainer API | The stack was created in the web editor, so it has no Git configuration. Recreate it from the repository; `git/redeploy` only works on Git stacks. |
 | Deploy fails with `HTTP 401`/`403` | `PORTAINER_API_TOKEN` is wrong, expired, or belongs to a user who cannot manage the stack. |
 | Deploy fails with `HTTP 404` | `PORTAINER_STACK_ID` or `PORTAINER_ENDPOINT_ID` is wrong. Both are in the stack URL and in `GET /api/stacks`. |
-| Deploy succeeds but the old page is still served | `docker inspect --format '{{.Config.Image}}' set_plate-frontend-1` must show the `ghcr.io` image. If it shows a local tag, the stack still has a `build:`/local `image:`; if the pull failed, the deploy log says so. |
+| Deploy succeeds but the old page is still served | `docker inspect --format '{{.Config.Image}}' booost-frontend-1` must show the `ghcr.io` image. If it shows a local tag, the stack still has a `build:`/local `image:`; if the pull failed, the deploy log says so. |
 | First load is slow | The first image pull and the first Supabase request are the slow parts. Later loads use nginx caching and the warmed Supabase client. |
 | AI adjustment shows an error | `AI_API_KEY` is empty or invalid, or `AI_MODEL` does not exist at `AI_BASE_URL`. This is expected for a no-cost demo. |
 

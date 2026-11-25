@@ -1,16 +1,41 @@
-.welcome-screen { display: flex; width: min(100%, 28rem); min-height: 100svh; margin: 0 auto; flex-direction: column; justify-content: space-between; padding: max(1.5rem, env(safe-area-inset-top)) 1.35rem max(1.5rem, env(safe-area-inset-bottom)); background: var(--background); }
-.welcome-mark { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--green); font-size: 0.8rem; font-weight: 800; letter-spacing: 0.12em; }
-.welcome-hero { padding: 15vh 0 10vh; }
-.welcome-kicker { margin-bottom: 1rem; color: var(--green); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
-.welcome-hero h1 { max-width: 19rem; margin: 0 0 1rem; color: #fff; font-size: clamp(2.3rem, 11vw, 3.4rem); line-height: 0.98; letter-spacing: 0; }
-.welcome-hero p { max-width: 21rem; margin: 0; color: var(--text-muted); font-size: 1rem; line-height: 1.55; }
-.welcome-actions { display: grid; justify-items: start; gap: 0.65rem; margin-top: 1.75rem; }
-.welcome-cta, .welcome-existing-cta { display: inline-flex; min-height: 3.1rem; align-items: center; justify-content: center; padding: 0 1rem; border-radius: 0.75rem; font-size: 0.85rem; font-weight: 800; text-decoration: none; }
-.welcome-cta { gap: 0.55rem; color: #071c0e; background: var(--green); }
-.welcome-features { display: grid; gap: 0.7rem; }
-.welcome-feature { display: flex; align-items: center; gap: 0.8rem; padding: 0.9rem; border: 1px solid var(--line); border-radius: 0.85rem; background: var(--surface); }
-.welcome-feature-icon { display: grid; flex: 0 0 auto; width: 2.4rem; height: 2.4rem; place-items: center; border-radius: 0.65rem; color: var(--green); background: #293a2e; }
-.welcome-feature h2 { margin: 0 0 0.15rem; color: #fff; font-size: 0.9rem; }
-.welcome-feature p { margin: 0; color: var(--text-muted); font-size: 0.75rem; }
+/* Welcome: the first screen, where people choose to sign up or log in. Uses the redesign pieces. */
+.welcome-screen {
+  display: flex;
+  width: min(100%, 28rem);
+  min-height: 100svh;
+  margin: 0 auto;
+  flex-direction: column;
+  gap: 24px;
+  padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem max(1.5rem, env(safe-area-inset-bottom));
+  color: var(--hifi-ink);
+  font-family: var(--hifi-sans);
+}
+.welcome-mark { margin: 0; color: var(--hifi-ink); font-family: var(--hifi-mono); font-size: 14px; letter-spacing: 0.12em; text-align: center; }
 
-@media (min-width: 700px) { .welcome-screen { border-inline: 1px solid #242424; padding-inline: 1.5rem; } }
+/* A glimpse of Home that fades out at the bottom, so it reads as a preview and not live data. */
+.welcome-preview {
+  display: grid;
+  gap: 12px;
+  margin-block: auto;
+  pointer-events: none;
+  user-select: none;
+  -webkit-mask-image: linear-gradient(#000 62%, transparent);
+  mask-image: linear-gradient(#000 62%, transparent);
+}
+.welcome-workout { gap: 12px; }
+.welcome-workout-row { display: flex; align-items: center; gap: 12px; }
+.welcome-workout-row .hifi-photo { border-radius: 6px; }
+.welcome-workout-copy { display: grid; gap: 6px; }
+.welcome-workout-copy strong { font-size: 20px; font-weight: 400; line-height: 1.2; }
+
+.welcome-hero h1 { margin: 0 0 10px; color: var(--hifi-ink); font-size: clamp(30px, 8.5vw, 36px); font-weight: 500; letter-spacing: -0.01em; line-height: 1.1; }
+.welcome-hero p { max-width: 22rem; margin: 0; color: var(--hifi-muted); font-size: 16px; line-height: 1.5; }
+
+/* Two clear choices: the main one filled in the selected blue, the other a plain pill. */
+.welcome-actions { display: grid; gap: 12px; }
+.welcome-actions .hifi-pill { display: flex; min-height: 52px; align-items: center; justify-content: center; text-decoration: none; }
+.welcome-actions .welcome-start { color: var(--hifi-on-selected); background: var(--hifi-selected); }
+.welcome-actions .welcome-login { background: var(--hifi-button); font-size: 15px; }
+.welcome-actions .hifi-pill:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+
+@media (min-width: 700px) { .welcome-screen { padding-inline: 1.5rem; } }

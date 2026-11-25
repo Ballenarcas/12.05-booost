@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SET&PLATE - wger Exercise Importer CLI
+"""BOOOST - wger Exercise Importer CLI
 
 Usage:
     python scripts/import_wger.py [--limit N] [--no-supabase]
@@ -17,7 +17,7 @@ from app.services.wger_importer import run_import, sync_cached_to_supabase
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Import exercises from wger REST API into SET&PLATE.")
+    parser = argparse.ArgumentParser(description="Import exercises from wger REST API into BOOOST.")
     parser.add_argument(
         "--sync-cache",
         action="store_true",
@@ -48,7 +48,7 @@ def main():
     args = parser.parse_args()
 
     print("========================================")
-    print("SET&PLATE - wger API Exercise Importer")
+    print("BOOOST - wger API Exercise Importer")
     print("========================================")
 
     if args.sync_cache:

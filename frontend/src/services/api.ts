@@ -9,15 +9,17 @@ const LOGIN_TIMEOUT_MS = 15000
 const DASHBOARD_TIMEOUT_MS = 15000
 const LLM_TIMEOUT_MS = 20000
 const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
-const DASHBOARD_CACHE_PREFIX = 'set_plate_dashboard:'
+const DASHBOARD_CACHE_PREFIX = 'booost_dashboard:'
 const DASHBOARD_CACHE_TTL_MS = 30_000
 const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
 const nutritionRequests = new Map<string, Promise<TodayNutritionData>>()
 const adjustmentRequests = new Map<string, Promise<CalorieAdjustmentData>>()
 const workoutStatisticsCache = new Map<string, { data: WorkoutStatistics; expiresAt: number }>()
+const nutritionStatisticsCache = new Map<string, { data: NutritionStatistics; expiresAt: number }>()
 const WORKOUT_STATISTICS_CACHE_TTL_MS = 30_000
-const NUTRITION_CACHE_PREFIX = 'set_plate_nutrition:'
+const NUTRITION_CACHE_PREFIX = 'booost_nutrition:'
 const NUTRITION_CACHE_TTL_MS = 60_000
+import type { NutritionStatistics, NutritionStatisticsRange } from '../types/nutrition'
 import type {
   LiveWorkoutAdjustmentRequest,
   LiveWorkoutAdjustmentResponse,
@@ -30,6 +32,7 @@ import type {
   WorkoutStatisticsRange,
 } from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
+import { DEFAULT_STATISTICS_RANGE } from '../utils/workoutStatistics'
 import type { PremiumPlan, UserProfile } from '../types'
 import type {
   HealthActivityDay,
@@ -86,8 +89,8 @@ export interface DashboardSummary {
   activity: HealthActivitySummary
 }
 
-const SESSION_KEY = 'set_plate_session'
-const STORAGE_PREFIX = 'set_plate_'
+const SESSION_KEY = 'booost_session'
+const STORAGE_PREFIX = 'booost_'
 
 export function activeWorkoutStorageKey(userId: string | undefined = getCurrentUser()?.id): string | null {
   return userId ? `${STORAGE_PREFIX}active_workout:${userId}` : null
@@ -97,8 +100,15 @@ export function overtrainingModPctStorageKey(userId: string | undefined = getCur
   return userId ? `${STORAGE_PREFIX}overtraining_mod_pct:${userId}` : null
 }
 
-export function overtrainingStateSessionKey(userId: string | undefined = getCurrentUser()?.id): string | null {
-  return userId ? `${STORAGE_PREFIX}overtraining_state:${userId}` : null
+export function getActiveDeloadPct(userId: string | undefined = getCurrentUser()?.id): number {
+  try {
+    const key = overtrainingModPctStorageKey(userId)
+    if (!key) return 0
+    const modPct = Number(localStorage.getItem(key) || '0')
+    return Number.isFinite(modPct) && modPct > 0 ? modPct : 0
+  } catch {
+    return 0
+  }
 }
 
 function clearStorageByPrefix(storage: Storage, prefix: string): void {
@@ -120,11 +130,13 @@ export function getAccessToken(): string | null {
 }
 
 export function clearSession(): void {
+  shortCache.clear()
   dashboardRequests.clear()
   insightRequests.clear()
   nutritionRequests.clear()
   adjustmentRequests.clear()
   workoutStatisticsCache.clear()
+  nutritionStatisticsCache.clear()
   routinesRequests.clear()
   exerciseListCache.clear()
   exerciseListInflight.clear()
@@ -149,23 +161,83 @@ async function apiFetch(input: string, init: RequestInit = {}): Promise<Response
   return response
 }
 
+function todayKey(): string {
+  return new Date().toDateString()
+}
+
+// Kept on the device, not just the tab, so reopening the app shows the last dashboard at once while a
+// fresh one loads. Only today's copy is used, and signing out removes it.
 function readDashboardCache(userId: string): { data: DashboardSummary; at: number } | null {
   try {
-    const saved = sessionStorage.getItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
+    const saved = localStorage.getItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
     if (!saved) return null
-    const cached = JSON.parse(saved) as { data: DashboardSummary; at: number }
-    return cached?.data && typeof cached.at === 'number' ? cached : null
+    const cached = JSON.parse(saved) as { data: DashboardSummary; at: number; day?: string }
+    return cached?.data && typeof cached.at === 'number' && cached.day === todayKey() ? cached : null
   } catch {
     return null
   }
 }
 
+// Last answers kept on the device, so pages show them at once on the next visit (even after the
+// app is reopened) while a fresh copy loads. Cleared when the data changes and on sign-out.
+const SAVED_COPY_PREFIX = 'booost_copy:'
+
+export function readSavedCopy<T>(key: string): T | null {
+  try {
+    return JSON.parse(localStorage.getItem(SAVED_COPY_PREFIX + key) ?? 'null') as T | null
+  } catch {
+    return null
+  }
+}
+
+function saveCopy(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(SAVED_COPY_PREFIX + key, JSON.stringify(value))
+  } catch {
+    // The fresh answer is still shown when storage is unavailable or full.
+  }
+}
+
+function forgetSavedCopies(prefix = ''): void {
+  try {
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith(SAVED_COPY_PREFIX + prefix))
+      .forEach((key) => localStorage.removeItem(key))
+  } catch {
+    // Nothing saved to forget when storage is unavailable.
+  }
+}
+
+// Short in-memory cache for what Home shows next to the dashboard. Same request in flight is shared,
+// so Home and Workouts never fetch it twice at once. Cleared with the dashboard after any change.
+const SHORT_CACHE_TTL_MS = 30_000
+const shortCache = new Map<string, { at: number; value: Promise<unknown> }>()
+
+function cachedRequest<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const hit = shortCache.get(key)
+  if (hit && Date.now() - hit.at < SHORT_CACHE_TTL_MS) return hit.value as Promise<T>
+  const value = load()
+  shortCache.set(key, { at: Date.now(), value })
+  value.catch(() => { if (shortCache.get(key)?.value === value) shortCache.delete(key) })
+  return value
+}
+
+/** A decided tip is replaced by the next one, so the cached tip must not come back. */
+function forgetCachedTip(): void {
+  for (const key of [...shortCache.keys()]) if (key.startsWith('tip:')) shortCache.delete(key)
+}
+
 export function clearDashboardCache(): void {
   dashboardRequests.clear()
+  shortCache.clear()
+  invalidateNutritionStatisticsCache()
+  forgetSavedCopies('history:')
+  forgetSavedCopies('nutrition:')
+  forgetSavedCopies('overtraining:')
   try {
-    Object.keys(sessionStorage)
+    Object.keys(localStorage)
       .filter((key) => key.startsWith(DASHBOARD_CACHE_PREFIX))
-      .forEach((key) => sessionStorage.removeItem(key))
+      .forEach((key) => localStorage.removeItem(key))
   } catch {
     // The next dashboard request remains authoritative if browser storage is unavailable.
   }
@@ -192,7 +264,7 @@ export async function fetchDashboardSummary(options: { forceRefresh?: boolean } 
       if (!response.ok) throw new Error("We couldn't load your dashboard. Please try again.")
       const data = await response.json() as DashboardSummary
       try {
-        sessionStorage.setItem(`${DASHBOARD_CACHE_PREFIX}${userId}`, JSON.stringify({ data, at: Date.now() }))
+        localStorage.setItem(`${DASHBOARD_CACHE_PREFIX}${userId}`, JSON.stringify({ data, at: Date.now(), day: todayKey() }))
       } catch {
         // The fresh response remains usable when browser storage is unavailable.
       }
@@ -221,6 +293,7 @@ const routinesRequests = new Map<string, Promise<Routine[]>>()
 
 export function clearRoutinesCache(): void {
   routinesRequests.clear()
+  forgetSavedCopies('routines:')
 }
 
 export async function fetchRoutines(): Promise<Routine[]> {
@@ -234,7 +307,9 @@ export async function fetchRoutines(): Promise<Routine[]> {
   })
     .then(async (response) => {
       if (!response.ok) throw new Error("We couldn't load your routines. Please try again.")
-      return response.json() as Promise<Routine[]>
+      const routines = await response.json() as Routine[]
+      saveCopy(`routines:${userId}`, routines)
+      return routines
     })
     .catch((error: unknown) => {
       if (routinesRequests.get(userId) === request) routinesRequests.delete(userId)
@@ -424,7 +499,14 @@ export async function requestWarmupRecommendation(
 }
 
 
-export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]> {
+export function fetchWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]> {
+  return cachedRequest(`history:${userId}`, () => loadWorkoutHistory(userId).then((items) => {
+    saveCopy(`history:${userId}`, items)
+    return items
+  }))
+}
+
+async function loadWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]> {
   const query = new URLSearchParams({ user_id: userId, limit: '30' })
   const response = await apiFetch(`${API_URL}/api/v1/workouts/history?${query}`, {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -469,11 +551,78 @@ export async function deleteWorkoutHistoryEntry(userId: string, workoutId: strin
   clearDashboardCache()
 }
 
+// The last statistics for each range are also kept on the device, so the page can show them at
+// once while fresh ones load. Only today's copy is used; saving or deleting a workout, or signing
+// out, removes them.
+const SAVED_STATISTICS_PREFIX = 'booost_stats:'
+const SAVED_NUTRITION_STATISTICS_PREFIX = 'booost_nutrition_stats:'
+
+export function getSavedWorkoutStatistics(userId: string, range: WorkoutStatisticsRange): WorkoutStatistics | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(`${SAVED_STATISTICS_PREFIX}${userId}:${range}`) ?? 'null') as { data: WorkoutStatistics; day: string } | null
+    return saved?.day === new Date().toDateString() ? saved.data : null
+  } catch {
+    return null
+  }
+}
+
+export function getSavedNutritionStatistics(userId: string, range: NutritionStatisticsRange): NutritionStatistics | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(`${SAVED_NUTRITION_STATISTICS_PREFIX}${userId}:${range}`) ?? 'null') as { data: NutritionStatistics; day: string } | null
+    return saved?.day === new Date().toDateString() ? saved.data : null
+  } catch {
+    return null
+  }
+}
+
+function forgetSavedStatistics(userId?: string): void {
+  try {
+    const prefix = `${SAVED_STATISTICS_PREFIX}${userId ?? ''}`
+    Object.keys(localStorage).filter((key) => key.startsWith(prefix)).forEach((key) => localStorage.removeItem(key))
+  } catch {
+    // Nothing saved to forget when storage is unavailable.
+  }
+}
+
+function forgetSavedNutritionStatistics(userId?: string): void {
+  try {
+    const prefix = `${SAVED_NUTRITION_STATISTICS_PREFIX}${userId ?? ''}`
+    Object.keys(localStorage).filter((key) => key.startsWith(prefix)).forEach((key) => localStorage.removeItem(key))
+  } catch {
+    // Nothing saved to forget when storage is unavailable.
+  }
+}
+
 function invalidateWorkoutStatisticsCache(userId: string): void {
   const prefix = `${userId}:`
   for (const key of workoutStatisticsCache.keys()) {
     if (key.startsWith(prefix)) workoutStatisticsCache.delete(key)
   }
+  forgetSavedStatistics(userId)
+}
+
+function invalidateNutritionStatisticsCache(userId?: string): void {
+  if (userId) {
+    const prefix = `${userId}:`
+    for (const key of nutritionStatisticsCache.keys()) {
+      if (key.startsWith(prefix)) nutritionStatisticsCache.delete(key)
+    }
+  } else {
+    nutritionStatisticsCache.clear()
+  }
+  forgetSavedNutritionStatistics(userId)
+}
+
+/** Loads what the main pages show in the background, so their first visit is instant too. */
+export function prefetchMainPages(): void {
+  const userId = getCurrentUser()?.id
+  if (!userId) return
+  const quietly = (request: Promise<unknown>) => { void request.catch(() => undefined) }
+  quietly(fetchWorkoutStatistics(userId, DEFAULT_STATISTICS_RANGE))
+  quietly(fetchNutritionStatistics(userId, DEFAULT_STATISTICS_RANGE))
+  quietly(fetchRoutines())
+  quietly(fetchWorkoutHistory(userId))
+  quietly(fetchTodayNutrition(userId))
 }
 
 export async function fetchWorkoutStatistics(
@@ -502,6 +651,44 @@ export async function fetchWorkoutStatistics(
   }
   const data = await response.json() as WorkoutStatistics
   workoutStatisticsCache.set(cacheKey, { data, expiresAt: Date.now() + WORKOUT_STATISTICS_CACHE_TTL_MS })
+  try {
+    localStorage.setItem(`${SAVED_STATISTICS_PREFIX}${userId}:${range}`, JSON.stringify({ data, day: new Date().toDateString() }))
+  } catch {
+    // The fresh response is still shown when storage is unavailable or full.
+  }
+  return data
+}
+
+export async function fetchNutritionStatistics(
+  userId: string,
+  range: NutritionStatisticsRange,
+  signal?: AbortSignal,
+): Promise<NutritionStatistics> {
+  const timezoneOffsetMinutes = new Date().getTimezoneOffset()
+  const cacheKey = `${userId}:${range}:${timezoneOffsetMinutes}`
+  const cached = nutritionStatisticsCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.data
+  if (cached) nutritionStatisticsCache.delete(cacheKey)
+
+  const query = new URLSearchParams({
+    range,
+    timezone_offset_minutes: String(timezoneOffsetMinutes),
+  })
+  const timeout = AbortSignal.timeout(DASHBOARD_TIMEOUT_MS)
+  const response = await apiFetch(`${API_URL}/api/v1/nutrition/statistics?${query}`, {
+    cache: 'no-store',
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  })
+  if (!response.ok) {
+    throw new Error("We couldn't load your meal statistics. Please try again.")
+  }
+  const data = await response.json() as NutritionStatistics
+  nutritionStatisticsCache.set(cacheKey, { data, expiresAt: Date.now() + WORKOUT_STATISTICS_CACHE_TTL_MS })
+  try {
+    localStorage.setItem(`${SAVED_NUTRITION_STATISTICS_PREFIX}${userId}:${range}`, JSON.stringify({ data, day: new Date().toDateString() }))
+  } catch {
+    // The fresh response is still shown when storage is unavailable or full.
+  }
   return data
 }
 
@@ -562,7 +749,7 @@ export async function loginUser(email: string, password: string): Promise<import
   clearSession()
   try {
     localStorage.setItem(SESSION_KEY, profile.access_token)
-    localStorage.setItem('set_plate_user', JSON.stringify(profile))
+    localStorage.setItem('booost_user', JSON.stringify(profile))
   } catch {
     throw new Error("We couldn't keep you signed in on this device. Please try again.")
   }
@@ -582,7 +769,7 @@ export interface TrainerInsightResponse {
 
 export async function getHealth(): Promise<{ status: string }> {
   const response = await apiFetch(`${API_URL}/api/v1/health`)
-  if (!response.ok) throw new Error("We couldn't reach SET&PLATE. Check your connection and try again.")
+  if (!response.ok) throw new Error("We couldn't reach BOOOST. Check your connection and try again.")
   return response.json() as Promise<{ status: string }>
 }
 
@@ -800,8 +987,8 @@ export async function fetchExerciseCategories(): Promise<string[]> {
 export async function fetchExerciseMuscleGroups(): Promise<string[]> {
   const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/muscle-groups`)
   if (!response.ok) throw new Error('Failed to fetch exercise muscle groups')
-  const data = await response.json() as { muscle_groups: string[] }
-  return data.muscle_groups
+  const data = await response.json() as { muscle_groups?: string[] }
+  return data.muscle_groups ?? []
 }
 
 export async function fetchExerciseById(exerciseId: string) {
@@ -878,7 +1065,7 @@ export async function submitUserOnboarding(formData: import('../types').UserOnbo
   clearSession()
   try {
     if (data.access_token) localStorage.setItem(SESSION_KEY, data.access_token)
-    localStorage.setItem('set_plate_user', JSON.stringify(localProfile))
+    localStorage.setItem('booost_user', JSON.stringify(localProfile))
   } catch {
     // Ignore
   }
@@ -888,7 +1075,7 @@ export async function submitUserOnboarding(formData: import('../types').UserOnbo
 
 export function getCurrentUser(): import('../types').UserProfile | null {
   try {
-    const saved = localStorage.getItem('set_plate_user')
+    const saved = localStorage.getItem('booost_user')
     return saved ? JSON.parse(saved) : null
   } catch {
     return null
@@ -903,7 +1090,7 @@ export interface PremiumStatus {
   expires_at: string
 }
 
-export const PREMIUM_UPDATED_EVENT = 'set_plate:premium-updated'
+export const PREMIUM_UPDATED_EVENT = 'booost:premium-updated'
 
 export function isPremiumActive(profile: UserProfile | null = getCurrentUser()): boolean {
   if (!profile?.is_premium) return false
@@ -945,7 +1132,7 @@ export async function purchasePremium(plan: PremiumPlan): Promise<PremiumStatus>
   }
 
   try {
-    localStorage.setItem('set_plate_user', JSON.stringify(updatedProfile))
+    localStorage.setItem('booost_user', JSON.stringify(updatedProfile))
   } catch {
     // The server response is still authoritative when browser storage is unavailable.
   }
@@ -968,7 +1155,7 @@ export async function cancelPremium(): Promise<void> {
   const user = getCurrentUser()
   if (user) {
     try {
-      localStorage.setItem('set_plate_user', JSON.stringify({
+      localStorage.setItem('booost_user', JSON.stringify({
         ...user,
         premium_expires_at: status.expires_at,
         premium_cancel_at_period_end: true,
@@ -998,9 +1185,9 @@ export async function updateUserSettings(
   try {
     const user = getCurrentUser()
     if (user?.id === userId) {
-      localStorage.setItem('set_plate_user', JSON.stringify({ ...user, ...settings }))
+      localStorage.setItem('booost_user', JSON.stringify({ ...user, ...settings }))
     }
-    sessionStorage.removeItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
+    localStorage.removeItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
   } catch {
     // The saved server response remains authoritative if browser storage is unavailable.
   }
@@ -1073,6 +1260,11 @@ function nutritionCacheKey(userId: string, windowStart: string): string {
   return `${NUTRITION_CACHE_PREFIX}${userId}:${windowStart}`
 }
 
+/** The last copy of a day's meals saved on this device, however old; the page refreshes it. */
+export function getSavedDayNutrition(userId: string, dateString?: string): TodayNutritionData | null {
+  return userId ? readSavedCopy<TodayNutritionData>(`nutrition:${userId}:${localDayWindow(dateString).today_start}`) : null
+}
+
 export function getCachedTodayNutrition(userId: string, dateString?: string): TodayNutritionData | null {
   if (!userId) return null
   try {
@@ -1108,6 +1300,7 @@ export async function fetchTodayNutrition(userId: string, dateString?: string): 
           nutritionCacheKey(userId, window.today_start),
           JSON.stringify({ data, at: Date.now() }),
         )
+        saveCopy(`nutrition:${userId}:${window.today_start}`, data)
       } catch {
         // The fresh response remains usable when browser storage is unavailable.
       }
@@ -1196,7 +1389,11 @@ function clearGoalCaches(): void {
   }
 }
 
-export async function fetchCurrentTip(): Promise<AiTip | null> {
+export function fetchCurrentTip(): Promise<AiTip | null> {
+  return cachedRequest(`tip:${getCurrentUser()?.id ?? ''}:${localDayQuery()}`, loadCurrentTip)
+}
+
+async function loadCurrentTip(): Promise<AiTip | null> {
   const response = await apiFetch(`${API_URL}/api/v1/ai/tips/current?${localDayQuery()}`, { signal: AbortSignal.timeout(LLM_TIMEOUT_MS) })
   if (!response.ok) throw new Error("We couldn't load your tip.")
   return ((await response.json()) as { tip: AiTip | null }).tip
@@ -1210,6 +1407,7 @@ export async function decideTip(tipId: string, status: 'accepted' | 'dismissed')
     signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
   })
   if (!response.ok) throw new Error("We couldn't update this tip. Please try again.")
+  forgetCachedTip()
   if (status === 'accepted') clearGoalCaches()
   return response.json() as Promise<AiTipDecision>
 }
@@ -1220,6 +1418,7 @@ export async function undoTip(tipId: string): Promise<AiTipDecision> {
     signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
   })
   if (!response.ok) throw new Error("We couldn't undo that change. Please try again.")
+  forgetCachedTip()
   clearGoalCaches()
   return response.json() as Promise<AiTipDecision>
 }
@@ -1257,6 +1456,7 @@ export interface MealCreateRequest {
 }
 
 function clearNutritionCache(): void {
+  invalidateNutritionStatisticsCache()
   try {
     Object.keys(sessionStorage)
       .filter((key) => key.startsWith(NUTRITION_CACHE_PREFIX))
@@ -1479,6 +1679,7 @@ export async function addHydrationEntry(payload: { amount: number; unit: 'ml' | 
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
     throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't save this drink. Please try again.")
   }
+  invalidateNutritionStatisticsCache()
   return response.json()
 }
 
@@ -1491,6 +1692,7 @@ export async function removeHydrationEntry(entryId: string): Promise<HydrationTo
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
     throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't remove this drink. Please try again.")
   }
+  invalidateNutritionStatisticsCache()
   return response.json()
 }
 
@@ -1516,7 +1718,7 @@ export async function createCustomExercise(userId: string, payload: import('../t
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(body?.detail || "We couldn't create this exercise.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't create this exercise.")
   }
   exerciseListCache.clear()
   return response.json()
@@ -1530,7 +1732,7 @@ export async function updateCustomExercise(userId: string, exerciseId: string, p
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(body?.detail || "We couldn't update this exercise.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update this exercise.")
   }
   exerciseListCache.clear()
   return response.json()
@@ -1542,7 +1744,7 @@ export async function deleteCustomExercise(userId: string, exerciseId: string): 
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(body?.detail || "We couldn't delete this exercise.")
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't delete this exercise.")
   }
   exerciseListCache.clear()
 }
@@ -1608,81 +1810,193 @@ export async function dismissMealRecommendation(id: string): Promise<void> {
 export interface FatigueFeedbackPayload {
   fatigue_level: number
   soreness_level: number
+  sleep_quality: 'restorative' | 'average' | 'poor'
+  joint_strain: 'none' | 'mild' | 'sharp'
   sore_muscles: string[]
   notes?: string
+}
+
+export interface FatigueFeedbackEntry {
+  id: string
+  fatigue_level: number
+  soreness_level: number
+  sleep_quality: 'restorative' | 'average' | 'poor'
+  joint_strain: 'none' | 'mild' | 'sharp'
+  sore_muscles: string[]
+  notes?: string | null
+  created_at: string
+}
+
+export type OvertrainingSeverity = 'ok' | 'watch' | 'high'
+
+export interface OvertrainingSignal {
+  id: string
+  label: string
+  value: string
+  detail: string
+  severity: OvertrainingSeverity
+}
+
+export interface MuscleStrainSummary {
+  muscle_group: string
+  sets_7d: number
+  hours_since_trained: number | null
+  reported_sore: boolean
+  status: OvertrainingSeverity
 }
 
 export interface OvertrainingAlertStatus {
   has_alert: boolean
   risk_level: 'none' | 'moderate' | 'high'
+  readiness_score: number
+  acwr: number | null
   load_increase_pct: number
   sessions_last_7_days: number
+  total_sets_last_7_days: number
   high_rpe_sets_count: number
+  consecutive_training_days: number
+  avg_workout_fatigue_7d: number | null
+  latest_workout_fatigue: number | null
   repeated_fatigue_reports: number
   strained_muscles: string[]
+  muscle_strain: MuscleStrainSummary[]
+  signals: OvertrainingSignal[]
+  recent_checkins: FatigueFeedbackEntry[]
   headline: string
-  critical_alert_title: string | null
-  critical_alert_body: string | null
-  critical_recommendation: string | null
-  fatigue_feedback_title: string | null
-  fatigue_feedback_body: string | null
-  fatigue_action: string | null
-  ai_modification_title: string | null
-  ai_modification_body: string | null
+  summary: string
+  recommendations: string[]
   volume_reduction_pct: number
-  mods_applied: boolean
+  deload_active: boolean
+  deload_expires_at: string | null
+  rest_day_scheduled: boolean
   dismissed: boolean
 }
 
-export async function fetchOvertrainingAlerts(userId: string): Promise<OvertrainingAlertStatus> {
-  const response = await apiFetch(
-    `${API_URL}/api/v1/workouts/overtraining-alerts?user_id=${encodeURIComponent(userId)}`,
-    { cache: 'no-store', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
-  )
-  if (!response.ok) {
-    throw new Error("We couldn't check your recovery status right now.")
+export function clearOvertrainingCache(): void {
+  for (const key of [...shortCache.keys()]) {
+    if (key.startsWith('overtraining:')) shortCache.delete(key)
   }
-  return response.json() as Promise<OvertrainingAlertStatus>
+  forgetSavedCopies('overtraining:')
 }
 
-export async function submitFatigueFeedback(
-  userId: string,
-  payload: FatigueFeedbackPayload,
-): Promise<void> {
-  const response = await apiFetch(
-    `${API_URL}/api/v1/workouts/fatigue-feedback?user_id=${encodeURIComponent(userId)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
-    },
-  )
-  if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    throw new Error(body?.detail || "We couldn't save your fatigue feedback.")
+export function getSavedOvertrainingAlerts(userId: string | undefined = getCurrentUser()?.id): OvertrainingAlertStatus | null {
+  return userId ? readSavedCopy<OvertrainingAlertStatus>(`overtraining:${userId}`) : null
+}
+
+function syncDeloadMirror(userId: string, status: OvertrainingAlertStatus): void {
+  const key = overtrainingModPctStorageKey(userId)
+  if (!key) return
+  try {
+    if (status.deload_active && status.volume_reduction_pct > 0) {
+      localStorage.setItem(key, String(status.volume_reduction_pct))
+    } else {
+      localStorage.removeItem(key)
+    }
+  } catch {
+    // Ignore storage quota or restriction errors.
   }
 }
 
-export async function applyOvertrainingMods(userId: string): Promise<OvertrainingAlertStatus> {
-  const response = await apiFetch(
-    `${API_URL}/api/v1/workouts/overtraining-alerts/apply?user_id=${encodeURIComponent(userId)}`,
-    { method: 'POST', signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) },
-  )
-  if (!response.ok) {
-    throw new Error("We couldn't apply the recovery modifications.")
-  }
-  clearDashboardCache()
-  return response.json() as Promise<OvertrainingAlertStatus>
+export async function fetchOvertrainingAlerts(
+  options: { forceRefresh?: boolean } = {},
+): Promise<OvertrainingAlertStatus> {
+  const userId = getCurrentUser()?.id
+  if (!userId) throw new Error('Sign in to view your recovery status.')
+  const cacheKey = `overtraining:${userId}:${localDayQuery()}`
+  if (options.forceRefresh) shortCache.delete(cacheKey)
+
+  return cachedRequest(cacheKey, async () => {
+    const response = await apiFetch(
+      `${API_URL}/api/v1/workouts/overtraining-alerts?${localDayQuery()}`,
+      { cache: 'no-store', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
+    )
+    if (!response.ok) {
+      throw new Error("We couldn't check your recovery status right now.")
+    }
+    const status = (await response.json()) as OvertrainingAlertStatus
+    saveCopy(`overtraining:${userId}`, status)
+    syncDeloadMirror(userId, status)
+    return status
+  })
 }
 
-export async function dismissOvertrainingAlert(userId: string): Promise<OvertrainingAlertStatus> {
-  const response = await apiFetch(
-    `${API_URL}/api/v1/workouts/overtraining-alerts/dismiss?user_id=${encodeURIComponent(userId)}`,
-    { method: 'POST', signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) },
-  )
+async function postOvertrainingMutation(
+  path: string,
+  method: 'POST' | 'DELETE',
+  fallbackError: string,
+  body?: unknown,
+  invalidateDashboard = false,
+): Promise<OvertrainingAlertStatus> {
+  const userId = getCurrentUser()?.id
+  if (!userId) throw new Error('Sign in to update your recovery status.')
+  const response = await apiFetch(`${API_URL}/api/v1/workouts${path}?${localDayQuery()}`, {
+    method,
+    ...(body !== undefined ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
   if (!response.ok) {
-    throw new Error("We couldn't dismiss the alert.")
+    const errBody = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof errBody?.detail === 'string' ? errBody.detail : fallbackError)
   }
-  return response.json() as Promise<OvertrainingAlertStatus>
+  const status = (await response.json()) as OvertrainingAlertStatus
+  clearOvertrainingCache()
+  if (invalidateDashboard) clearDashboardCache()
+  saveCopy(`overtraining:${userId}`, status)
+  syncDeloadMirror(userId, status)
+  return status
+}
+
+export function submitFatigueFeedback(payload: FatigueFeedbackPayload): Promise<OvertrainingAlertStatus> {
+  return postOvertrainingMutation(
+    '/fatigue-feedback',
+    'POST',
+    "We couldn't save your recovery check-in.",
+    payload,
+  )
+}
+
+export function deleteFatigueFeedback(entryId: string): Promise<OvertrainingAlertStatus> {
+  return postOvertrainingMutation(
+    `/fatigue-feedback/${encodeURIComponent(entryId)}`,
+    'DELETE',
+    "We couldn't remove that recovery check-in.",
+  )
+}
+
+export function applyOvertrainingMods(): Promise<OvertrainingAlertStatus> {
+  return postOvertrainingMutation(
+    '/overtraining-alerts/apply',
+    'POST',
+    "We couldn't apply the deload modifications.",
+    undefined,
+    true,
+  )
+}
+
+export function clearOvertrainingMods(): Promise<OvertrainingAlertStatus> {
+  return postOvertrainingMutation(
+    '/overtraining-alerts/apply',
+    'DELETE',
+    "We couldn't turn off the active deload.",
+    undefined,
+    true,
+  )
+}
+
+export function scheduleRecoveryRestDay(): Promise<OvertrainingAlertStatus> {
+  return postOvertrainingMutation(
+    '/overtraining-alerts/rest-day',
+    'POST',
+    "We couldn't update today's workout to a rest day.",
+    undefined,
+    true,
+  )
+}
+
+export function dismissOvertrainingAlert(): Promise<OvertrainingAlertStatus> {
+  return postOvertrainingMutation(
+    '/overtraining-alerts/dismiss',
+    'POST',
+    "We couldn't dismiss the alert.",
+  )
 }

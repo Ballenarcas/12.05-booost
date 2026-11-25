@@ -1,35 +1,58 @@
+/* Camera screen from the Figma mockup ("6/MEALS_CAMARA"); the results below keep the shared theme. */
 .scan-screen {
   padding-bottom: 0.5rem;
 }
 
 .scan-header {
+  display: grid;
+  gap: 0;
+  margin-bottom: 22px;
+}
+
+.scan-title-row {
   display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  margin-bottom: 1.15rem;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: -16px;
 }
 
 .scan-header h1 {
-  flex: 1;
-  min-width: 0;
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  color: var(--text);
+  font-family: var(--hifi-sans);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.2;
 }
 
+/* BOTON_VOLVER: round glass button; the dark arrow is part of the image. */
 .scan-back {
   display: grid;
-  width: 2.5rem;
-  height: 2.5rem;
-  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  margin: -4px 0 0 -4px;
   place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 0.75rem;
-  color: #fff;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
   background: transparent;
   cursor: pointer;
+}
+:root[data-theme="dark"] .scan-back img, :root[data-theme="dark"] .scan-import img { filter: invert(1); }
+
+.scan-import {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--hifi-sans);
+  font-size: 11px;
+  text-transform: uppercase;
 }
 
 .scan-date {
@@ -41,45 +64,102 @@
 
 .scan-capture {
   display: grid;
-  gap: 0.8rem;
+  justify-items: center;
+  gap: 16px;
 }
 
-.scan-camera-card {
+/* Viewfinder: live camera with the mockup's corner brackets and its pale scan band on the top half. */
+.scan-viewfinder {
+  position: relative;
   display: grid;
-  justify-items: center;
-  gap: 0.7rem;
-  padding: 2.1rem 1.2rem;
-  border: 1px dashed #3a3a3a;
-  border-radius: 1.2rem;
-  background: #171717;
+  width: 100%;
+  aspect-ratio: 344 / 495;
+  max-height: 60svh;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 23px;
+  background: linear-gradient(180deg, #c9d3df 0%, #8f9aa8 100%);
+}
+.scan-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.scan-viewfinder:not([data-camera="live"]) .scan-video { visibility: hidden; }
+/* While the photo is analysed, a scan band sweeps down and back up with its tinted trail
+   always on the side opposite the direction of movement (::before downward, ::after upward). */
+.scan-photo { position: relative; overflow: hidden; }
+.scan-photo[data-scanning="true"]::before,
+.scan-photo[data-scanning="true"]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 100%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.scan-photo[data-scanning="true"]::before {
+  border-bottom: 1.5px solid #fff;
+  background: linear-gradient(180deg, transparent 84%, rgba(249, 249, 249, 0.35) 92%, #96bad8 100%);
+  box-shadow: 0 1px 10px rgba(150, 186, 216, 0.9);
+  transform: translateY(-98%);
+  animation: scan-sweep-down 5.2s ease-in-out infinite;
+}
+.scan-photo[data-scanning="true"]::after {
+  border-top: 1.5px solid #fff;
+  background: linear-gradient(0deg, transparent 84%, rgba(249, 249, 249, 0.35) 92%, #96bad8 100%);
+  box-shadow: 0 -1px 10px rgba(150, 186, 216, 0.9);
+  transform: translateY(2%);
+  opacity: 0;
+  animation: scan-sweep-up 5.2s ease-in-out infinite;
+}
+@keyframes scan-sweep-down {
+  0% { transform: translateY(-98%); opacity: 0.5; }
+  5% { opacity: 1; }
+  45% { opacity: 1; }
+  50% { transform: translateY(-2%); opacity: 0.5; }
+  55% { opacity: 0; }
+  95% { opacity: 0; }
+  100% { transform: translateY(-98%); opacity: 0.5; }
+}
+@keyframes scan-sweep-up {
+  0% { transform: translateY(2%); opacity: 0.5; }
+  5% { opacity: 0; }
+  45% { opacity: 0; }
+  50% { transform: translateY(98%); opacity: 0.5; }
+  55% { opacity: 1; }
+  95% { opacity: 1; }
+  100% { transform: translateY(2%); opacity: 0.5; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-photo[data-scanning="true"]::before { animation: none; opacity: 1; transform: translateY(-47%); }
+  .scan-photo[data-scanning="true"]::after { display: none; }
+}
+.scan-frame { position: absolute; z-index: 1; width: 83%; height: auto; max-height: 90%; }
+.scan-viewfinder-copy {
+  position: absolute;
+  z-index: 1;
+  top: 40px;
+  right: 39px;
+  left: 39px;
   text-align: center;
 }
+.scan-viewfinder-copy h2 { margin: 0; color: #fff; font-family: var(--hifi-sans); font-size: 16px; font-weight: 300; text-transform: uppercase; }
+.scan-viewfinder-copy p { margin: 0; color: #424242; font-family: var(--hifi-sans); font-size: 14px; }
 
-.scan-camera-icon {
+.scan-shutter {
   display: grid;
-  width: 5rem;
-  height: 5rem;
+  width: 79px;
+  height: 79px;
   place-items: center;
-  border: 1px solid rgba(40, 205, 98, 0.28);
+  padding: 0;
+  border: 0;
   border-radius: 50%;
-  color: var(--green);
-  background: rgba(40, 205, 98, 0.08);
+  background: transparent;
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-out);
 }
+.scan-shutter:active { transform: scale(0.94); }
+.scan-back:focus-visible, .scan-import:focus-visible, .scan-shutter:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
 
-.scan-camera-card h2 {
-  margin: 0;
-  font-size: 1.2rem;
-}
-
-.scan-camera-card p {
-  max-width: 20rem;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  line-height: 1.5;
-}
-
-.scan-primary,
 .scan-secondary {
   display: flex;
   width: 100%;
@@ -87,31 +167,25 @@
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  border-radius: 0.75rem;
-  cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 800;
-}
-
-.scan-primary {
-  margin-top: 0.45rem;
   border: 0;
-  color: #071c0e;
-  background: var(--green);
-}
-
-.scan-secondary {
-  border: 1px solid var(--line);
-  color: #fff;
-  background: #1e1e1e;
+  border-radius: 31px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: inset 0 0 4px var(--hifi-shadow);
+  cursor: pointer;
+  font-family: var(--hifi-mono);
+  font-size: 14px;
+  text-transform: uppercase;
 }
 
 .scan-privacy {
-  margin-top: 0.35rem !important;
-  color: #7c7c7c !important;
-  font-size: 0.68rem !important;
-  line-height: 1.4 !important;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
 }
+
 
 .scan-file-input {
   display: none;
@@ -122,7 +196,7 @@
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 1.1rem;
-  background: #101010;
+  background: var(--surface-raised);
 }
 
 .scan-image {
@@ -158,7 +232,7 @@
   gap: 0.7rem;
   padding: 0.95rem 1rem;
   border-top: 1px solid var(--line);
-  background: #1a1a1a;
+  background: var(--surface);
 }
 
 .scan-loading svg {
@@ -185,7 +259,7 @@
   padding: 0.9rem 1rem;
   border: 1px solid rgba(248, 113, 113, 0.35);
   border-radius: 0.8rem;
-  color: #fecaca;
+  color: var(--negative);
   background: rgba(248, 113, 113, 0.1);
 }
 
@@ -217,7 +291,7 @@
   padding: 0.7rem 0.85rem;
   border: 1px solid rgba(248, 113, 113, 0.35);
   border-radius: 0.7rem;
-  color: #fecaca;
+  color: var(--negative);
   background: rgba(248, 113, 113, 0.1);
   font-size: 0.8rem;
   line-height: 1.45;
@@ -246,7 +320,7 @@
   padding: 0;
   border: 0;
   outline: none;
-  color: #fff;
+  color: var(--text);
   background: transparent;
   font-size: 1rem;
   font-weight: 700;
@@ -257,7 +331,7 @@
   align-items: flex-start;
   gap: 0.4rem;
   margin: 0.75rem 0 0;
-  color: #c9b97a;
+  color: var(--warning);
   font-size: 0.75rem;
   line-height: 1.45;
 }
@@ -288,7 +362,7 @@
 }
 
 .scan-section-heading span {
-  color: #707070;
+  color: var(--text-muted);
   font-size: 0.66rem;
 }
 
@@ -300,9 +374,9 @@
 
 .scan-item {
   padding: 0.85rem;
-  border: 1px solid #2d2d2d;
+  border: 1px solid var(--line);
   border-radius: 0.9rem;
-  background: #1a1a1a;
+  background: var(--surface);
 }
 
 .scan-item-top {
@@ -318,14 +392,14 @@
   border: 0;
   border-bottom: 1px solid transparent;
   outline: none;
-  color: #fff;
+  color: var(--text);
   background: transparent;
   font-size: 0.95rem;
   font-weight: 700;
 }
 
 .scan-item-name:focus {
-  border-bottom-color: #4b4b4b;
+  border-bottom-color: var(--line);
 }
 
 .scan-remove {
@@ -336,13 +410,13 @@
   place-items: center;
   border: 0;
   border-radius: 0.5rem;
-  color: #7f7f7f;
+  color: var(--text-muted);
   background: transparent;
   cursor: pointer;
 }
 
 .scan-remove:hover {
-  color: #ff9c9c;
+  color: var(--negative);
   background: rgba(248, 113, 113, 0.1);
 }
 
@@ -359,9 +433,9 @@
   align-items: center;
   gap: 0.15rem;
   padding: 0.2rem;
-  border: 1px solid #303030;
+  border: 1px solid var(--line);
   border-radius: 0.65rem;
-  background: #111;
+  background: var(--surface-raised);
 }
 
 .scan-stepper button {
@@ -371,13 +445,13 @@
   place-items: center;
   border: 0;
   border-radius: 0.45rem;
-  color: #dedede;
+  color: var(--text);
   background: transparent;
   cursor: pointer;
 }
 
 .scan-stepper button:hover {
-  background: #292929;
+  background: var(--surface-raised);
 }
 
 .scan-stepper input {
@@ -385,7 +459,7 @@
   padding: 0;
   border: 0;
   outline: none;
-  color: #fff;
+  color: var(--text);
   background: transparent;
   font-size: 0.82rem;
   font-weight: 800;
@@ -410,7 +484,7 @@
   padding: 0;
   border: 0;
   outline: none;
-  color: #fff;
+  color: var(--text);
   background: transparent;
   font-size: 0.82rem;
   font-weight: 800;
@@ -425,7 +499,7 @@
   margin-top: 0.55rem;
   padding: 0.15rem 0;
   border: 0;
-  color: #8b8b8b;
+  color: var(--text-muted);
   background: transparent;
   cursor: pointer;
   font-size: 0.68rem;
@@ -449,11 +523,11 @@
 .scan-macros input {
   width: 100%;
   padding: 0.45rem 0.5rem;
-  border: 1px solid #303030;
+  border: 1px solid var(--line);
   border-radius: 0.5rem;
   outline: none;
-  color: #fff;
-  background: #111;
+  color: var(--text);
+  background: var(--surface-raised);
   font-size: 0.78rem;
 }
 
@@ -465,7 +539,7 @@
   justify-content: center;
   gap: 0.4rem;
   margin-top: 0.65rem;
-  border: 1px dashed #3a3a3a;
+  border: 1px dashed var(--line);
   border-radius: 0.7rem;
   color: var(--green);
   background: transparent;
@@ -496,7 +570,7 @@
 }
 
 .scan-total strong {
-  color: #a78bfa;
+  color: var(--primary);
   font-size: 1.4rem;
   font-weight: 900;
   font-variant-numeric: tabular-nums;

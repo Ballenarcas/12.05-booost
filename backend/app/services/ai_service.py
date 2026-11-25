@@ -64,7 +64,7 @@ def generate_trainer_insight(
             {
                 "role": "system",
                 "content": (
-                    "You are SET&PLATE's AI fitness and nutrition coach. "
+                    "You are BOOOST's AI fitness and nutrition coach. "
                     "Give concise, practical, supportive guidance. Do not diagnose medical conditions."
                 ),
             },

@@ -81,9 +81,9 @@ jobs:
           pip install -r requirements-dev.txt
           pip check
 
-      - name: Run Pytest
+      - name: Run Pytest with branch coverage
         working-directory: backend
-        run: pytest -q
+        run: pytest -q --cov=app --cov-branch --cov-report=term
 
   containers:
     name: Containers (compose, images, nginx)
@@ -113,7 +113,7 @@ jobs:
         with:
           context: ./backend
           load: true
-          tags: set-and-plate-backend:ci
+          tags: booost-backend:ci
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -122,19 +122,19 @@ jobs:
         with:
           context: ./frontend
           load: true
-          tags: set-and-plate-frontend:ci
+          tags: booost-frontend:ci
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
       # The nginx config is the piece that broke the last deployment: catch a
       # bad directive or a wrong `listen` port here instead of on the NAS.
       - name: Validate the nginx config
-        run: docker run --rm set-and-plate-frontend:ci nginx -t
+        run: docker run --rm booost-frontend:ci nginx -t
 
       - name: Serve the SPA and check the health endpoint
         run: |
           set -euo pipefail
-          docker run -d --name ci-frontend -p 127.0.0.1:18080:8080 set-and-plate-frontend:ci
+          docker run -d --name ci-frontend -p 127.0.0.1:18080:8080 booost-frontend:ci
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:18080/healthz >/dev/null 2>&1; then break; fi
             sleep 1
@@ -174,7 +174,7 @@ jobs:
         id: meta-backend
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/set-plate-backend
+          images: ghcr.io/${{ github.repository_owner }}/booost-backend
           tags: |
             type=raw,value=latest
             type=sha,format=short
@@ -197,7 +197,7 @@ jobs:
         id: meta-frontend
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/set-plate-frontend
+          images: ghcr.io/${{ github.repository_owner }}/booost-frontend
           tags: |
             type=raw,value=latest
             type=sha,format=short

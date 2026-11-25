@@ -1,22 +1,77 @@
+@import '@fontsource-variable/inter';
+
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  color: #fff;
-  background: #121212;
+  font-family: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--background);
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --background: #121212;
-  --surface: #1e1e1e;
-  --surface-raised: #272727;
-  --olive: #6b6a00;
-  --olive-light: #7f7d0d;
-  --green: #28cd62;
-  --purple: #5b507a;
-  --text-muted: #a0a0a0;
-  --line: #343434;
+
+  /* Wireframe style: white ground, light grey blocks, black ink. */
+  --background: #fff;
+  --surface: #f2f2f2;
+  --surface-raised: #e6e6e6;
+  --well: #fafafa;
+  --line: #d9d9d9;
+  --control: #c4c4c4;
+
+  --text: #000;
+  --text-muted: #6b6b6b;
+  --text-faint: #8a8a8a;
+
+  /* Green only marks finished states. */
+  --green: #1a8f45;
+  --green-tint: #e3f4e8;
+  --on-green: #fff;
+  --negative: #c62f45;
+  --negative-tint: #fbe7ea;
+  --warning: #a86b00;
+
+  /* The one primary action per screen is a black pill. */
+  --primary: #222;
+  --on-primary: #fff;
+
+  /* Measured data is drawn in ink on grey tracks. */
+  --data: #222;
+
+  /* Feedback is quick and settles without a bounce. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-fast: 120ms;
+  --motion: 200ms;
+
+  --radius-card: 0.75rem;
+  --radius-control: 0.5rem;
+  --radius-chip: 999px;
+  --radius-pill: 999px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #0f0f0f;
+  --surface: #1c1c1c;
+  --surface-raised: #2a2a2a;
+  --well: #161616;
+  --line: #333;
+  --control: #4d4d4d;
+  --text: #fff;
+  --text-muted: #a3a3a3;
+  --text-faint: #7a7a7a;
+  --green: #3ccf75;
+  --green-tint: #12301d;
+  --on-green: #000;
+  --negative: #ff6b7f;
+  --negative-tint: #3a1a20;
+  --warning: #e0a83a;
+  --primary: #f2f2f2;
+  --on-primary: #000;
+  --data: #e6e6e6;
 }
 
 * { box-sizing: border-box; }
+/* The wireframes use smaller type than the browser default; every rem size follows this. */
+html { font-size: 15px; }
 html, body, #root { min-height: 100%; margin: 0; }
 body { min-width: 320px; background: var(--background); }
 button, a { -webkit-tap-highlight-color: transparent; }

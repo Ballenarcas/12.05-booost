@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from uuid import UUID
 
@@ -9,7 +10,6 @@ from app.db.supabase_client import get_supabase
 from app.schemas.exercise import Exercise
 from app.schemas.overtraining import (
     FatigueFeedbackCreate,
-    FatigueFeedbackEntry,
     OvertrainingStatusResponse,
 )
 from app.schemas.workout import (
@@ -37,7 +37,9 @@ class WorkoutFacade:
         supabase = get_supabase(admin=True)
         if supabase is None:
             raise HTTPException(status_code=503, detail="Supabase is not configured")
-        return await plan_daily_workout(user_id, supabase, day)
+        # Planning makes many blocking Supabase calls. Running it on a worker thread (with its own
+        # event loop for the AI call) keeps the server answering every other request meanwhile.
+        return await asyncio.to_thread(asyncio.run, plan_daily_workout(user_id, supabase, day))
 
     async def suggest_adjustment(self, payload: LiveWorkoutAdjustmentRequest) -> list[LiveWorkoutAdjustmentSuggestion]:
         return await suggest_live_adjustment(payload.model_dump(mode="json"))
@@ -61,7 +63,12 @@ class WorkoutFacade:
         return build_warmup_recommendation(payload)
 
     def save_log(self, user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResponse:
-        return workout_service.save_workout_log(user_id, payload)
+        saved = workout_service.save_workout_log(user_id, payload)
+        try:
+            overtraining_service.on_workout_completed(user_id)
+        except Exception as error:
+            logger.warning("Could not refresh overtraining state after saving workout: %s", error)
+        return saved
 
     def list_history(self, user_id: UUID, limit: int = 30) -> WorkoutHistoryResponse:
         return workout_service.list_workout_history(user_id, limit)
@@ -121,17 +128,36 @@ class WorkoutFacade:
     def delete_custom_exercise(self, user_id: UUID, exercise_id: str) -> None:
         workout_service.delete_custom_exercise(user_id, exercise_id)
 
-    def get_overtraining_status(self, user_id: UUID) -> OvertrainingStatusResponse:
-        return overtraining_service.evaluate_overtraining(user_id)
+    def get_overtraining_status(self, user_id: UUID, day: LocalDay | None = None) -> OvertrainingStatusResponse:
+        return overtraining_service.evaluate_overtraining(user_id, day)
 
-    def submit_fatigue_feedback(self, user_id: UUID, payload: FatigueFeedbackCreate) -> FatigueFeedbackEntry:
-        return overtraining_service.record_fatigue_feedback(user_id, payload)
+    def submit_fatigue_feedback(
+        self,
+        user_id: UUID,
+        payload: FatigueFeedbackCreate,
+        day: LocalDay | None = None,
+    ) -> OvertrainingStatusResponse:
+        return overtraining_service.record_fatigue_feedback(user_id, payload, day)
 
-    def apply_overtraining_mods(self, user_id: UUID) -> OvertrainingStatusResponse:
-        return overtraining_service.apply_overtraining_mods(user_id)
+    def delete_fatigue_feedback(
+        self,
+        user_id: UUID,
+        entry_id: str,
+        day: LocalDay | None = None,
+    ) -> OvertrainingStatusResponse:
+        return overtraining_service.delete_fatigue_feedback(user_id, entry_id, day)
 
-    def dismiss_overtraining_alert(self, user_id: UUID) -> OvertrainingStatusResponse:
-        return overtraining_service.dismiss_overtraining_alert(user_id)
+    def apply_overtraining_mods(self, user_id: UUID, day: LocalDay | None = None) -> OvertrainingStatusResponse:
+        return overtraining_service.apply_overtraining_mods(user_id, day)
+
+    def clear_overtraining_mods(self, user_id: UUID, day: LocalDay | None = None) -> OvertrainingStatusResponse:
+        return overtraining_service.clear_overtraining_mods(user_id, day)
+
+    def schedule_recovery_rest_day(self, user_id: UUID, day: LocalDay | None = None) -> OvertrainingStatusResponse:
+        return overtraining_service.schedule_recovery_rest_day(user_id, day)
+
+    def dismiss_overtraining_alert(self, user_id: UUID, day: LocalDay | None = None) -> OvertrainingStatusResponse:
+        return overtraining_service.dismiss_overtraining_alert(user_id, day)
 
 
 workout_facade = WorkoutFacade()

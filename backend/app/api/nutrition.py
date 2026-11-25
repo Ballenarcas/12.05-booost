@@ -18,6 +18,7 @@ from app.schemas.nutrition import (
     MealRecommendationsResponse,
     MealUpdateRequest,
 )
+from app.schemas.nutrition_statistics import NutritionStatisticsRange, NutritionStatisticsResponse
 from app.facades.nutrition_facade import nutrition_facade
 from app.services.meal_recommendation_service import AlreadyHandled, RefreshLimitReached
 from app.services.meal_scan_service import MealScanFailed, MealScanNoFood, MealScanUnavailable
@@ -57,6 +58,20 @@ def get_today_nutrition(
     except Exception as err:
         logger.exception("Failed to load today's nutrition")
         raise HTTPException(status_code=500, detail="Could not load today's nutrition.") from err
+
+
+@router.get("/statistics", response_model=NutritionStatisticsResponse)
+def get_nutrition_statistics(
+    user_id: UUID = Depends(current_user),
+    range_key: NutritionStatisticsRange = Query("1M", alias="range"),
+    timezone_offset_minutes: int = Query(
+        0,
+        ge=-840,
+        le=840,
+        description="Client getTimezoneOffset() value used for local date buckets",
+    ),
+) -> NutritionStatisticsResponse:
+    return nutrition_facade.get_statistics(user_id, range_key, timezone_offset_minutes)
 
 
 def _looks_like_image(data: bytes) -> bool:

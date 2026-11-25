@@ -204,7 +204,7 @@ jobs:
 
           if [ -n "$missing" ]; then
             echo "::error::The stack is missing a value for:${missing}"
-            echo "::error::Add them under Stacks -> set_plate -> Environment variables, click Update the stack, then retry."
+            echo "::error::Add them under Stacks -> booost -> Environment variables, click Update the stack, then retry."
             exit 1
           fi
 

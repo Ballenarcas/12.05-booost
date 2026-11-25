@@ -1,7 +1,8 @@
 import { ArrowUp, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { activeWorkoutStorageKey } from '../../services/api'
+import { usePageNavigate } from '../../utils/usePageNavigate'
 
 type ActiveWorkoutSummary = { name: string; startedAt: string }
 
@@ -30,7 +31,7 @@ function formatElapsed(startedAt: string, now: number): string {
 }
 
 export default function WorkoutInProgressBar() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const { pathname } = useLocation()
   const [workout, setWorkout] = useState(readActiveWorkout)
   const [now, setNow] = useState(Date.now)
@@ -47,12 +48,13 @@ export default function WorkoutInProgressBar() {
     return () => window.clearInterval(timer)
   }, [])
 
-  if (!workout || pathname.startsWith('/workouts/active')) return null
+  // The exercise guide is read mid-workout; the bar would cover its instructions.
+  if (!workout || pathname.startsWith('/workouts/active') || pathname.endsWith('/guide')) return null
 
   function discardWorkout() {
     const key = activeWorkoutStorageKey()
     if (key) localStorage.removeItem(key)
-    sessionStorage.removeItem('set_plate_pending_exercise')
+    sessionStorage.removeItem('booost_pending_exercise')
     setWorkout(null)
     setIsDiscardOpen(false)
   }

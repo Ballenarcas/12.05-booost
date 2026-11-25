@@ -1,0 +1,72 @@
+/* Calorie ball and macro bars from the Figma "Nutrition card", shared by Home and Meals. */
+.home-nutrition { display: flex; align-items: center; justify-content: center; gap: 36px; padding-bottom: 16px; }
+.home-orb {
+  position: relative;
+  flex: none;
+  width: 126px;
+  height: 126px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #fff;
+  isolation: isolate;
+}
+.home-orb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow:
+    inset -1px 0 4px rgba(0, 0, 0, 0.22),
+    inset 0 0 8px rgba(141, 207, 232, 0.45);
+}
+.home-orb-waves { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.home-orb-level { transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1); will-change: transform; }
+.home-orb-wave { will-change: transform; }
+.home-orb-wave-back { animation: home-orb-wave-reverse 6.4s linear infinite; }
+.home-orb-wave-front { animation: home-orb-wave-forward 4.2s linear infinite; }
+.home-orb-stop-back-top { stop-color: #a4def5; stop-opacity: 0.72; }
+.home-orb-stop-back-bottom { stop-color: #2f7ec0; stop-opacity: 0.6; }
+.home-orb-stop-front-top { stop-color: #d6f3ff; stop-opacity: 0.92; }
+.home-orb-stop-front-mid { stop-color: #96d3ee; stop-opacity: 0.9; }
+.home-orb-stop-front-bottom { stop-color: #0052b1; stop-opacity: 0.92; }
+@keyframes home-orb-wave-forward {
+  from { transform: translateX(0); }
+  to { transform: translateX(-126px); }
+}
+@keyframes home-orb-wave-reverse {
+  from { transform: translateX(-126px); }
+  to { transform: translateX(0); }
+}
+.home-orb-value { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; gap: 4px; margin: 0; color: #424242; font-family: var(--hifi-mono); text-align: center; }
+.home-orb-value strong { font-size: 24px; font-weight: 400; line-height: 1.1; }
+.home-orb-value span { font-size: 14px; line-height: 1; }
+:root[data-theme="dark"] .home-orb {
+  background: radial-gradient(circle at 50% 25%, #51618e 0%, #37466e 100%);
+}
+:root[data-theme="dark"] .home-orb::after {
+  box-shadow:
+    inset -1px 0 5px rgba(0, 0, 0, 0.45),
+    inset 0 0 8px rgba(141, 207, 232, 0.22);
+}
+:root[data-theme="dark"] .home-orb-stop-back-top { stop-color: #2c629c; stop-opacity: 0.72; }
+:root[data-theme="dark"] .home-orb-stop-back-bottom { stop-color: #082e59; stop-opacity: 0.85; }
+:root[data-theme="dark"] .home-orb-stop-front-top { stop-color: #1c5794; stop-opacity: 0.88; }
+:root[data-theme="dark"] .home-orb-stop-front-mid { stop-color: #0d3b6e; stop-opacity: 0.94; }
+:root[data-theme="dark"] .home-orb-stop-front-bottom { stop-color: #041f3d; stop-opacity: 0.98; }
+:root[data-theme="dark"] .home-orb-value { color: #fff; }
+.home-macros { display: grid; flex: 1; gap: 12px; max-width: 160px; margin: 0; padding: 0; list-style: none; }
+.home-macros li { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 0; }
+.home-macro-name { padding-left: 2px; color: var(--hifi-faint); font-size: 14px; text-transform: uppercase; }
+.home-macro-value { padding-right: 2px; color: var(--hifi-faint); font-family: var(--hifi-mono); font-size: 14px; }
+.home-macro-value strong { color: var(--hifi-ink); font-size: 18px; font-weight: 400; line-height: 1.2; }
+.home-macros .hifi-bar { grid-column: 1 / -1; }
+@media (max-width: 360px) {
+  .home-nutrition { flex-direction: column; gap: 16px; }
+  .home-macros { width: 100%; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-orb-level { transition: none; }
+  .home-orb-wave { animation: none; }
+}

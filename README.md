@@ -1,4 +1,4 @@
-# SET&PLATE
+# BOOOST
 
 **Train with purpose. Eat with clarity.**
 
@@ -24,8 +24,8 @@ The calorie goal uses the Mifflin-St Jeor formula and is adjusted for your goal.
 You need Python 3.11+, Node 20+ and a Supabase project. An AI API key is optional and only needed for the AI features.
 
 ```bash
-git clone https://github.com/Ballenarcas/12.05-set_plate.git
-cd 12.05-set_plate
+git clone https://github.com/Ballenarcas/12.05-booost.git
+cd 12.05-booost
 cp .env.example .env        # then fill in your Supabase keys
 ```
 
@@ -66,7 +66,7 @@ Four endpoints back the sync. All of them require the bearer token:
 | `POST` | `/api/v1/health-connect/sync` | Upsert newer daily steps and active calories |
 | `POST` | `/api/v1/health-connect/disconnect` | Revoke consent and delete stored activity |
 
-On Android the host injects `window.SETPLATEHealthConnect` with `requestPermissions`, `readActivity(days)` and an optional `revokePermissions`. Without that bridge the browser build keeps the same flow working with a preview source. If the tables are missing, the endpoints report the feature as not configured and the suggestions fall back to no activity context.
+On Android the host injects `window.BOOOSTHealthConnect` with `requestPermissions`, `readActivity(days)` and an optional `revokePermissions`. Without that bridge the browser build keeps the same flow working with a preview source. If the tables are missing, the endpoints report the feature as not configured and the suggestions fall back to no activity context.
 
 ## Environment variables
 

@@ -1,6 +1,6 @@
 # Code Standards & Architectural Conventions
 
-Enforce these conventions across the SET&PLATE codebase.
+Enforce these conventions across the BOOOST codebase.
 
 ---
 

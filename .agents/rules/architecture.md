@@ -1,6 +1,6 @@
 # Architecture & Domain Boundary Rules
 
-SET&PLATE integrates fitness and nutrition tracking with an optional AI Trainer.
+BOOOST integrates fitness and nutrition tracking with an optional AI Trainer.
 
 ---
 

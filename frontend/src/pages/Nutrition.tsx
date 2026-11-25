@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, ArrowLeft, Calendar, Camera, ChefHat, GlassWater, Heart, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, ChefHat, ChevronDown, ChevronLeft, ChevronRight, Heart, Loader2, Plus, Scale, Search, Trash2, X } from 'lucide-react';
+import { usePageNavigate } from '../utils/usePageNavigate';
 import {
   addFavoriteMeal,
   addMealLog,
@@ -9,16 +9,22 @@ import {
   fetchFavoriteMeals,
   fetchTodayNutrition,
   getCurrentUser,
+  getSavedDayNutrition,
   isPremiumActive,
   searchFoodItems,
   updateFavoriteMeal,
   updateMealLog,
+  type TodayNutritionData,
 } from '../services/api';
-import type { FavoriteMeal, FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
+import IntakeCard from '../components/nutrition/IntakeCard';
+import MealDatePicker from '../components/nutrition/MealDatePicker';
 import FavoriteMealsModal from '../components/nutrition/FavoriteMealsModal';
 import MealRecommendationsModal from '../components/nutrition/MealRecommendationsModal';
-import HydrationCard from '../components/home/HydrationCard';
+import { sameDay } from '../utils/monthGrid';
+import type { FavoriteMeal, FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
+import HydrationSummary from '../components/home/HydrationSummary';
 import '../styles/log-meals.css';
+import '../styles/meals.css';
 
 // Names match ignoring case, like the server's unique rule.
 const favoriteKey = (mealType: string, name: string) => `${mealType}|${name.trim().toLowerCase()}`;
@@ -48,14 +54,36 @@ type HighQuantityWarning =
     next: number;
   };
 
+const MAX_DAYS_BACK = 7;
+
+/** YYYY-MM-DD in the phone's own time zone. */
+function toInputDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 export default function Nutrition() {
-  const navigate = useNavigate();
-  const scanTarget = isPremiumActive(getCurrentUser()) ? '/scan-meal' : '/premium';
+  const navigate = usePageNavigate();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [meals, setMeals] = useState<MealLogItem[]>([]);
-  const [dateError, setDateError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  
+  // Start from the copy saved earlier in this visit, so the card and list show at once.
+  const [cachedToday] = useState(() => getSavedDayNutrition(getCurrentUser()?.id ?? '', toInputDate(new Date())));
+  const [meals, setMeals] = useState<MealLogItem[]>(cachedToday?.meals ?? []);
+  const [targets, setTargets] = useState<Pick<TodayNutritionData, 'daily_goal' | 'target_proteins_g' | 'target_carbs_g' | 'target_fats_g'> | null>(cachedToday);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const daySwipeRef = useRef<{ x: number; y: number; swiped: boolean } | null>(null);
+  const [isLoading, setIsLoading] = useState(!cachedToday);
+  // When the day changes, show its saved copy in the same render; the effect below refreshes it.
+  const [shownDate, setShownDate] = useState(selectedDate);
+  if (shownDate !== selectedDate) {
+    setShownDate(selectedDate);
+    const userId = getCurrentUser()?.id;
+    const saved = userId ? getSavedDayNutrition(userId, toInputDate(selectedDate)) : null;
+    if (saved) {
+      setMeals(saved.meals || []);
+      setTargets(saved);
+    }
+    setIsLoading(!saved);
+  }
+
   // États pour l'édition et la suppression
   const [editingMeal, setEditingMeal] = useState<MealLogItem | null>(null);
   const [editIngredients, setEditIngredients] = useState<MealIngredient[]>([]);
@@ -83,6 +111,9 @@ export default function Nutrition() {
   // Set while the edit dialog is editing a favorite instead of a logged meal.
   const [editingFavoriteId, setEditingFavoriteId] = useState<string | null>(null);
   const [heartBusyId, setHeartBusyId] = useState<string | null>(null);
+  const [openMealId, setOpenMealId] = useState<string | null>(null);
+  // Which heart just changed, so only that one animates (not hearts already set on load).
+  const [heartAnim, setHeartAnim] = useState<{ id: string; kind: 'pop' | 'unpop' } | null>(null);
   const [favoriteNotice, setFavoriteNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -96,17 +127,38 @@ export default function Nutrition() {
 
   const toggleFavorite = async (meal: MealLogItem) => {
     const existing = favoritesByKey.get(favoriteKey(meal.meal_type, meal.meal_name));
+    const pendingId = `pending-${meal.id}`;
     setHeartBusyId(meal.id);
     setFavoriteNotice(null);
+    // The heart changes on tap; the request confirms it, and a failure puts it back.
+    if (existing) {
+      setFavorites((current) => current.filter((favorite) => favorite.id !== existing.id));
+      setHeartAnim({ id: meal.id, kind: 'unpop' });
+    } else {
+      setFavorites((current) => [{
+        id: pendingId,
+        name: meal.meal_name,
+        meal_type: meal.meal_type,
+        calories: meal.item_calories,
+        proteins_g: meal.proteins_g ?? 0,
+        carbs_g: meal.carbs_g ?? 0,
+        fats_g: meal.fats_g ?? 0,
+        quantity_g: Number(meal.weight_g) || 100,
+        ingredients: meal.ingredients ?? [],
+      }, ...current]);
+      setHeartAnim({ id: meal.id, kind: 'pop' });
+    }
     try {
       if (existing) {
         await deleteFavoriteMeal(existing.id);
-        setFavorites((current) => current.filter((favorite) => favorite.id !== existing.id));
       } else {
         const saved = await addFavoriteMeal(meal.id);
-        setFavorites((current) => [saved, ...current.filter((favorite) => favorite.id !== saved.id)]);
+        setFavorites((current) => [saved, ...current.filter((favorite) => favorite.id !== pendingId && favorite.id !== saved.id)]);
       }
     } catch (error) {
+      setFavorites((current) => (existing
+        ? [existing, ...current.filter((favorite) => favorite.id !== existing.id)]
+        : current.filter((favorite) => favorite.id !== pendingId)));
       setFavoriteNotice(error instanceof Error ? error.message : "We couldn't update your favorites.");
     } finally {
       setHeartBusyId(null);
@@ -126,7 +178,6 @@ export default function Nutrition() {
       ...(consumedAt ? { consumed_at: consumedAt.toISOString() } : {}),
     });
     setIsFavoritesOpen(false);
-    setDateError(null);
     // Show the day it was logged to; a new Date also reloads the list when it's the same day.
     setSelectedDate(consumedAt ?? new Date());
   };
@@ -162,30 +213,35 @@ export default function Nutrition() {
     }
   };
 
-  // SE DÉCLENCHE À CHAQUE CHANGEMENT DE DATE DANS LE CALENDRIER
+  // Reloads the meals each time the selected day changes.
   useEffect(() => {
     const user = getCurrentUser();
     if (!user?.id) return;
 
-    setIsLoading(true);
+    const formattedDate = toInputDate(selectedDate);
+    const cached = getSavedDayNutrition(user.id, formattedDate);
 
-    // Formatage sûr de la date locale en YYYY-MM-DD (évite les bugs de fuseau horaire)
-    const year = selectedDate.getFullYear();
-    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-    const day = String(selectedDate.getDate()).padStart(2, '0');
-    const formattedDate = `${year}-${month}-${day}`;
-
-    // On utilise ta nouvelle fonction API qui gère les dates
+    // A slower answer for a day the user already left must not overwrite the current day.
+    let isCurrent = true;
     fetchTodayNutrition(user.id, formattedDate)
       .then(data => {
+        if (!isCurrent) return;
         setMeals(data.meals || []);
+        setTargets(data);
       })
       .catch(error => {
-        console.error("Erreur de chargement des repas:", error);
-        setMeals([]);
+        if (!isCurrent) return;
+        console.error("Could not load meals:", error);
+        if (!cached) setMeals([]);
       })
-      .finally(() => setIsLoading(false));
-  }, [selectedDate]); // L'ajout de selectedDate ici est la clé du fonctionnement !
+      .finally(() => {
+        if (isCurrent) setIsLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectedDate]);
 
   useEffect(() => {
     if (!editingMeal || !isFoodSearchOpen || !editFoodName.trim()) {
@@ -213,19 +269,16 @@ export default function Nutrition() {
     };
   }, [editingMeal, editFoodName, isFoodSearchOpen]);
 
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newDate = new Date(e.target.value);
-    const today = new Date();
-    const diffTime = today.getTime() - newDate.getTime(); 
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays > 7 || diffDays < 0) {
-      setDateError("You can't select a date outside the 1-week limit.");
-    } else {
-      setDateError(null);
-      setSelectedDate(newDate); // Ceci va déclencher le useEffect juste au-dessus
-    }
+  const consumedKcal = meals.reduce((total, meal) => total + meal.item_calories, 0);
+  const today = new Date();
+  const oldestDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() - MAX_DAYS_BACK);
+  const canGoBack = !sameDay(selectedDate, oldestDay) && selectedDate > oldestDay;
+  const canGoForward = !sameDay(selectedDate, today);
+  const moveDay = (step: number) => {
+    if (step < 0 ? !canGoBack : !canGoForward) return;
+    setSelectedDate((current) => new Date(current.getFullYear(), current.getMonth(), current.getDate() + step));
   };
+
 
   const formatDateLabel = (date: Date) => {
     const today = new Date();
@@ -233,21 +286,11 @@ export default function Nutrition() {
     yesterday.setDate(yesterday.getDate() - 1);
 
     const options: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long', day: 'numeric' };
-    const dateString = date.toLocaleDateString('en-US', options).toUpperCase();
+    const dateString = date.toLocaleDateString('en-US', options);
 
-    if (date.toDateString() === today.toDateString()) return `TODAY, ${dateString}`;
-    if (date.toDateString() === yesterday.toDateString()) return `YESTERDAY, ${dateString}`;
+    if (date.toDateString() === today.toDateString()) return `Today, ${dateString}`;
+    if (date.toDateString() === yesterday.toDateString()) return `Yesterday, ${dateString}`;
     return dateString;
-  };
-
-  const formatTime = (timeString?: string) => {
-    if (!timeString) return 'Just now';
-    try {
-      const date = new Date(timeString);
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
-      return timeString;
-    }
   };
 
   const openEditModal = (meal: MealLogItem) => {
@@ -428,154 +471,152 @@ export default function Nutrition() {
   };
 
   return (
-    <div style={{ backgroundColor: '#121212', minHeight: '100vh', color: '#f3f3f5', padding: '24px 20px', fontFamily: 'system-ui, -apple-system, sans-serif', paddingBottom: '120px' }}>
-      
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
-        <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', color: '#f3f3f5', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
-          <ArrowLeft size={24} strokeWidth={2.5} />
-        </button>
-        <h1 style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '0.05em', margin: 0, textTransform: 'uppercase' }}>SAVED MEAL HISTORY</h1>
-        
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <Calendar size={24} style={{ color: '#8e8e93' }} strokeWidth={2} />
-          <input 
-            type="date" 
-            max={new Date().toISOString().split('T')[0]}
-            onChange={handleDateChange}
-            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', colorScheme: 'dark' }}
-            aria-label="Select date"
-          />
-        </div>
+    <div
+      className="screen hifi-screen hifi-theme meals-screen"
+      // Swipe left or right anywhere on the page to change day.
+      onPointerDown={(event) => { daySwipeRef.current = { x: event.clientX, y: event.clientY, swiped: false }; }}
+      onPointerUp={(event) => {
+        const start = daySwipeRef.current;
+        if (!start) return;
+        const dx = event.clientX - start.x;
+        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(event.clientY - start.y) * 1.5) {
+          start.swiped = true;
+          moveDay(dx < 0 ? 1 : -1);
+        }
+      }}
+      onClickCapture={(event) => {
+        if (daySwipeRef.current?.swiped) event.stopPropagation();
+        daySwipeRef.current = null;
+      }}
+    >
+      <header className="hifi-page-header">
+        <h1 className="hifi-page-title">Meals</h1>
+        <button className="hifi-pill" type="button" onClick={() => navigate('/log-meals')}>Add meal</button>
       </header>
 
-      {dateError && (
-        <div style={{ backgroundColor: 'rgba(255, 77, 77, 0.1)', border: '1px solid rgba(255, 77, 77, 0.2)', color: '#ff4d4d', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center', fontSize: '13.5px', fontWeight: 500 }}>
-          {dateError}
-        </div>
+      <nav className="meal-day-nav" aria-label="Day">
+        <button className="subpage-button" type="button" onClick={() => moveDay(-1)} disabled={!canGoBack} aria-label="Previous day">
+          <ChevronLeft size={20} aria-hidden="true" />
+        </button>
+        <button className="meal-day-button" type="button" onClick={() => setIsDatePickerOpen(true)} aria-haspopup="dialog" aria-label={`${formatDateLabel(selectedDate)}. Choose a day`}>
+          {formatDateLabel(selectedDate)}
+        </button>
+        <button className="subpage-button" type="button" onClick={() => moveDay(1)} disabled={!canGoForward} aria-label="Next day">
+          <ChevronRight size={20} aria-hidden="true" />
+        </button>
+      </nav>
+
+      {isDatePickerOpen && (
+        <MealDatePicker
+          selected={selectedDate}
+          min={oldestDay}
+          max={today}
+          onSelect={(date) => {
+            setSelectedDate(date);
+            setIsDatePickerOpen(false);
+          }}
+          onClose={() => setIsDatePickerOpen(false)}
+        />
       )}
 
-      <h2 style={{ color: '#8e8e93', fontSize: '12.5px', marginBottom: '16px', fontWeight: 500, letterSpacing: '0.02em' }}>
-        {formatDateLabel(selectedDate)}
-      </h2>
+      {/* Always drawn, so it never pops in late: it shows its shape while the day loads. */}
+      <IntakeCard
+        label="Daily intake"
+        consumed={consumedKcal}
+        goal={targets?.daily_goal ?? 0}
+        pending={!targets}
+        macros={[
+          { label: 'Protein', current: meals.reduce((total, meal) => total + (meal.proteins_g ?? 0), 0), target: targets?.target_proteins_g ?? 0 },
+          { label: 'Carbs', current: meals.reduce((total, meal) => total + (meal.carbs_g ?? 0), 0), target: targets?.target_carbs_g ?? 0 },
+          { label: 'Fat', current: meals.reduce((total, meal) => total + (meal.fats_g ?? 0), 0), target: targets?.target_fats_g ?? 0 },
+        ]}
+        footer={<p className="hifi-caption meals-remaining">
+          {targets ? `${Math.abs(Math.round(targets.daily_goal - consumedKcal)).toLocaleString('en-US')} ${consumedKcal > targets.daily_goal ? 'over' : 'remaining'}` : ' '}
+        </p>}
+      />
 
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-        <button
-          type="button"
-          onClick={() => navigate('/log-meals')}
-          style={{ flex: 1, minWidth: 0, minHeight: '58px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: '1px solid #333', borderRadius: '14px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
-        >
-          <Plus size={20} aria-hidden="true" />
-          Manual Register
+      <div className="action-row">
+        <button className="action-button" type="button" onClick={() => { setFavoriteNotice(null); setIsFavoritesOpen(true); }}>
+          <Heart size={17} aria-hidden="true" /> Favorites{favorites.length > 0 && ` · ${favorites.length}`}
         </button>
         <button
-          type="button"
-          onClick={() => navigate(scanTarget)}
-          aria-label="Scan plate with AI"
-          style={{ flex: 1, minWidth: 0, minHeight: '58px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', border: '1px solid rgba(40, 205, 98, 0.35)', borderRadius: '14px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
-        >
-          <Camera size={18} aria-hidden="true" />
-          <span>Scan plate</span>
-          <span style={{ padding: '3px 7px', borderRadius: '6px', color: '#161616', backgroundColor: '#b99a45', fontSize: '10px', fontWeight: 800 }}>PRO</span>
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-        <button
-          type="button"
-          onClick={() => { setFavoriteNotice(null); setIsFavoritesOpen(true); }}
-          style={{ flex: 1, minWidth: 0, minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: '1px solid #333', borderRadius: '14px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
-        >
-          <Heart size={18} aria-hidden="true" />
-          Favorites{favorites.length > 0 && <span style={{ color: '#8e8e93', fontWeight: 600 }}>· {favorites.length}</span>}
-        </button>
-        <button
+          className="action-button"
           type="button"
           // Non-Premium users see the paywall; the server checks Premium again on every request.
           onClick={() => (isPremiumActive() ? setIsSuggestionsOpen(true) : navigate('/premium'))}
           aria-label={isPremiumActive() ? 'Suggested meals' : 'Suggested meals, available with Pro'}
-          style={{ flex: 1, minWidth: 0, minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', border: '1px solid #333', borderRadius: '14px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
         >
-          <ChefHat size={18} aria-hidden="true" style={{ flexShrink: 0 }} />
-          <span>Suggestions</span>
-          {!isPremiumActive() && <span style={{ padding: '3px 7px', borderRadius: '6px', color: '#161616', backgroundColor: '#b99a45', fontSize: '10px', fontWeight: 800 }}>PRO</span>}
+          <ChefHat size={17} aria-hidden="true" /> Suggestions {!isPremiumActive() && <span className="pro-badge">Pro</span>}
         </button>
       </div>
+      {favoriteNotice && <p className="form-error" role="alert">{favoriteNotice}</p>}
 
-      {favoriteNotice && (
-        <div role="alert" style={{ backgroundColor: 'rgba(255, 77, 77, 0.1)', border: '1px solid rgba(255, 77, 77, 0.2)', color: '#ff4d4d', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center', fontSize: '13.5px', fontWeight: 500 }}>
-          {favoriteNotice}
+      <section className="meals-panel" aria-labelledby="meals-list-title">
+        <h2 className="hifi-section-title" id="meals-list-title">{sameDay(selectedDate, today) ? "Today's meals" : 'Meals this day'}</h2>
+        <div className="meals-panel-list">
+          {isLoading ? (
+            <p className="visually-hidden" role="status">Loading your meals...</p>
+          ) : meals.length === 0 ? (
+            <p className="hifi-muted">No meals recorded for this day.</p>
+          ) : (
+            meals.map((meal) => {
+              const isFavorite = favoritesByKey.has(favoriteKey(meal.meal_type, meal.meal_name));
+              return (
+                <article className="meals-card" key={meal.id} data-open={openMealId === meal.id}>
+                  <div className="meals-card-top">
+                    <button
+                      className="meals-card-main"
+                      type="button"
+                      onClick={() => setOpenMealId(openMealId === meal.id ? null : meal.id)}
+                      aria-expanded={openMealId === meal.id}
+                      aria-label={`${meal.meal_type}: ${meal.meal_name}, ${meal.item_calories} kcal. ${openMealId === meal.id ? 'Hide' : 'Show'} contents`}
+                    >
+                      <span className="meals-card-type">{meal.meal_type}</span>
+                      <span className="meals-card-name">{meal.meal_name}</span>
+                    </button>
+                    <span className="meals-card-side">
+                      <span className="meals-card-icons">
+                        <button
+                          className={`meals-card-heart${heartAnim?.id === meal.id ? ` is-${heartAnim.kind}` : ''}`}
+                          onAnimationEnd={() => setHeartAnim(null)}
+                          type="button"
+                          onClick={() => toggleFavorite(meal)}
+                          disabled={heartBusyId === meal.id}
+                          aria-pressed={isFavorite}
+                          aria-label={isFavorite ? `Remove ${meal.meal_name} from favorites` : `Save ${meal.meal_name} as a favorite`}
+                        >
+                          <Heart size={18} aria-hidden="true" fill={isFavorite ? 'currentColor' : 'none'} />
+                        </button>
+                        <ChevronDown className="meals-card-chevron" size={22} strokeWidth={1.5} aria-hidden="true" />
+                      </span>
+                      <span className="meals-card-kcal">{meal.item_calories}kcal</span>
+                    </span>
+                  </div>
+                  {openMealId === meal.id && (
+                    <div className="meals-card-details">
+                      {meal.ingredients?.length ? (
+                        <ul className="meals-card-foods" aria-label={`Contents of ${meal.meal_name}`}>
+                          {meal.ingredients.map((ingredient, index) => (
+                            <li key={`${ingredient.name}-${index}`}>
+                              <span>{ingredient.name}</span>
+                              <span><b>{Math.round(ingredient.quantity_g)}g</b> {Math.round(ingredient.calories_per_100g * ingredient.quantity_g / 100)}kcal</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="meals-card-foods-empty">{meal.weight_g ? `${Math.round(Number(meal.weight_g))}g · ` : ''}No ingredient breakdown for this meal.</p>
+                      )}
+                      <button className="hifi-link-button meals-card-edit" type="button" onClick={() => openEditModal(meal)}>Edit</button>
+                    </div>
+                  )}
+                </article>
+              );
+            })
+          )}
         </div>
-      )}
-
-      <section style={{ marginBottom: '20px' }} aria-labelledby="nutrition-hydration">
-        <h2
-          id="nutrition-hydration"
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#8e8e93', fontSize: '12.5px', marginBottom: '12px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}
-        >
-          <GlassWater size={16} aria-hidden="true" /> Hydration today
-        </h2>
-        <HydrationCard />
       </section>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {isLoading ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93', fontSize: '14px' }}>Loading your meals...</div>
-        ) : meals.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93', fontSize: '14px' }}>No meals recorded for this day.</div>
-        ) : (
-          meals.map((meal) => (
-            <div key={meal.id} style={{ backgroundColor: '#1c1c1e', borderRadius: '20px', padding: '20px', position: 'relative', border: '1px solid rgba(255,255,255,0.03)' }}>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', flex: 1, paddingRight: '12px' }}>
-                  <Utensils size={18} color="#8e8e93" style={{ marginTop: '2px', flexShrink: 0 }} />
-                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, lineHeight: '1.3', letterSpacing: '0.02em', color: '#ffffff' }}>
-                    {meal.meal_type.toUpperCase()}: {meal.meal_name.toUpperCase()}
-                  </h3>
-                </div>
-                <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexShrink: 0 }}>
-                  <span style={{ color: '#8e8e93', fontSize: '13.5px', fontWeight: 500 }}>
-                    {formatTime(meal.consumed_at)}
-                  </span>
-                  {(() => {
-                    const isFavorite = favoritesByKey.has(favoriteKey(meal.meal_type, meal.meal_name));
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => toggleFavorite(meal)}
-                        disabled={heartBusyId === meal.id}
-                        aria-pressed={isFavorite}
-                        aria-label={isFavorite ? `Remove ${meal.meal_name} from favorites` : `Save ${meal.meal_name} as a favorite`}
-                        style={{ background: 'none', border: 'none', color: isFavorite ? '#ff6b81' : '#8e8e93', cursor: 'pointer', padding: 0, display: 'flex', opacity: heartBusyId === meal.id ? 0.5 : 1 }}
-                      >
-                        <Heart size={18} strokeWidth={2} fill={isFavorite ? 'currentColor' : 'none'} />
-                      </button>
-                    );
-                  })()}
-                  <button onClick={() => openEditModal(meal)} aria-label={`Edit ${meal.meal_name}`} style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                    <Pencil size={18} strokeWidth={2} />
-                  </button>
-                  <button onClick={() => setDeletingMeal(meal)} style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                    <Trash2 size={18} strokeWidth={2} />
-                  </button>
-                </div>
-              </div>
-
-              <ul style={{ listStyleType: 'disc', paddingLeft: '28px', margin: 0, color: '#d1d1d6', fontSize: '14px', lineHeight: '1.8' }}>
-                <li>{meal.item_calories} kcal</li>
-                {meal.proteins_g !== undefined && <li>{meal.proteins_g}g Protein</li>}
-                {meal.carbs_g !== undefined && <li>{meal.carbs_g}g Carbs</li>}
-                {meal.fats_g !== undefined && <li>{meal.fats_g}g Fat</li>}
-              </ul>
-              {meal.ingredient_details_saved === false && (
-                <p style={{ margin: '10px 0 0', color: '#d6b85a', fontSize: '12px', lineHeight: 1.4 }}>
-                  Saved without ingredient details. Apply the meal ingredients database migration to enable ingredient editing.
-                </p>
-              )}
-            </div>
-          ))
-        )}
-      </div>
+      <HydrationSummary detailed />
 
       {editingMeal && (
         <div className="modal-backdrop" onClick={() => !isSavingEdit && closeEditor()}>
@@ -702,8 +743,11 @@ export default function Nutrition() {
               </div>
 
               {editError && <div className="inline-alert" role="alert">{editError}</div>}
-              <button className="btn-modal-submit" type="submit" disabled={isSavingEdit || editIngredients.length === 0 || editIngredients.some((ingredient) => ingredient.quantity_g <= 0)}>
+              <button className="primary-button" type="submit" disabled={isSavingEdit || editIngredients.length === 0 || editIngredients.some((ingredient) => ingredient.quantity_g <= 0)}>
                 {isSavingEdit ? <><Loader2 size={18} className="animate-spin" aria-hidden="true" /> Saving...</> : 'Save changes'}
+              </button>
+              <button className="text-action meal-delete-link" type="button" disabled={isSavingEdit} onClick={() => { setDeletingMeal(editingMeal); setEditingMeal(null); }}>
+                <Trash2 size={16} aria-hidden="true" /> Delete meal
               </button>
             </form>
           </div>
@@ -726,7 +770,7 @@ export default function Nutrition() {
         <MealRecommendationsModal
           onClose={() => setIsSuggestionsOpen(false)}
           // Suggestions are logged to today, so show today with the new meal.
-          onAdded={() => { setDateError(null); setSelectedDate(new Date()); }}
+          onAdded={() => setSelectedDate(new Date())}
           onPremiumRequired={() => navigate('/premium')}
         />
       )}
@@ -751,7 +795,7 @@ export default function Nutrition() {
             </div>
             <h3 id="quantity-warning-title">Is {highQuantityWarning.next.toLocaleString()}g correct?</h3>
             <p id="quantity-warning-description">
-              <strong>{highQuantityWarning.name}</strong> at {highQuantityWarning.next.toLocaleString()}g is over
+              <strong>{highQuantityWarning.name}</strong> at {highQuantityWarning.next.toLocaleString()}g is over{' '}
               {MAX_REASONABLE_QUANTITY_G.toLocaleString()}g. That may be too much for one meal. Please confirm
               the amount is right.
             </p>
@@ -768,16 +812,15 @@ export default function Nutrition() {
       )}
 
       {deletingMeal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ backgroundColor: '#1c1c1e', padding: '24px', borderRadius: '24px', width: '90%', maxWidth: '340px', boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '17px', fontWeight: 700, color: '#ffffff' }}>Delete Meal?</h3>
-            <p style={{ margin: 0, color: '#d1d1d6', fontSize: '14px', lineHeight: '1.5' }}>Are you sure you want to remove <strong style={{color: '#fff'}}>{deletingMeal.meal_name}</strong> from this day? This cannot be undone.</p>
-            {deleteError && <p role="alert" style={{ margin: '12px 0 0', color: '#ff8585', fontSize: '13px' }}>{deleteError}</p>}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '28px' }}>
-              <button onClick={() => { setDeletingMeal(null); setDeleteError(null) }} disabled={isDeletingMeal} style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: '10px 16px', fontSize: '14.5px', fontWeight: 600 }}>Cancel</button>
-              <button onClick={confirmDelete} disabled={isDeletingMeal} style={{ backgroundColor: '#ff4d4d', border: 'none', color: '#ffffff', borderRadius: '12px', padding: '10px 24px', cursor: isDeletingMeal ? 'wait' : 'pointer', fontSize: '14.5px', fontWeight: 600 }}>
-                {isDeletingMeal ? 'Deleting...' : 'Delete'}
+        <div className="modal-backdrop">
+          <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="delete-meal-title">
+            <h2 id="delete-meal-title">Delete {deletingMeal.meal_name}?</h2>
+            <p>It will be removed from this day. This cannot be undone.</p>
+            {deleteError && <p className="form-error" role="alert">{deleteError}</p>}
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" onClick={() => { setDeletingMeal(null); setDeleteError(null) }} disabled={isDeletingMeal}>Cancel</button>
+              <button className="danger-action" type="button" onClick={confirmDelete} disabled={isDeletingMeal}>
+                {isDeletingMeal ? 'Deleting...' : 'Delete meal'}
               </button>
             </div>
           </div>

@@ -737,12 +737,18 @@ def add_favorite_from_meal(user_id: str, meal_id: str) -> FavoriteMeal:
 
     name = meal.get("name") or "Unnamed Meal"
     meal_type = (ingredient_rows[0].get("meal_type") if ingredient_rows else None) or infer_meal_type(meal.get("consumed_at"))
-    existing = _find_favorite(supabase, user_id, meal_type, name)
+    # One read of the user's favorites (at most MAX_FAVORITE_MEALS rows) covers both the duplicate
+    # check and the limit, instead of a query for each.
+    saved = supabase.table("favorite_meals").select(FAVORITE_COLUMNS).eq("user_id", user_id).execute().data or []
+    wanted = name.strip().lower()
+    existing = next(
+        (row for row in saved if row.get("meal_type") == meal_type and str(row.get("name", "")).strip().lower() == wanted),
+        None,
+    )
     if existing:
         return _favorite_from_row(existing)
 
-    count = supabase.table("favorite_meals").select("id").eq("user_id", user_id).execute().data or []
-    if len(count) >= MAX_FAVORITE_MEALS:
+    if len(saved) >= MAX_FAVORITE_MEALS:
         raise FavoriteLimitReached(f"You can save up to {MAX_FAVORITE_MEALS} favorite meals.")
 
     ingredients = [MealIngredient(**{key: row[key] for key in MealIngredient.model_fields}) for row in ingredient_rows]

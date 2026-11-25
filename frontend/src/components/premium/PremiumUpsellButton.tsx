@@ -1,6 +1,7 @@
 import { Crown } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { usePageNavigate } from '../../utils/usePageNavigate'
 import { PREMIUM_UPDATED_EVENT, isPremiumActive } from '../../services/api'
 
 interface PremiumUpsellButtonProps {
@@ -9,7 +10,7 @@ interface PremiumUpsellButtonProps {
 }
 
 function PremiumUpsellButton({ compact = false, className = '' }: PremiumUpsellButtonProps) {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const location = useLocation()
   const [isPremium, setIsPremium] = useState(() => isPremiumActive())
 
@@ -30,7 +31,7 @@ function PremiumUpsellButton({ compact = false, className = '' }: PremiumUpsellB
       type="button"
       className={`premium-upsell-button${compact ? ' is-compact' : ''}${className ? ` ${className}` : ''}`}
       onClick={() => navigate('/premium', { state: { from: location.pathname } })}
-      aria-label="Unlock SET&PLATE Premium"
+      aria-label="Unlock BOOOST Premium"
       title="Unlock Premium"
     >
       <Crown size={15} aria-hidden="true" />

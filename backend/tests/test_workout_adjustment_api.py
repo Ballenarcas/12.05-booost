@@ -33,6 +33,10 @@ def test_adjustment_requires_a_session():
     assert response.status_code == 401
 
 
+def test_daily_plan_requires_a_session():
+    assert client.post("/api/v1/workouts/plan-today").status_code == 401
+
+
 def test_adjustment_returns_the_model_suggestions(monkeypatch):
     patch_suggestions(monkeypatch, [
         {"action": "drop_set", "exercise_id": "bench", "reason": "Fatigue on set one."},

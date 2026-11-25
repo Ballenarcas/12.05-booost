@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Sparkles } from 'lucide-react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { ArrowLeft, ArrowRight, Check, Eye, EyeOff } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 import { loginUser } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { UserProfile } from '../types'
@@ -8,7 +9,7 @@ import '../styles/onboarding.css'
 import '../styles/login.css'
 
 function Login() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -38,9 +39,9 @@ function Login() {
 
   if (profile) {
     return (
-      <main className="onboarding-container login-container">
+      <main className="onboarding-container hifi-theme login-container">
         <div className="completion-overlay">
-          <div className="completion-icon-wrapper"><Sparkles size={34} aria-hidden="true" /></div>
+          <div className="completion-icon-wrapper"><Check size={34} aria-hidden="true" /></div>
           <h1 className="onboarding-title">Welcome, {profile.name}!</h1>
           <p className="onboarding-subtitle">Your personalized training &amp; nutrition plan is ready.</p>
         </div>
@@ -49,9 +50,9 @@ function Login() {
   }
 
   return (
-    <main className="onboarding-container login-container">
+    <main className="onboarding-container hifi-theme login-container">
       <div className="onboarding-content login-content">
-        <div className="login-mark"><Sparkles size={17} aria-hidden="true" /> SET&PLATE</div>
+        <div className="login-mark">BOOOST</div>
         <header className="onboarding-header login-header">
           <h1 className="onboarding-title">Welcome back</h1>
           <p className="onboarding-subtitle">Sign in to continue your training and nutrition journey.</p>
@@ -113,7 +114,7 @@ function Login() {
       </div>
 
       <p className="login-create-prompt">
-        New to SET&PLATE? <Link to="/onboarding">Create your profile</Link>
+        New to BOOOST? <Link to="/onboarding">Create your profile</Link>
       </p>
     </main>
   )

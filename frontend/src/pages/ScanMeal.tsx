@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft,
-  Camera,
   Check,
   ChevronDown,
   ChevronUp,
   Flame,
-  ImagePlus,
   Loader2,
   Minus,
   Plus,
@@ -22,6 +19,10 @@ import {
   type MealScanItem,
 } from '../services/api'
 import { describeError } from '../utils/errors.js'
+import backIcon from '../assets/scan/back.svg'
+import importIcon from '../assets/scan/import.svg'
+import frameImage from '../assets/scan/frame.svg'
+import shutterImage from '../assets/scan/shutter.svg'
 import '../styles/scan-meal.css'
 
 type ScanPhase = 'idle' | 'analyzing' | 'results' | 'saving' | 'error'
@@ -108,6 +109,41 @@ export default function ScanMeal() {
   const [notes, setNotes] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [camera, setCamera] = useState<'starting' | 'live' | 'unavailable'>(() =>
+    typeof navigator.mediaDevices?.getUserMedia === 'function' ? 'starting' : 'unavailable')
+
+  // Live viewfinder while choosing a photo. Without camera access (refused, no camera, an old
+  // WebView) the shutter falls back to the phone's own camera through the file input.
+  useEffect(() => {
+    if (phase !== 'idle') return
+    if (typeof navigator.mediaDevices?.getUserMedia !== 'function') return
+    let stream: MediaStream | null = null
+    let cancelled = false
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+      .then((next) => {
+        if (cancelled) {
+          next.getTracks().forEach((track) => track.stop())
+          return
+        }
+        stream = next
+        // The device's background blur follows faces and smears the food; turn it off where the camera lets us.
+        const [track] = next.getVideoTracks()
+        const blurOptions = (track?.getCapabilities?.() as { backgroundBlur?: boolean[] } | undefined)?.backgroundBlur
+        if (blurOptions?.includes(false)) {
+          track.applyConstraints({ advanced: [{ backgroundBlur: false } as MediaTrackConstraintSet] }).catch(() => {})
+        }
+        if (videoRef.current) videoRef.current.srcObject = next
+        setCamera('live')
+      })
+      .catch(() => { if (!cancelled) setCamera('unavailable') })
+    return () => {
+      cancelled = true
+      stream?.getTracks().forEach((track) => track.stop())
+      // Back to idle later starts the camera again.
+      setCamera('starting')
+    }
+  }, [phase])
 
   useEffect(() => () => {
     if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current)
@@ -181,6 +217,21 @@ export default function ScanMeal() {
     const file = event.target.files?.[0]
     event.target.value = ''
     void handleFile(file)
+  }
+
+  const takePhoto = () => {
+    const video = videoRef.current
+    if (camera !== 'live' || !video?.videoWidth) {
+      cameraInputRef.current?.click()
+      return
+    }
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    canvas.getContext('2d')?.drawImage(video, 0, 0)
+    canvas.toBlob((blob) => {
+      if (blob) void handleFile(new File([blob], 'meal.jpg', { type: 'image/jpeg' }))
+    }, 'image/jpeg', 0.9)
   }
 
   const handleRetake = () => {
@@ -265,29 +316,38 @@ export default function ScanMeal() {
   const showPreview = Boolean(imageUrl) && phase !== 'idle'
 
   return (
-    <div className="screen scan-screen">
+    <div className="screen hifi-theme scan-screen">
       <header className="scan-header">
         <button className="scan-back" type="button" onClick={() => navigate(-1)} aria-label="Go back">
-          <ArrowLeft size={22} aria-hidden="true" />
+          <img src={backIcon} alt="" width={36} height={37} />
         </button>
-        <h1>{phase === 'results' || phase === 'saving' ? 'Scan results' : 'Scan meal'}</h1>
-        <span className="scan-date">{todayLabel()}</span>
+        <div className="scan-title-row">
+          <h1>{phase === 'results' || phase === 'saving' ? 'Scan results' : 'Scan'}</h1>
+          {phase === 'idle' ? (
+            <button className="scan-import" type="button" onClick={() => galleryInputRef.current?.click()}>
+              <img src={importIcon} alt="" width={43.2143} height={43.2143} />
+              <span>Import</span>
+            </button>
+          ) : (
+            <span className="scan-date">{todayLabel()}</span>
+          )}
+        </div>
       </header>
 
       {phase === 'idle' && (
         <section className="scan-capture" aria-labelledby="scan-capture-title">
-          <div className="scan-camera-card">
-            <span className="scan-camera-icon" aria-hidden="true"><Camera size={42} /></span>
-            <h2 id="scan-capture-title">Snap your plate</h2>
-            <p>Take a clear photo of the whole meal. The AI estimates each ingredient, its weight, and its calories.</p>
-            <button type="button" className="scan-primary" onClick={() => cameraInputRef.current?.click()}>
-              <Camera size={19} aria-hidden="true" /> Open camera
-            </button>
-            <button type="button" className="scan-secondary" onClick={() => galleryInputRef.current?.click()}>
-              <ImagePlus size={19} aria-hidden="true" /> Choose from gallery
-            </button>
-            <p className="scan-privacy">Your photo is sent to the AI provider only to estimate this meal.</p>
+          <div className="scan-viewfinder" data-camera={camera}>
+            <video ref={videoRef} className="scan-video" autoPlay playsInline muted aria-hidden="true" />
+            <img className="scan-frame" src={frameImage} alt="" width={286} height={445} />
+            <div className="scan-viewfinder-copy">
+              <h2 id="scan-capture-title">Take a photo</h2>
+              <p>{camera === 'unavailable' ? 'Tap the button to open your camera' : 'Capture an image to scan food items'}</p>
+            </div>
           </div>
+          <button className="scan-shutter" type="button" onClick={takePhoto} aria-label="Take photo">
+            <img src={shutterImage} alt="" width={79} height={79} />
+          </button>
+          <p className="scan-privacy">Your photo is sent to the AI provider only to estimate this meal.</p>
           {error && <p className="scan-error" role="alert">{error}</p>}
         </section>
       )}
@@ -307,7 +367,9 @@ export default function ScanMeal() {
 
       {showPreview && (
         <section className="scan-preview" aria-label="Meal photo preview">
-          <img src={imageUrl ?? ''} alt="Meal to analyze" className="scan-image" />
+          <div className="scan-photo" data-scanning={phase === 'analyzing'}>
+            <img src={imageUrl ?? ''} alt="Meal to analyze" className="scan-image" />
+          </div>
           <button type="button" className="scan-retake" onClick={handleRetake}>
             <RotateCcw size={16} aria-hidden="true" /> Retake
           </button>

@@ -17,7 +17,7 @@
 }
 
 .hydration-history-back {
-  color: #fff;
+  color: var(--text);
 }
 
 .hydration-history-back:focus-visible,
@@ -44,7 +44,7 @@
   place-items: center;
   border: 0;
   border-radius: 0.65rem;
-  color: #fff;
+  color: var(--text);
   background: var(--surface-raised);
   cursor: pointer;
 }
@@ -193,7 +193,7 @@
 }
 
 .hydration-chart-grid {
-  stroke: rgba(255, 255, 255, 0.07);
+  stroke: var(--line);
   stroke-width: 1;
 }
 
@@ -305,7 +305,7 @@
   height: 0.4rem;
   overflow: hidden;
   border-radius: 999px;
-  background: #2b2b2b;
+  background: var(--surface-raised);
 }
 
 .hydration-day-fill {
@@ -359,7 +359,7 @@
 
 .hydration-history-empty h3 {
   margin: 0 0 0.25rem;
-  color: #fff;
+  color: var(--text);
   font-size: 0.92rem;
 }
 

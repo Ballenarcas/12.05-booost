@@ -1,0 +1,60 @@
+/* Home page from the Figma mockup ("1/HOME"); shared pieces live in redesign.css. */
+
+
+/* Blue wash in the top right corner, fading into a pale lilac ground. */
+.app-shell:has(.home-screen) {
+  background:
+    radial-gradient(110% 45% at 100% 0%, rgba(0, 82, 177, 0.9) 0%, rgba(141, 207, 232, 0.35) 55%, transparent 80%),
+    linear-gradient(180deg, #e9eef8 0%, #f6f6fe 40%, #f8f8ff 100%);
+}
+:root[data-theme="dark"] .app-shell:has(.home-screen) {
+  background:
+    radial-gradient(110% 45% at 100% 0%, rgba(0, 62, 140, 0.75) 0%, rgba(20, 60, 100, 0.3) 55%, transparent 80%),
+    #0f1115;
+}
+
+.home-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.home-date { margin: 0 0 4px; color: var(--hifi-muted); font-size: 14px; text-transform: uppercase; }
+.home-greeting { margin: 0; font-size: 20px; font-weight: 500; line-height: 1.2; }
+.home-heading { margin: 0; padding-top: 8px; font-size: 24px; font-weight: 400; line-height: 1.2; }
+.home-cards { display: grid; gap: 16px; margin-top: -4px; }
+
+
+
+/* Activity */
+.home-activity { display: grid; grid-template-columns: repeat(2, minmax(0, 140px)); justify-content: center; gap: 24px; padding-bottom: 16px; }
+.home-activity-stat { display: grid; gap: 4px; justify-items: center; font-family: var(--hifi-mono); text-align: center; }
+.home-activity-stat strong { font-size: 24px; font-weight: 400; line-height: 1.1; }
+.home-activity-stat span { color: var(--hifi-faint); font-size: 14px; line-height: 1; white-space: nowrap; }
+.home-activity-stat .hifi-bar { width: 100%; margin-top: 8px; }
+
+/* AI workout */
+.home-plan-intro { display: grid; margin: 0; font-size: 16px; line-height: 1.2; }
+.home-plan-intro span { color: var(--hifi-faint); }
+.home-workout { display: flex; gap: 12px; min-height: 88px; padding: 8px 0 16px; }
+
+.home-workout-body { display: flex; flex: 1; flex-direction: column; justify-content: space-between; gap: 8px; min-width: 0; }
+.home-workout-body h3 { margin: 0; font-size: 20px; font-weight: 400; line-height: 1.2; overflow-wrap: anywhere; }
+.home-workout-meta { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+.home-workout-meta .hifi-caption { color: var(--hifi-muted); }
+.hifi-badge { align-self: flex-start; padding: 2px 8px; border-radius: 31px; color: var(--hifi-muted); background: var(--hifi-well); font-family: var(--hifi-mono); font-size: 12px; text-transform: uppercase; }
+
+
+/* AI insight: the mockup's sheet, kept in the page so it never covers the cards. */
+.ai-insight { gap: 8px; border-radius: 28px 28px 12px 12px; background: linear-gradient(180deg, rgba(141, 207, 232, 0.21) 0%, rgba(1, 78, 144, 0.21) 100%), var(--hifi-card); box-shadow: 0 -2px 8px rgba(131, 131, 131, 0.25); }
+.ai-insight-top { display: flex; align-items: center; justify-content: space-between; min-height: 30px; }
+.ai-insight-close { display: grid; place-items: center; width: 44px; height: 44px; margin: -12px -12px -12px 0; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.ai-insight-close:disabled { cursor: not-allowed; opacity: 0.5; }
+.ai-insight-message { margin: 0; font-size: 20px; font-weight: 500; line-height: 1.25; }
+.ai-insight .ai-tip-notice p { margin: 0; color: var(--hifi-muted); font-size: 14px; line-height: 1.4; }
+.ai-insight-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding-top: 8px; }
+.ai-insight-why { display: grid; place-items: center; width: 44px; height: 44px; margin-right: auto; padding: 0; border: 0; color: var(--hifi-muted); background: transparent; cursor: pointer; }
+:root[data-theme="dark"] .ai-insight-close img { filter: invert(1); }
+
+@media (max-width: 360px) {
+  .home-activity { gap: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hifi-bar > span { transition: none; }
+}
+.home-workout .hifi-photo { border-radius: 6px; }

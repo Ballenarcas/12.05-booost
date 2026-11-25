@@ -1,15 +1,31 @@
-import { ArrowLeft, Clock3, Dumbbell, HeartPulse, PieChart, TrendingUp } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Dumbbell, HeartPulse, Utensils } from 'lucide-react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import StatsBreakdown, { type BreakdownItem } from '../components/stats/StatsBreakdown'
+import StatsCalendar, { type CalendarDayData } from '../components/stats/StatsCalendar'
+import StatsProgressionChart, { type ProgressionDatum } from '../components/stats/StatsProgressionChart'
 import FatigueHistoryChart from '../components/workout/FatigueHistoryChart'
-import MuscleGroupDistributionChart from '../components/workout/MuscleGroupDistributionChart'
-import VolumeProgressionChart from '../components/workout/VolumeProgressionChart'
-import { fetchWorkoutStatistics, getCurrentUser } from '../services/api'
+import {
+  fetchNutritionStatistics,
+  fetchWorkoutStatistics,
+  getCurrentUser,
+  getSavedNutritionStatistics,
+  getSavedWorkoutStatistics,
+} from '../services/api'
+import type { NutritionStatistics, NutritionStatisticsRange } from '../types/nutrition'
 import type { WorkoutStatistics, WorkoutStatisticsRange } from '../types/workout'
 import { describeError } from '../utils/errors.js'
 import {
+  formatCompactGrams,
+  formatCompactHydration,
+  formatCompactKgParts,
+  toLocalDateKey,
+  type SplitMetricValue,
+} from '../utils/nutritionStatistics'
+import {
   DEFAULT_STATISTICS_RANGE,
   STATISTICS_RANGES,
+  formatCompactDuration,
   formatFatigueAverage,
   formatFatigueDay,
   formatStatisticsDateRange,
@@ -19,151 +35,277 @@ import {
 } from '../utils/workoutStatistics'
 import '../styles/workout-statistics.css'
 
-interface MetricCardProps {
-  icon: ReactNode
-  label: string
-  value: string
-  note: string
-}
+type StatsTab = 'workouts' | 'meals'
 
-function MetricCard({ icon, label, value, note }: MetricCardProps) {
-  return (
-    <article className="card stats-metric-card">
-      <span className="stats-metric-icon" aria-hidden="true">{icon}</span>
-      <p className="stats-metric-label">{label}</p>
-      <p className="stats-metric-value">{value}</p>
-      <p className="stats-metric-note">{note}</p>
-    </article>
-  )
-}
-
-function StatisticsSkeleton() {
-  return (
-    <div className="stats-loading" role="status" aria-label="Loading workout statistics">
-      <div className="stats-metrics" aria-hidden="true">
-        {[0, 1, 2].map((item) => (
-          <div className="card stats-metric-card" key={item}>
-            <span className="skeleton skeleton-line w-short" />
-            <span className="skeleton skeleton-line w-mid tall" />
-            <span className="skeleton skeleton-line w-mid" />
-          </div>
-        ))}
-      </div>
-      <div className="card stats-panel" aria-hidden="true">
-        <span className="skeleton skeleton-line w-mid tall" />
-        <span className="skeleton stats-chart-skeleton" />
-      </div>
-      <div className="card stats-panel" aria-hidden="true">
-        <span className="skeleton skeleton-line w-mid tall" />
-        <span className="skeleton stats-chart-skeleton" />
-      </div>
-      <div className="card stats-panel" aria-hidden="true">
-        <span className="skeleton skeleton-line w-mid tall" />
-        <span className="skeleton stats-chart-skeleton" />
-      </div>
-    </div>
-  )
-}
-
-function durationValue(data: WorkoutStatistics): string {
-  if (data.total_workouts === 0) return '0 min'
-  if (data.workouts_with_duration === 0) return 'Unavailable'
-  return formatStatisticsDuration(data.total_duration_seconds)
-}
-
-function durationNote(data: WorkoutStatistics): string {
-  if (data.total_workouts === 0) return 'No completed sessions'
-  if (data.workouts_with_duration === 0) return 'Missing recorded durations'
-  if (data.workouts_with_duration < data.total_workouts) {
-    return `${data.workouts_with_duration} of ${data.total_workouts} sessions timed`
+// Half-oval range dial geometry in px so the sliding indicator dot follows the exact SVG arc.
+const DIAL = (() => {
+  const rx = 76
+  const ry = 36
+  const side = 22
+  const top = 30
+  const left = side
+  const right = side + 2 * rx
+  return {
+    width: right + side,
+    height: top + ry + 36,
+    path: `M ${left} ${top} A ${rx} ${ry} 0 0 0 ${right} ${top}`,
+    labels: [
+      { left, top: top - 4, transform: 'translate(-100%, -40%)' },
+      { left: left + rx, top: top + ry + 12, transform: 'translateX(-50%)' },
+      { left: right, top: top - 4, transform: 'translate(0%, -40%)' },
+    ],
   }
-  return 'Recorded session time'
+})()
+
+function workoutDurationSplit(data: WorkoutStatistics): SplitMetricValue {
+  if (data.total_workouts === 0) return { value: '0', unit: 'm', exact: '0 min' }
+  if (data.workouts_with_duration === 0) return { value: '–', unit: '', exact: 'Unavailable' }
+  const totalMinutes = Math.floor(data.total_duration_seconds / 60)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  const exact = formatStatisticsDuration(data.total_duration_seconds)
+  if (hours === 0) return { value: String(minutes), unit: 'm', exact }
+  if (minutes === 0) return { value: String(hours), unit: 'h', exact }
+  return { value: `${hours}h${String(minutes).padStart(2, '0')}`, unit: 'm', exact }
+}
+
+function pillDurationLabel(seconds: number, volumeKg: number): string {
+  if (seconds > 0) {
+    const totalMinutes = Math.floor(seconds / 60)
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`
+    if (hours > 0) return `${hours}h`
+    return `${Math.max(1, minutes)}m`
+  }
+  if (volumeKg > 0) return `${formatVolumeKg(volumeKg)}kg`
+  return 'Done'
+}
+
+function buildFallbackRangeBounds(range: WorkoutStatisticsRange): { start: string; end: string } {
+  const end = new Date()
+  const start = new Date(end)
+  if (range === '1W') start.setDate(start.getDate() - 7)
+  else if (range === '1M') start.setMonth(start.getMonth() - 1)
+  else start.setMonth(start.getMonth() - 3)
+  return { start: toLocalDateKey(start), end: toLocalDateKey(end) }
 }
 
 function WorkoutStatisticsPage() {
-  const navigate = useNavigate()
   const userId = getCurrentUser()?.id
+  const [searchParams, setSearchParams] = useSearchParams()
+  // The URL is the one source of the tab, so back/forward and links switch it too.
+  const tab: StatsTab = searchParams.get('tab') === 'meals' ? 'meals' : 'workouts'
+  const [switchDir, setSwitchDir] = useState<'left' | 'right' | null>(null)
   const [range, setRange] = useState<WorkoutStatisticsRange>(DEFAULT_STATISTICS_RANGE)
-  const [data, setData] = useState<WorkoutStatistics | null>(null)
-  const [isLoading, setIsLoading] = useState(Boolean(userId))
-  const [error, setError] = useState<string | null>(userId ? null : 'Sign in to view your workout statistics.')
-  const [retryToken, setRetryToken] = useState(0)
-  const requestId = useRef(0)
+
+  const [workoutData, setWorkoutData] = useState<WorkoutStatistics | null>(() => (
+    userId ? getSavedWorkoutStatistics(userId, DEFAULT_STATISTICS_RANGE) : null
+  ))
+  const [workoutLoading, setWorkoutLoading] = useState(Boolean(userId))
+  const [workoutError, setWorkoutError] = useState<string | null>(
+    userId ? null : 'Sign in to view your workout statistics.',
+  )
+
+  const [mealData, setMealData] = useState<NutritionStatistics | null>(() => (
+    userId ? getSavedNutritionStatistics(userId, DEFAULT_STATISTICS_RANGE) : null
+  ))
+  const [mealLoading, setMealLoading] = useState(Boolean(userId))
+  const [mealError, setMealError] = useState<string | null>(
+    userId ? null : 'Sign in to view your meal statistics.',
+  )
+
+  const [workoutRetryToken, setWorkoutRetryToken] = useState(0)
+  const [mealRetryToken, setMealRetryToken] = useState(0)
+  const workoutReqId = useRef(0)
+  const mealReqId = useRef(0)
+  const workoutTabRef = useRef<HTMLButtonElement | null>(null)
+  const mealsTabRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     if (!userId) return
-
-    const currentRequest = ++requestId.current
+    const currentRequest = ++workoutReqId.current
     const controller = new AbortController()
 
     fetchWorkoutStatistics(userId, range, controller.signal)
       .then((result) => {
-        if (currentRequest === requestId.current) setData(result)
+        if (currentRequest === workoutReqId.current) {
+          setWorkoutData(result)
+          setWorkoutError(null)
+        }
       })
       .catch((requestError: unknown) => {
-        if (controller.signal.aborted || currentRequest !== requestId.current) return
-        setError(describeError(requestError, "We couldn't load your workout statistics. Please try again."))
+        if (controller.signal.aborted || currentRequest !== workoutReqId.current) return
+        setWorkoutError(describeError(requestError, "We couldn't load your workout statistics. Please try again."))
       })
       .finally(() => {
-        if (currentRequest === requestId.current) setIsLoading(false)
+        if (currentRequest === workoutReqId.current) setWorkoutLoading(false)
       })
 
-    return () => {
-      controller.abort()
+    return () => controller.abort()
+  }, [range, workoutRetryToken, userId])
+
+  useEffect(() => {
+    if (!userId) return
+    const currentRequest = ++mealReqId.current
+    const controller = new AbortController()
+
+    fetchNutritionStatistics(userId, range as NutritionStatisticsRange, controller.signal)
+      .then((result) => {
+        if (currentRequest === mealReqId.current) {
+          setMealData(result)
+          setMealError(null)
+        }
+      })
+      .catch((requestError: unknown) => {
+        if (controller.signal.aborted || currentRequest !== mealReqId.current) return
+        setMealError(describeError(requestError, "We couldn't load your meal statistics. Please try again."))
+      })
+      .finally(() => {
+        if (currentRequest === mealReqId.current) setMealLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [range, mealRetryToken, userId])
+
+  function selectTab(nextTab: StatsTab) {
+    if (nextTab === tab) return
+    setSwitchDir(nextTab === 'meals' ? 'right' : 'left')
+    const nextParams = new URLSearchParams(searchParams)
+    if (nextTab === 'meals') nextParams.set('tab', 'meals')
+    else nextParams.delete('tab')
+    setSearchParams(nextParams, { replace: true })
+  }
+
+  function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, current: StatsTab) {
+    let target: HTMLButtonElement | null = null
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      target = current === 'workouts' ? mealsTabRef.current : workoutTabRef.current
+    } else if (event.key === 'Home') {
+      target = workoutTabRef.current
+    } else if (event.key === 'End') {
+      target = mealsTabRef.current
     }
-  }, [range, retryToken, userId])
+    if (target) {
+      event.preventDefault()
+      target.focus()
+    }
+  }
 
   function changeRange(nextRange: WorkoutStatisticsRange) {
     if (nextRange === range) return
-    requestId.current += 1
-    setError(null)
-    setIsLoading(true)
+    workoutReqId.current += 1
+    mealReqId.current += 1
+    setWorkoutError(null)
+    setMealError(null)
+    setWorkoutLoading(true)
+    setMealLoading(true)
+
+    const savedWorkout = userId ? getSavedWorkoutStatistics(userId, nextRange) : null
+    if (savedWorkout) setWorkoutData(savedWorkout)
+    const savedMeals = userId ? getSavedNutritionStatistics(userId, nextRange) : null
+    if (savedMeals) setMealData(savedMeals)
+
     setRange(nextRange)
   }
 
-  function retry() {
-    requestId.current += 1
-    setError(null)
-    setIsLoading(true)
-    setRetryToken((value) => value + 1)
+  function retryWorkouts() {
+    workoutReqId.current += 1
+    setWorkoutError(null)
+    setWorkoutLoading(true)
+    setWorkoutRetryToken((v) => v + 1)
   }
 
-  const selectedRangeLabel = STATISTICS_RANGES.find((option) => option.value === range)?.label ?? range
-  const displayedRangeLabel = data
-    ? STATISTICS_RANGES.find((option) => option.value === data.range)?.label ?? data.range
-    : null
-  const volumeEmpty = data?.volume_progression.length === 0
-  const distributionEmpty = data?.muscle_group_distribution.length === 0
-  const fatigueHistory = data?.fatigue_history ?? []
-  const fatigueEmpty = fatigueHistory.length === 0
+  function retryMeals() {
+    mealReqId.current += 1
+    setMealError(null)
+    setMealLoading(true)
+    setMealRetryToken((v) => v + 1)
+  }
+
+  const activeLoading = tab === 'workouts' ? workoutLoading : mealLoading
+  const fallbackBounds = buildFallbackRangeBounds(range)
+
+  // Workouts tab derived view data
+  const workoutVolumeSplit = formatCompactKgParts(workoutData?.total_volume_kg ?? 0)
+  const workoutTimeSplit = workoutData ? workoutDurationSplit(workoutData) : { value: '0', unit: 'm', exact: '0 min' }
+  const volumePoints: ProgressionDatum[] = (workoutData?.volume_progression ?? []).map((p) => ({
+    date: p.date,
+    value: p.volume_kg,
+  }))
+  const workoutCalendarDays: CalendarDayData[] = (workoutData?.calendar_days ?? []).map((day) => ({
+    date: day.date,
+    summaryLabel: `${day.workout_count} ${day.workout_count === 1 ? 'workout' : 'workouts'}, ${formatCompactDuration(day.total_duration_seconds)}`,
+    pills: day.items.map((item) => ({
+      label: item.label.toUpperCase(),
+      value: pillDurationLabel(item.duration_seconds, item.volume_kg),
+    })),
+  }))
+  const classifiedKg = workoutData?.classified_volume_kg ?? 0
+  const muscleItems: BreakdownItem[] = (workoutData?.muscle_group_distribution ?? []).map((item) => ({
+    id: item.muscle_group,
+    label: item.muscle_group.toUpperCase(),
+    valueText: item.volume_kg >= 1000
+      ? `${formatCompactKgParts(item.volume_kg).value}kg`
+      : `${formatVolumeKg(item.volume_kg)}kg`,
+    exactText: `${formatVolumeKg(item.volume_kg)} kg`,
+    share: classifiedKg > 0 ? (item.volume_kg / classifiedKg) * 100 : 0,
+  }))
+  const classifiedSplit = formatCompactKgParts(classifiedKg)
+  const fatigueHistory = workoutData?.fatigue_history ?? []
   const latestFatigue = fatigueHistory[fatigueHistory.length - 1]
 
-  return (
-    <div className="screen workout-stats-screen" aria-busy={isLoading}>
-      <header className="stats-page-header">
-        <button
-          className="icon-button stats-back-button"
-          type="button"
-          aria-label="Back to workouts"
-          onClick={() => navigate('/workouts')}
-        >
-          <ArrowLeft size={21} aria-hidden="true" />
-        </button>
-        <div>
-          <p className="eyebrow">Training insights</p>
-          <h1>Workout Statistics</h1>
-        </div>
-      </header>
+  // Meals tab derived view data
+  const hydrationSplit = formatCompactHydration(mealData?.total_hydration_ml ?? 0)
+  const intakeSplit = formatCompactGrams(mealData?.total_macros_g ?? 0)
+  const mealPoints: ProgressionDatum[] = (mealData?.calorie_progression ?? []).map((p) => ({
+    date: p.date,
+    value: p.calories,
+    loggedDays: p.logged_days,
+  }))
+  const mealCalendarDays: CalendarDayData[] = (mealData?.calendar_days ?? []).map((day) => ({
+    date: day.date,
+    summaryLabel: `${day.meal_count} ${day.meal_count === 1 ? 'meal' : 'meals'}, ${day.total_calories.toLocaleString('en-US')} kcal`,
+    pills: day.items.map((item) => ({
+      label: item.meal_type.toUpperCase(),
+      value: `${item.calories}kcal`,
+    })),
+  }))
+  const totalMacrosG = mealData?.total_macros_g ?? 0
+  const macroItems: BreakdownItem[] = (mealData?.macro_distribution ?? []).map((item) => {
+    const gramsSplit = formatCompactGrams(item.grams)
+    return {
+      id: item.macro,
+      label: item.label.toUpperCase(),
+      valueText: `${gramsSplit.value}${gramsSplit.unit}`,
+      exactText: gramsSplit.exact,
+      share: totalMacrosG > 0 ? (item.grams / totalMacrosG) * 100 : 0,
+    }
+  })
 
-      <section className="stats-range-section" aria-labelledby="stats-range-title">
-        <div className="stats-range-heading">
-          <h2 className="section-title" id="stats-range-title">Date range</h2>
-          {data?.range === range && (
-            <p className="stats-range-caption">{formatStatisticsDateRange(data.start_date, data.end_date)}</p>
-          )}
-        </div>
-        <div className="stats-range" role="group" aria-label="Statistics date range">
-          {STATISTICS_RANGES.map((option) => (
+  return (
+    <div className="screen hifi-screen stats-screen" data-tab={tab} aria-busy={activeLoading}>
+      <h1 className="visually-hidden">Statistics</h1>
+
+      <section className="stats-range-section" aria-label="Date range">
+        <div
+          className="stats-range"
+          role="group"
+          aria-label="Statistics date range"
+          style={{ width: DIAL.width, height: DIAL.height }}
+        >
+          <svg className="stats-range-arc" width={DIAL.width} height={DIAL.height} aria-hidden="true">
+            <path d={DIAL.path} />
+          </svg>
+          <span
+            className="stats-range-dot"
+            aria-hidden="true"
+            style={{
+              offsetPath: `path('${DIAL.path}')`,
+              offsetDistance: `${50 * Math.max(0, STATISTICS_RANGES.findIndex((option) => option.value === range))}%`,
+            }}
+          />
+          {STATISTICS_RANGES.map((option, index) => (
             <button
               className="stats-range-button"
               key={option.value}
@@ -171,163 +313,323 @@ function WorkoutStatisticsPage() {
               aria-pressed={range === option.value}
               aria-label={option.description}
               onClick={() => changeRange(option.value)}
+              style={DIAL.labels[index]}
             >
               {option.label}
             </button>
           ))}
         </div>
+        {((tab === 'workouts' ? workoutData : mealData)?.range === range) && (
+          <p className="visually-hidden">
+            {formatStatisticsDateRange(
+              (tab === 'workouts' ? workoutData : mealData)!.start_date,
+              (tab === 'workouts' ? workoutData : mealData)!.end_date,
+            )}
+          </p>
+        )}
       </section>
 
-      {isLoading && !data && <StatisticsSkeleton />}
+      <div className="stats-switcher-wrap">
+        <div className="stats-switcher" role="tablist" aria-label="Statistics category">
+          <button
+            ref={workoutTabRef}
+            id="stats-tab-workouts"
+            type="button"
+            role="tab"
+            className="stats-switcher-tab"
+            aria-selected={tab === 'workouts'}
+            tabIndex={tab === 'workouts' ? 0 : -1}
+            onClick={() => selectTab('workouts')}
+            onKeyDown={(e) => handleTabKeyDown(e, 'workouts')}
+          >
+            WORKOUTS
+          </button>
+          <button
+            ref={mealsTabRef}
+            id="stats-tab-meals"
+            type="button"
+            role="tab"
+            className="stats-switcher-tab"
+            aria-selected={tab === 'meals'}
+            tabIndex={tab === 'meals' ? 0 : -1}
+            onClick={() => selectTab('meals')}
+            onKeyDown={(e) => handleTabKeyDown(e, 'meals')}
+          >
+            MEALS
+          </button>
+        </div>
+      </div>
 
-      {isLoading && data && (
-        <p className="stats-refresh-status" role="status">
-          <span className="stats-refresh-indicator" aria-hidden="true" />
-          Updating {selectedRangeLabel} statistics; showing {displayedRangeLabel} results until ready.
+      {activeLoading && (
+        <p className="visually-hidden" role="status">
+          Loading {tab} statistics
         </p>
       )}
 
-      {!isLoading && error && (
-        <div className="card state-card stats-error-card" role="alert">
-          <p>{error}</p>
-          <button className="secondary-action" type="button" onClick={retry}>
-            Try again
-          </button>
-        </div>
-      )}
-
-      {data && (isLoading || !error) && (
-        <div className="stats-content">
-          <section className="card stats-panel stats-fatigue-panel" aria-labelledby="fatigue-history-title">
-            <div className="stats-panel-heading">
-              <div>
-                <h2 id="fatigue-history-title"><HeartPulse size={17} aria-hidden="true" /> Fatigue History</h2>
-                <p>Your latest fatigue rating from each workout day, saved with the workout. This history covers all time.</p>
-              </div>
-              {!fatigueEmpty && (
-                <span className="stats-panel-total">Avg {formatFatigueAverage(data.fatigue_average)}/10</span>
-              )}
-            </div>
-            {fatigueEmpty ? (
-              <div className="stats-chart-empty" role="status">
-                <HeartPulse size={24} aria-hidden="true" />
-                <p>No fatigue ratings yet.</p>
-                <span>Finish a workout and rate how tired you felt. Each rating will appear here by workout date.</span>
-              </div>
-            ) : (
-              <>
-                <FatigueHistoryChart points={fatigueHistory} />
-                <ol className="stats-fatigue-list" aria-label="Fatigue history by workout date, newest first">
-                  {[...fatigueHistory].reverse().map((point) => (
-                    <li
-                      className={`stats-fatigue-item${point.fatigue_level > 5 ? ' stats-fatigue-item-high' : ''}`}
-                      key={point.date}
-                    >
-                      <span className="stats-fatigue-dot" aria-hidden="true" />
-                      <div className="stats-fatigue-details">
-                        <span className="stats-fatigue-date">{formatFatigueDay(point.date)}</span>
-                        <span className="stats-fatigue-name">
-                          {point.name}{point.workout_count > 1 ? ` · ${point.workout_count} workouts` : ''}
-                        </span>
-                      </div>
-                      <span className="stats-fatigue-level">{point.fatigue_level}/10</span>
-                    </li>
-                  ))}
-                </ol>
-                <p className="stats-classification-note">
-                  {fatigueHistory.length} rated {fatigueHistory.length === 1 ? 'day' : 'days'} across {data.fatigue_workouts}{' '}
-                  {data.fatigue_workouts === 1 ? 'workout' : 'workouts'}. Latest {data.fatigue_latest}/10
-                  {latestFatigue && ` on ${formatFatigueDay(latestFatigue.date)}`}. Ratings above 5 are treated as high fatigue.
-                </p>
-              </>
-            )}
-          </section>
-
-          <div className="stats-metrics" aria-live="polite">
-            <MetricCard
-              icon={<Dumbbell size={18} />}
-              label="Total workouts"
-              value={formatWorkoutCount(data.total_workouts)}
-              note={data.total_workouts === 0 ? 'No completed sessions' : 'Completed sessions'}
-            />
-            <MetricCard
-              icon={<TrendingUp size={18} />}
-              label="Total volume"
-              value={`${formatVolumeKg(data.total_volume_kg)} kg`}
-              note={data.eligible_set_count === 0 ? 'No eligible weighted sets' : `${data.eligible_set_count} completed weighted sets`}
-            />
-            <MetricCard
-              icon={<Clock3 size={18} />}
-              label="Total time"
-              value={durationValue(data)}
-              note={durationNote(data)}
-            />
+      {/* Workouts panel */}
+      <section
+        className="stats-panel-view"
+        role="tabpanel"
+        aria-labelledby="stats-tab-workouts"
+        data-enter={switchDir ?? undefined}
+        hidden={tab !== 'workouts'}
+      >
+        {!workoutLoading && workoutError && !workoutData && (
+          <div className="card state-card stats-error-card" role="alert">
+            <p>{workoutError}</p>
+            <button className="secondary-action" type="button" onClick={retryWorkouts}>
+              Try again
+            </button>
           </div>
+        )}
 
-          {data.total_workouts === 0 && (
-            <div className="card stats-empty-callout">
-              <Dumbbell size={22} aria-hidden="true" />
-              <div>
-                <h2>No completed workouts in this range</h2>
-                <p>Record and finish a workout to populate these statistics. A wider range may include older sessions.</p>
+        {workoutData && (
+          <div className="stats-content">
+            {workoutError && (
+              <div className="card state-card stats-error-card" role="alert">
+                <p>{workoutError}</p>
+                <button className="secondary-action" type="button" onClick={retryWorkouts}>
+                  Try again
+                </button>
               </div>
-            </div>
-          )}
+            )}
 
-          <section className="card stats-panel" aria-labelledby="volume-progression-title">
-            <div className="stats-panel-heading">
-              <div>
-                <h2 id="volume-progression-title"><TrendingUp size={17} aria-hidden="true" /> Volume Progression</h2>
-                <p>Recorded weighted volume in kilograms over time.</p>
+            <article className="stats-hero-card" aria-live="polite">
+              <div className="stats-hero-top">
+                <span className="stats-hero-title">WORKOUTS</span>
+                <span className="stats-hero-tag">TOTAL</span>
               </div>
-              {!volumeEmpty && <span className="stats-panel-total">{formatVolumeKg(data.total_volume_kg)} kg</span>}
-            </div>
-            {volumeEmpty ? (
-              <div className="stats-chart-empty" role="status">
-                <TrendingUp size={24} aria-hidden="true" />
-                <p>No eligible weighted volume for this range.</p>
-                <span>Completed sets with recorded reps and a positive weight will appear here.</span>
+              <p className="stats-hero-count">{formatWorkoutCount(workoutData.total_workouts)}</p>
+              <div className="stats-hero-bottom">
+                <div className="stats-hero-metric">
+                  <span className="stats-hero-metric-label">TIME</span>
+                  <strong className="stats-hero-metric-value" title={workoutTimeSplit.exact}>
+                    <span aria-hidden="true">
+                      {workoutTimeSplit.value}
+                      {workoutTimeSplit.unit && <small>{workoutTimeSplit.unit}</small>}
+                    </span>
+                    <span className="visually-hidden">{workoutTimeSplit.exact}</span>
+                  </strong>
+                </div>
+                <div className="stats-hero-metric is-right">
+                  <span className="stats-hero-metric-label">VOLUME</span>
+                  <strong className="stats-hero-metric-value" title={workoutVolumeSplit.exact}>
+                    <span aria-hidden="true">
+                      {workoutVolumeSplit.value}
+                      <small>{workoutVolumeSplit.unit}</small>
+                    </span>
+                    <span className="visually-hidden">{workoutVolumeSplit.exact}</span>
+                  </strong>
+                </div>
               </div>
-            ) : (
-              <VolumeProgressionChart
-                key={data.range}
-                points={data.volume_progression}
-                granularity={data.progression_granularity}
-                rangeStart={data.start_date}
-                rangeEnd={data.end_date}
+            </article>
+
+            {workoutData.total_workouts === 0 && (
+              <div className="hifi-card stats-empty-callout">
+                <Dumbbell size={20} aria-hidden="true" />
+                <div>
+                  <h2>No completed workouts in this range</h2>
+                  <p>Finish a workout to populate progression and muscle volume. Try 3M for older sessions.</p>
+                </div>
+              </div>
+            )}
+
+            <h2 className="stats-section-heading" id="volume-progression-title">
+              Volume
+              <br />
+              Progression
+            </h2>
+            <section aria-labelledby="volume-progression-title">
+              <StatsProgressionChart
+                key={`workout-${workoutData.range}`}
+                points={volumePoints}
+                granularity={workoutData.progression_granularity}
+                range={workoutData.range}
+                unit="kg"
+                ariaLabel={`Volume progression: ${volumePoints.length} recorded periods totaling ${formatVolumeKg(workoutData.total_volume_kg)} kilograms`}
+                emptyTitle="No weighted volume in this range."
+                emptyHint="Completed sets with recorded reps and weight will appear here."
               />
-            )}
-          </section>
+            </section>
 
-          <section className="card stats-panel" aria-labelledby="muscle-distribution-title">
-            <div className="stats-panel-heading">
-              <div>
-                <h2 id="muscle-distribution-title"><PieChart size={17} aria-hidden="true" /> Muscle Group Distribution</h2>
-                <p>Recorded volume attributed to each exercise's primary muscle group.</p>
-              </div>
-            </div>
-            {distributionEmpty ? (
-              <div className="stats-chart-empty" role="status">
-                <PieChart size={24} aria-hidden="true" />
-                <p>No classified muscle-group volume for this range.</p>
-                <span>
-                  {data.unclassified_volume_kg > 0
+            <h2 className="stats-section-heading" id="muscle-distribution-title">
+              Muscle
+              <br />
+              Distribution
+            </h2>
+            <section className="stats-distribution-section" aria-labelledby="muscle-distribution-title">
+              <StatsCalendar
+                rangeStart={workoutData.start_date.slice(0, 10) || fallbackBounds.start}
+                rangeEnd={workoutData.end_date.slice(0, 10) || fallbackBounds.end}
+                days={workoutCalendarDays}
+                emptyDayCategory="workouts"
+                tabKey={`workouts-${workoutData.range}`}
+              />
+
+              <StatsBreakdown
+                key={`workout-breakdown-${workoutData.range}`}
+                totalValue={classifiedSplit.value}
+                totalUnit={classifiedSplit.unit}
+                totalExact={classifiedSplit.exact}
+                totalLabel="CLASSIFIED"
+                items={muscleItems}
+                ariaLabel="Muscle group volume details"
+                emptyMessage={
+                  workoutData.unclassified_volume_kg > 0
                     ? 'Recorded exercises could not be matched to catalogue muscle groups.'
-                    : 'Completed weighted sets linked to an exercise with muscle metadata will appear here.'}
-                </span>
+                    : 'Completed weighted sets linked to muscle metadata will appear here.'
+                }
+                note={
+                  workoutData.total_volume_kg > 0 && workoutData.unclassified_volume_kg > 0
+                    ? `${formatVolumeKg(workoutData.classified_volume_kg)} kg classified of ${formatVolumeKg(workoutData.total_volume_kg)} kg recorded volume. ${formatVolumeKg(workoutData.unclassified_volume_kg)} kg excluded.`
+                    : undefined
+                }
+              />
+            </section>
+
+            {fatigueHistory.length > 0 && (
+              <section className="hifi-card stats-fatigue-card" aria-labelledby="fatigue-history-title">
+                <div className="stats-panel-heading">
+                  <div>
+                    <h2 id="fatigue-history-title">
+                      <HeartPulse size={17} aria-hidden="true" /> Fatigue History
+                    </h2>
+                    <p>Latest fatigue rating per workout day (all time).</p>
+                  </div>
+                  <span className="stats-panel-total">Avg {formatFatigueAverage(workoutData.fatigue_average)}/10</span>
+                </div>
+                <FatigueHistoryChart points={fatigueHistory} />
+                <p className="stats-classification-note">
+                  {fatigueHistory.length} rated {fatigueHistory.length === 1 ? 'day' : 'days'} across{' '}
+                  {workoutData.fatigue_workouts} {workoutData.fatigue_workouts === 1 ? 'workout' : 'workouts'}. Latest{' '}
+                  {workoutData.fatigue_latest}/10
+                  {latestFatigue ? ` on ${formatFatigueDay(latestFatigue.date)}` : ''}.
+                </p>
+              </section>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Meals panel */}
+      <section
+        className="stats-panel-view"
+        role="tabpanel"
+        aria-labelledby="stats-tab-meals"
+        data-enter={switchDir ?? undefined}
+        hidden={tab !== 'meals'}
+      >
+        {!mealLoading && mealError && !mealData && (
+          <div className="card state-card stats-error-card" role="alert">
+            <p>{mealError}</p>
+            <button className="secondary-action" type="button" onClick={retryMeals}>
+              Try again
+            </button>
+          </div>
+        )}
+
+        {mealData && (
+          <div className="stats-content">
+            {mealError && (
+              <div className="card state-card stats-error-card" role="alert">
+                <p>{mealError}</p>
+                <button className="secondary-action" type="button" onClick={retryMeals}>
+                  Try again
+                </button>
               </div>
-            ) : (
-              <MuscleGroupDistributionChart distribution={data.muscle_group_distribution} />
             )}
-            {data.total_volume_kg > 0 && (
-              <p className="stats-classification-note">
-                {formatVolumeKg(data.classified_volume_kg)} kg classified of {formatVolumeKg(data.total_volume_kg)} kg recorded volume.
-                {data.unclassified_volume_kg > 0 && ` ${formatVolumeKg(data.unclassified_volume_kg)} kg could not be mapped to a muscle group and is excluded from the chart.`}
-              </p>
+
+            <article className="stats-hero-card" aria-live="polite">
+              <div className="stats-hero-top">
+                <span className="stats-hero-title">MEALS</span>
+                <span className="stats-hero-tag">TOTAL</span>
+              </div>
+              <p className="stats-hero-count">{formatWorkoutCount(mealData.total_meals)}</p>
+              <div className="stats-hero-bottom">
+                <div className="stats-hero-metric">
+                  <span className="stats-hero-metric-label">HYDRATION</span>
+                  <strong className="stats-hero-metric-value" title={hydrationSplit.exact}>
+                    <span aria-hidden="true">
+                      {hydrationSplit.value}
+                      <small>{hydrationSplit.unit}</small>
+                    </span>
+                    <span className="visually-hidden">{hydrationSplit.exact}</span>
+                  </strong>
+                </div>
+                <div className="stats-hero-metric is-right">
+                  <span className="stats-hero-metric-label">
+                    NUTRITION
+                    <br />
+                    INTAKE
+                  </span>
+                  <strong className="stats-hero-metric-value" title={intakeSplit.exact}>
+                    <span aria-hidden="true">
+                      {intakeSplit.value}
+                      <small>{intakeSplit.unit}</small>
+                    </span>
+                    <span className="visually-hidden">{intakeSplit.exact}</span>
+                  </strong>
+                </div>
+              </div>
+            </article>
+
+            {mealData.total_meals === 0 && (
+              <div className="hifi-card stats-empty-callout">
+                <Utensils size={20} aria-hidden="true" />
+                <div>
+                  <h2>No meals logged in this range</h2>
+                  <p>Log a meal to see daily calorie trends and macro totals. Try 3M for older entries.</p>
+                </div>
+              </div>
             )}
-          </section>
-        </div>
-      )}
+
+            <h2 className="stats-section-heading" id="nutrition-progression-title">
+              Nutrition
+              <br />
+              Progression
+            </h2>
+            <section aria-labelledby="nutrition-progression-title">
+              <StatsProgressionChart
+                key={`meals-${mealData.range}`}
+                points={mealPoints}
+                granularity={mealData.progression_granularity}
+                range={mealData.range}
+                unit="kcal"
+                weeklyIsAverage
+                ariaLabel={`Nutrition progression: ${mealPoints.length} recorded periods totaling ${mealData.total_calories.toLocaleString('en-US')} kilocalories`}
+                emptyTitle="No calorie data in this range."
+                emptyHint="Meals with recorded calories will populate this progression chart."
+              />
+            </section>
+
+            <h2 className="stats-section-heading" id="nutrition-intake-title">
+              Nutrition
+              <br />
+              Intake
+            </h2>
+            <section className="stats-distribution-section" aria-labelledby="nutrition-intake-title">
+              <StatsCalendar
+                rangeStart={mealData.start_date.slice(0, 10) || fallbackBounds.start}
+                rangeEnd={mealData.end_date.slice(0, 10) || fallbackBounds.end}
+                days={mealCalendarDays}
+                emptyDayCategory="meals"
+                tabKey={`meals-${mealData.range}`}
+              />
+
+              <StatsBreakdown
+                key={`meals-breakdown-${mealData.range}`}
+                totalValue={intakeSplit.value}
+                totalUnit={intakeSplit.unit}
+                totalExact={intakeSplit.exact}
+                totalLabel="CLASSIFIED"
+                items={macroItems}
+                ariaLabel="Macronutrient breakdown"
+                emptyMessage="Logged meals with protein, carbs, and fats will appear here."
+              />
+            </section>
+          </div>
+        )}
+      </section>
     </div>
   )
 }

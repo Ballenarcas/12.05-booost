@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # Bcrypt comparison against a throwaway hash keeps the failed-login path as
 # slow as the successful one, so the response time does not reveal whether an
 # email is registered.
-_DUMMY_HASH = hash_password("set-and-plate-timing-equalizer")
+_DUMMY_HASH = hash_password("booost-timing-equalizer")
 
 
 def _expires_at(expires_at_unix: int) -> datetime:
@@ -108,7 +108,7 @@ class OnboardingFacade:
         token, expires_at = issue_access_token(str(user_id))
         return UserOnboardingResponse(status="success", user_id=user_id, name=payload.name,
             surname=payload.surname, email=email, calorie_goal=calorie_goal,
-            message=f"Welcome to SET&PLATE, {payload.name}!", saved_to_supabase=True,
+            message=f"Welcome to BOOOST, {payload.name}!", saved_to_supabase=True,
             access_token=token, token_expires_at=_expires_at(expires_at))
 
     def login(self, payload: UserLoginRequest) -> UserLoginResponse:

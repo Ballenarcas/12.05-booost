@@ -1,6 +1,6 @@
 # .agents Directory Architecture
 
-This directory configures autonomous AI coding agents (such as Antigravity, Gemini Code Assist, and other LLM assistants) operating on the **SET&PLATE** repository.
+This directory configures autonomous AI coding agents (such as Antigravity, Gemini Code Assist, and other LLM assistants) operating on the **BOOOST** repository.
 
 It is purpose-built to **maximize token efficiency**, enforce codebase architecture, and provide modular progressive-disclosure workflows.
 
@@ -19,7 +19,7 @@ It is purpose-built to **maximize token efficiency**, enforce codebase architect
 ├── rules/                     # Always-on and directory-scoped agent rules
 │   ├── token_optimization.md  # Core token economy rules (slicing, output filtering, diffs)
 │   ├── code_standards.md      # FastAPI, Pydantic, React 19, TypeScript conventions
-│   ├── architecture.md        # SET&PLATE domain separation and client abstractions
+│   ├── architecture.md        # BOOOST domain separation and client abstractions
 │   └── git_and_safety.md      # Secret protection, .env rules, safe execution
 └── skills/                    # On-demand progressive disclosure skills
     ├── token-budget/          # Low-token exploration & inspection runbook

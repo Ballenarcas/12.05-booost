@@ -1,5 +1,5 @@
 -- =============================================================================
--- SET&PLATE - Database Seed Script (Excludes Exercises Table)
+-- BOOOST - Database Seed Script (Excludes Exercises Table)
 -- Populates: RLS Policies, Users, Meals, Routines, Routine Exercises, Workouts & Sets
 -- =============================================================================
 

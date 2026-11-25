@@ -14,6 +14,8 @@ from app.schemas.workout_statistics import (
     FatigueHistoryPoint,
     MuscleGroupVolume,
     VolumeProgressionPoint,
+    WorkoutCalendarDay,
+    WorkoutCalendarItem,
     WorkoutStatisticsRange,
     WorkoutStatisticsResponse,
 )
@@ -22,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 _RANGE_MONTHS = {"1M": 1, "3M": 3}
 _WORKOUT_SELECT = (
-    "id,start_time,end_time,"
+    "id,name,start_time,end_time,"
     "workout_sets(set_number,reps,weight,is_done,exercise_id,"
     "exercises(muscles))"
 )
@@ -244,6 +246,7 @@ def aggregate_workout_statistics(
     progression: dict[date, float] = defaultdict(float)
     muscle_volume: dict[str, float] = defaultdict(float)
     muscle_labels: dict[str, str] = {}
+    calendar_by_day: dict[date, list[WorkoutCalendarItem]] = defaultdict(list)
     seen_workouts: set[str] = set()
 
     for workout_index, row in enumerate(workout_rows):
@@ -263,12 +266,18 @@ def aggregate_workout_statistics(
         total_workouts += 1
 
         completed_at = _parse_datetime(row.get("end_time"))
+        workout_duration = 0
         if completed_at is not None and completed_at > started_at:
-            total_duration_seconds += int((completed_at - started_at).total_seconds())
+            workout_duration = int((completed_at - started_at).total_seconds())
+            total_duration_seconds += workout_duration
             workouts_with_duration += 1
 
-        bucket = _bucket_date(_local_date(started_at, timezone_offset_minutes), range_key)
+        local_day = _local_date(started_at, timezone_offset_minutes)
+        bucket = _bucket_date(local_day, range_key)
         seen_sets: set[tuple[str, str]] = set()
+        workout_muscles: dict[str, float] = defaultdict(float)
+        workout_muscle_labels: dict[str, str] = {}
+        workout_volume = 0.0
         for set_index, set_row in enumerate(row.get("workout_sets") or []):
             if not isinstance(set_row, dict) or not _is_completed_set(set_row):
                 continue
@@ -301,6 +310,7 @@ def aggregate_workout_statistics(
                 continue
 
             total_volume += volume
+            workout_volume += volume
             eligible_set_count += 1
             progression[bucket] += volume
 
@@ -308,6 +318,24 @@ def aggregate_workout_statistics(
                 muscle_key = muscle.casefold()
                 muscle_labels.setdefault(muscle_key, muscle)
                 muscle_volume[muscle_key] += volume
+                workout_muscle_labels.setdefault(muscle_key, muscle)
+                workout_muscles[muscle_key] += volume
+
+        if workout_muscles:
+            top_muscle_key = min(
+                workout_muscles,
+                key=lambda key: (-workout_muscles[key], workout_muscle_labels[key].casefold()),
+            )
+            pill_label = workout_muscle_labels[top_muscle_key]
+        else:
+            pill_label = str(row.get("name") or "Workout").strip() or "Workout"
+        calendar_by_day[local_day].append(
+            WorkoutCalendarItem(
+                label=pill_label,
+                duration_seconds=workout_duration,
+                volume_kg=round(workout_volume, 2),
+            )
+        )
 
     volume_progression = [
         VolumeProgressionPoint(date=day, volume_kg=round(volume, 2))
@@ -322,6 +350,15 @@ def aggregate_workout_statistics(
     muscle_group_distribution.sort(key=lambda item: (-item.volume_kg, item.muscle_group.casefold()))
     classified_volume = round(sum(muscle_volume.values()), 2)
     rounded_total_volume = round(total_volume, 2)
+    calendar_days = [
+        WorkoutCalendarDay(
+            date=day,
+            workout_count=len(items),
+            total_duration_seconds=sum(item.duration_seconds for item in items),
+            items=items,
+        )
+        for day, items in sorted(calendar_by_day.items())
+    ]
     fatigue_history, fatigue_workouts = _aggregate_fatigue_history(
         fatigue_source,
         timezone_offset_minutes=timezone_offset_minutes,
@@ -346,6 +383,7 @@ def aggregate_workout_statistics(
         muscle_group_distribution=muscle_group_distribution,
         classified_volume_kg=classified_volume,
         unclassified_volume_kg=round(max(0.0, total_volume - classified_volume), 2),
+        calendar_days=calendar_days,
         fatigue_history=fatigue_history,
         fatigue_workouts=fatigue_workouts,
         fatigue_days=len(fatigue_history),

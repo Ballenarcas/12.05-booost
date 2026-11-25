@@ -1,0 +1,112 @@
+/* Meals page from the Figma mockup ("4/MEALS"); shared pieces live in redesign.css. */
+
+.meals-screen { gap: 24px; }
+
+/* Sky blue wash from the top, fading into the pale ground. */
+.app-shell:has(.meals-screen) {
+  background:
+    radial-gradient(120% 40% at 100% 0%, rgba(141, 207, 232, 0.95) 0%, rgba(206, 226, 253, 0.6) 50%, transparent 80%),
+    linear-gradient(180deg, #e9f6fb 0%, #f6f6fe 45%, #f8f8ff 100%);
+}
+:root[data-theme="dark"] .app-shell:has(.meals-screen) {
+  background: radial-gradient(120% 40% at 100% 0%, rgba(0, 62, 140, 0.55) 0%, transparent 75%), #0f1115;
+}
+
+.meals-screen .meal-day-nav { margin: -8px 0 -8px; }
+.meals-screen .action-row { margin-top: -8px; }
+.meals-remaining { color: #bababa; text-transform: uppercase; }
+
+/* Today's meals: a soft blue panel holding white meal cards. */
+.meals-panel {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #e2f1ff 13%, #f9f9f9 100%);
+}
+:root[data-theme="dark"] .meals-panel { background: linear-gradient(180deg, #1a2a3d 13%, var(--surface) 100%); }
+.meals-panel .hifi-section-title { padding: 0 4px; }
+.meals-panel-list { display: grid; gap: 8px; }
+
+.meals-card {
+  display: grid;
+  border-radius: 10px;
+  background: var(--hifi-card);
+  box-shadow: inset -1px -1px 5px #ececec;
+}
+:root[data-theme="dark"] .meals-card { box-shadow: none; }
+.meals-card-top { display: flex; min-height: 77px; gap: 4px; }
+.meals-card-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0 12px 16px;
+  border: 0;
+  border-radius: 10px 0 0 10px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.meals-card-type { font-size: 20px; line-height: 1.2; }
+.meals-card-name { color: #6c6c6c; font-family: var(--hifi-mono); font-size: 14px; line-height: 1.12; overflow-wrap: anywhere; }
+:root[data-theme="dark"] .meals-card-name { color: var(--hifi-muted); }
+.meals-card-side { display: flex; flex: none; flex-direction: column; align-items: flex-end; justify-content: space-between; padding: 0 12px 12px 0; }
+.meals-card-icons { display: flex; align-items: center; }
+/* Figma "Meal card": a thin grey chevron, down while closed and up while open. */
+.meals-card-chevron { color: var(--hifi-faint); transition: transform var(--motion) var(--ease-out); pointer-events: none; }
+.meals-card[data-open="true"] .meals-card-chevron { transform: rotate(180deg); }
+.meals-card-details { display: grid; gap: 8px; padding: 0 16px 12px; animation: content-in var(--motion) var(--ease-out); }
+.meals-card-foods { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; color: var(--hifi-faint); font-family: var(--hifi-mono); font-size: 14px; line-height: 1.12; }
+.meals-card-foods li { display: flex; justify-content: space-between; gap: 12px; }
+.meals-card-foods li span:last-child { flex: none; text-align: right; }
+.meals-card-foods b { color: #828282; font-weight: 400; }
+:root[data-theme="dark"] .meals-card-foods b { color: var(--hifi-muted); }
+.meals-card-foods-empty { margin: 0; color: var(--hifi-faint); font-family: var(--hifi-mono); font-size: 14px; }
+.meals-card-edit { justify-self: end; min-height: 36px; }
+.meals-card-heart { display: grid; width: 40px; height: 44px; place-items: center; padding: 0; border: 0; color: var(--hifi-faint); background: transparent; cursor: pointer; }
+.meals-card-heart[aria-pressed="true"] { color: var(--negative); }
+/* Busy only blocks a second tap; the heart already shows the new state. */
+.meals-card-heart:disabled { cursor: default; }
+.meals-card-kcal { color: #b4b4b4; font-family: var(--hifi-mono); font-size: 14px; white-space: nowrap; }
+.meals-card-main:focus-visible, .meals-card-heart:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+
+/* Heart: a press dip on tap, then a pop with a soft ring when saved, or a quick shrink when removed. */
+.meals-card-heart { position: relative; transition: color var(--motion) var(--ease-out); }
+.meals-card-heart svg { transition: transform var(--motion-fast) var(--ease-out); }
+.meals-card-heart:active svg { transform: scale(0.85); }
+.meals-card-heart.is-pop svg { animation: heart-pop 480ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.meals-card-heart.is-pop::after {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border: 2px solid var(--negative);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: heart-ring 480ms var(--ease-out) forwards;
+}
+.meals-card-heart.is-unpop svg { animation: heart-unpop 260ms var(--ease-out); }
+@keyframes heart-pop {
+  0% { transform: scale(0.85); }
+  45% { transform: scale(1.35); }
+  75% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+@keyframes heart-ring {
+  from { opacity: 0.7; transform: scale(0.4); }
+  to { opacity: 0; transform: scale(1.5); }
+}
+@keyframes heart-unpop {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.7); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meals-card-chevron { transition: none; }
+  .meals-card-details { animation: none; }
+  .meals-card-heart.is-pop svg, .meals-card-heart.is-unpop svg, .meals-card-heart.is-pop::after { animation: none; }
+}

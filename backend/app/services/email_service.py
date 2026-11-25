@@ -22,12 +22,12 @@ def send_password_reset_email(to: str, link: str) -> None:
         return
 
     text = (
-        "Someone asked to reset the password of your SET&PLATE account.\n\n"
+        "Someone asked to reset the password of your BOOOST account.\n\n"
         f"Set a new password here (the link works once, for 30 minutes):\n{link}\n\n"
         "If it wasn't you, ignore this email. Your password stays the same."
     )
     html = (
-        "<p>Someone asked to reset the password of your SET&amp;PLATE account.</p>"
+        "<p>Someone asked to reset the password of your BOOOST account.</p>"
         f'<p><a href="{escape(link)}">Set a new password</a></p>'
         "<p>The link works once, for 30 minutes. If it wasn't you, ignore this email. "
         "Your password stays the same.</p>"
@@ -39,7 +39,7 @@ def send_password_reset_email(to: str, link: str) -> None:
             json={
                 "from": settings.email_from,
                 "to": [to],
-                "subject": "Reset your SET&PLATE password",
+                "subject": "Reset your BOOOST password",
                 "text": text,
                 "html": html,
             },

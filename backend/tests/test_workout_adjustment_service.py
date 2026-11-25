@@ -14,6 +14,8 @@ from app.services import workout_adjustment_service as service
 def short_routines_are_usable(monkeypatch):
     """Most tests here use a one-exercise routine; the minimum has its own tests."""
     monkeypatch.setattr(service, "MIN_PLAN_EXERCISES", 1)
+    # Each test brings its own fake catalog, so none may reuse another test's cached one.
+    monkeypatch.setattr(service, "_catalog_cache", None)
 
 
 class FakeQuery:
@@ -553,3 +555,188 @@ async def test_ai_request_uses_example_model_and_unwraps_suggestion_array(monkey
     assert calls["model"] == "llama-3.3-70b-versatile"
     assert calls["response_format"] == {"type": "json_object"}
     assert calls["closed"] is True
+
+
+def test_exercise_catalog_is_loaded_once_and_reused(monkeypatch):
+    loads = []
+    monkeypatch.setattr(service, "_fetch_exercise_catalog", lambda _db: loads.append(1) or [{"id": "1", "name": "Squat"}])
+
+    first = service._load_exercise_catalog(object())
+    second = service._load_exercise_catalog(object())
+
+    assert first == second == [{"id": "1", "name": "Squat"}]
+    assert len(loads) == 1
+
+
+# --- RF-02: the AI reply must be valid JSON before it becomes a plan ---
+
+def test_parse_json_strips_markdown_fences():
+    assert service._parse_json('```json\n{"a": 1}\n```') == {"a": 1}
+    assert service._parse_json('```\n[1, 2]\n```') == [1, 2]
+
+
+@pytest.mark.parametrize("content", [None, "", "   ", "```json\n```"])
+def test_parse_json_rejects_an_empty_reply(content):
+    with pytest.raises(ValueError):
+        service._parse_json(content)
+
+
+def test_only_bad_json_is_retried():
+    assert service._is_retryable_json_error(ValueError("bad json")) is True
+    assert service._is_retryable_json_error(RuntimeError("network")) is False
+
+
+def fake_ai(monkeypatch, replies, model="llama-3.3-70b-versatile"):
+    """Serve `replies` in order from a fake OpenAI client; return what was seen."""
+    calls = {"count": 0, "closed": False, "request": {}}
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            calls["request"] = kwargs
+            reply = replies[calls["count"]]
+            calls["count"] += 1
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=reply))])
+
+    class FakeClient:
+        def __init__(self, **_):
+            self.chat = SimpleNamespace(completions=FakeCompletions())
+
+        async def close(self):
+            calls["closed"] = True
+
+    monkeypatch.setattr(service, "AsyncOpenAI", FakeClient)
+    monkeypatch.setattr(service, "get_settings", lambda: SimpleNamespace(
+        ai_api_key="test-key", ai_model=model, ai_base_url="https://example.test/v1",
+    ))
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_ai_request_is_refused_when_ai_is_not_configured(monkeypatch):
+    monkeypatch.setattr(service, "get_settings", lambda: SimpleNamespace(ai_api_key=""))
+    with pytest.raises(HTTPException) as error:
+        await service._request_json("context", {"type": "object"})
+    assert error.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_ai_request_retries_once_after_an_empty_reply(monkeypatch):
+    calls = fake_ai(monkeypatch, ["", '```json\n{"workout_name": "Push"}\n```'])
+    result = await service._request_json("context", {"type": "object"})
+    assert result == {"workout_name": "Push"}
+    assert calls["count"] == 2
+    assert calls["closed"] is True
+
+
+@pytest.mark.asyncio
+async def test_ai_request_fails_cleanly_after_two_invalid_replies(monkeypatch):
+    calls = fake_ai(monkeypatch, ["not json", "{still not json"])
+    with pytest.raises(HTTPException) as error:
+        await service._request_json("context", {"type": "object"})
+    assert error.value.status_code == 502
+    assert calls["count"] == 2
+    assert calls["closed"] is True
+
+
+@pytest.mark.asyncio
+async def test_ai_request_rejects_a_list_when_an_object_is_expected(monkeypatch):
+    calls = fake_ai(monkeypatch, ["[1]", "[2]"])
+    with pytest.raises(HTTPException) as error:
+        await service._request_json("context", {"type": "object"})
+    assert error.value.status_code == 502
+    assert calls["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_ai_request_retries_a_wrong_shape_and_accepts_a_bare_array(monkeypatch):
+    fake_ai(monkeypatch, ['{"suggestions": "none"}', '[{"action": "drop_set"}]'])
+    result = await service._request_json("context", {"type": "array", "items": {"type": "object"}})
+    assert result == [{"action": "drop_set"}]
+
+
+@pytest.mark.asyncio
+async def test_gpt_oss_models_get_a_strict_json_schema(monkeypatch):
+    calls = fake_ai(monkeypatch, ['{"ok": true}'], model="openai/gpt-oss-120b")
+    assert await service._request_json("context", {"type": "object"}) == {"ok": True}
+    request = calls["request"]
+    assert request["response_format"]["type"] == "json_schema"
+    assert request["response_format"]["json_schema"]["strict"] is True
+    assert "max_completion_tokens" in request
+
+
+@pytest.mark.parametrize("plan", [
+    None,
+    {"rest_day": True},
+    {"routine_id": "r1"},
+    {"routine_id": None, "reasoning": 3},
+    {"routine_id": None, "reasoning": "ok", "workout_name": "  "},
+    {"routine_id": None, "reasoning": "ok", "workout_name": "Push", "exercises": "squat"},
+    {"routine_id": None, "reasoning": "ok", "workout_name": "Push", "exercises": ["squat"]},
+])
+def test_an_incomplete_retried_plan_is_not_usable(plan):
+    assert service._plan_retry_is_usable(plan, {}, {}, 1) is False
+
+
+# --- RF-01: the 48 h intake is classified against the calorie goal ---
+
+async def planned_prompt(monkeypatch, database):
+    prompts = []
+
+    async def recommend(prompt, _schema):
+        prompts.append(json.loads(prompt))
+        return {
+            "routine_id": database.routine_id, "workout_name": "Routine", "rest_day": False,
+            "adjusted": False, "reasoning": "Keep the plan.",
+            "exercises": [{"exercise_id": database.exercise_id, "sets": 2, "reps": 8}],
+        }
+
+    monkeypatch.setattr(service, "_request_json", recommend)
+    await service.plan_daily_workout(UUID(database.rows["users"][0]["id"]), database)
+    return prompts[0]
+
+
+@pytest.mark.parametrize("calories, expected", [
+    (3000, "severe_deficit"),   # < 0.8 x 4000
+    (3200, "near_target"),      # exactly 80 % is not a deficit
+    (4000, "near_target"),
+    (4800, "near_target"),      # exactly 120 % is not a surplus
+    (5000, "severe_surplus"),   # > 1.2 x 4000
+])
+@pytest.mark.asyncio
+async def test_daily_plan_classifies_the_48h_intake(monkeypatch, calories, expected):
+    database = FakeDatabase()
+    day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    database.rows["meals"] = [{
+        "calories": calories, "proteins": 100, "carbs": 200, "fats": 60,
+        "consumed_at": (day_start - timedelta(hours=12)).isoformat(),
+    }]
+
+    prompt = await planned_prompt(monkeypatch, database)
+
+    assert prompt["calorie_status"] == expected
+
+
+@pytest.mark.asyncio
+async def test_daily_plan_status_is_unknown_without_a_meal_logged_yesterday(monkeypatch):
+    database = FakeDatabase()
+    database.rows["meals"] = []
+
+    prompt = await planned_prompt(monkeypatch, database)
+
+    assert prompt["calorie_status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_daily_plan_rejects_a_reply_that_breaks_the_schema(monkeypatch):
+    database = FakeDatabase()
+
+    async def recommend(*_):
+        return {"routine_id": None, "workout_name": "Push", "rest_day": "no",
+                "adjusted": True, "reasoning": "x", "exercises": []}
+
+    monkeypatch.setattr(service, "_request_json", recommend)
+    with pytest.raises(HTTPException) as error:
+        await service.plan_daily_workout(UUID(database.rows["users"][0]["id"]), database)
+
+    assert error.value.status_code == 502
+    assert database.writes == []

@@ -1,36 +1,25 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import {
-  ChevronLeft,
-  Loader2,
-  Plus,
-  Search,
-  Star,
-  Trash2,
-  Utensils,
-  X,
-  Scale,
-  Sparkles,
-} from 'lucide-react'
+import { usePageNavigate } from '../utils/usePageNavigate'
+import { Crown, Loader2, Sparkles, X } from 'lucide-react'
 import {
   addMealLog,
   decideCalorieAdjustment,
-  deleteMealLog,
   fetchCalorieAdjustment,
   fetchTodayNutrition,
   getCachedTodayNutrition,
   getCurrentUser,
+  isPremiumActive,
   searchFoodItems,
   type CalorieAdjustmentData,
   type FoodSearchItem,
   type MealIngredient,
-  type MealLogItem,
   type TodayNutritionData,
 } from '../services/api'
-import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { summarizeMeal } from '../utils/mealComposition.js'
 import { describeError } from '../utils/errors.js'
+import backIcon from '../assets/scan/back.svg'
 import '../styles/log-meals.css'
+import '../styles/add-food.css'
 
 type PlateFood = {
   name: string
@@ -45,33 +34,20 @@ type PlateFood = {
   fatPer100g: number
 }
 
-type MealDelta = { calories: number; protein: number; carbs: number; fat: number }
+const MEAL_TYPES = ['Breakfast', 'Lunch', 'Snack', 'Dinner']
+// Used until a food from the search gives its real values.
+const DEFAULT_DENSITY = { caloriesPer100g: 130, proteinPer100g: 8, carbsPer100g: 15, fatPer100g: 3.5 }
 
-function applyMealDelta(prev: TodayNutritionData, delta: MealDelta, sign: 1 | -1): TodayNutritionData {
-  const targetGoal = prev.daily_goal
-  const consumed = Math.max(0, prev.consumed_calories + sign * (delta.calories || 0))
-  const consumedProteins = Math.max(0, Math.round(((prev.proteins_g || 0) + sign * (delta.protein || 0)) * 10) / 10)
-  const consumedCarbs = Math.max(0, Math.round(((prev.carbs_g || 0) + sign * (delta.carbs || 0)) * 10) / 10)
-  const consumedFats = Math.max(0, Math.round(((prev.fats_g || 0) + sign * (delta.fat || 0)) * 10) / 10)
-  const remaining = (target: number, consumedValue: number) => Math.max(0, Math.round((target - consumedValue) * 10) / 10)
-  const progress = targetGoal > 0 ? Math.round((consumed / targetGoal) * 100) : 0
-
-  return {
-    ...prev,
-    consumed_calories: consumed,
-    calories_progress_percentage: Math.min(100, Math.max(0, progress)),
-    remaining_calories: Math.max(0, targetGoal - consumed),
-    proteins_g: consumedProteins,
-    carbs_g: consumedCarbs,
-    fats_g: consumedFats,
-    remaining_proteins_g: remaining(prev.target_proteins_g, consumedProteins),
-    remaining_carbs_g: remaining(prev.target_carbs_g, consumedCarbs),
-    remaining_fats_g: remaining(prev.target_fats_g, consumedFats),
-  }
+function mealTypeForNow(): string {
+  const hour = new Date().getHours()
+  if (hour < 11) return 'Breakfast'
+  if (hour < 16) return 'Lunch'
+  if (hour < 19) return 'Snack'
+  return 'Dinner'
 }
 
 export function LogMeals() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const currentUser = getCurrentUser()
 
   // 1. Session check: redirect to /login if unauthenticated
@@ -83,32 +59,23 @@ export function LogMeals() {
 
   const [initialNutrition] = useState(() => getCachedTodayNutrition(currentUser?.id ?? ''))
   const hadCachedNutrition = useRef(Boolean(initialNutrition))
-  const [isLoading, setIsLoading] = useState(!initialNutrition)
   const [nutritionData, setNutritionData] = useState<TodayNutritionData | null>(initialNutrition)
-  const [mealList, setMealList] = useState<MealLogItem[]>(initialNutrition?.meals ?? [])
   const [adjustment, setAdjustment] = useState<CalorieAdjustmentData | null>(null)
   const [adjustmentError, setAdjustmentError] = useState<string | null>(null)
   const [isDeciding, setIsDeciding] = useState(false)
   const [isTipOpen, setIsTipOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
 
-  // Modal & Register state
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  // Add food form state
   const [foodInput, setFoodInput] = useState('')
   const [quantityGrams, setQuantityGrams] = useState('100')
   const [plateFoods, setPlateFoods] = useState<PlateFood[]>([])
-  const [mealType, setMealType] = useState('Breakfast')
+  const [mealType, setMealType] = useState(mealTypeForNow)
   const [selectedFoodDensity, setSelectedFoodDensity] = useState<{
     caloriesPer100g: number
     proteinPer100g: number
     carbsPer100g: number
     fatPer100g: number
-  }>({
-    caloriesPer100g: 130,
-    proteinPer100g: 8,
-    carbsPer100g: 15,
-    fatPer100g: 3.5,
-  })
+  }>(DEFAULT_DENSITY)
 
   // Food suggestions state
   const [suggestions, setSuggestions] = useState<FoodSearchItem[]>([])
@@ -128,15 +95,11 @@ export function LogMeals() {
       .then((data) => {
         if (!isMounted) return
         setNutritionData(data)
-        setMealList(data.meals)
         setErrorMessage(null)
       })
       .catch((err: Error) => {
         if (!isMounted || hadCachedNutrition.current) return
         setErrorMessage(describeError(err, "We couldn't load today's meals. Please try again."))
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false)
       })
 
     return () => {
@@ -149,7 +112,6 @@ export function LogMeals() {
     fetchTodayNutrition(currentUser.id)
       .then((data) => {
         setNutritionData(data)
-        setMealList(data.meals)
       })
       .catch(() => undefined)
   }
@@ -239,7 +201,7 @@ export function LogMeals() {
 
   // 3. Search suggestions as user types in modal
   useEffect(() => {
-    if (!isModalOpen || !isFoodSearchOpen) return
+    if (!isFoodSearchOpen) return
 
     let isCurrent = true
     const timer = setTimeout(() => {
@@ -265,7 +227,7 @@ export function LogMeals() {
       isCurrent = false
       clearTimeout(timer)
     }
-  }, [foodInput, isFoodSearchOpen, isModalOpen])
+  }, [foodInput, isFoodSearchOpen])
 
   // 4. Live Automatic Nutrition Calculation (User NEVER inputs calories manually)
   const calculatedNutrition = useMemo(() => {
@@ -312,37 +274,10 @@ export function LogMeals() {
     }])
     setFoodInput('')
     setQuantityGrams('100')
-    setSelectedFoodDensity({ caloriesPer100g: 130, proteinPer100g: 8, carbsPer100g: 15, fatPer100g: 3.5 })
+    setSelectedFoodDensity(DEFAULT_DENSITY)
     setSuggestions([])
     setIsFoodSearchOpen(false)
     setFoodSearchMessage(null)
-  }
-
-  const handleOpenModal = () => {
-    setFoodInput('')
-    setQuantityGrams('100')
-    setPlateFoods([])
-    setSelectedFoodDensity({ caloriesPer100g: 130, proteinPer100g: 8, carbsPer100g: 15, fatPer100g: 3.5 })
-    setIsFoodSearchOpen(false)
-    setSuggestions([])
-    setFoodSearchMessage(null)
-    setErrorMessage(null)
-    // Pre-select meal type based on hour
-    const currentHour = new Date().getHours()
-    if (currentHour < 11) setMealType('Breakfast')
-    else if (currentHour < 16) setMealType('Lunch')
-    else if (currentHour < 19) setMealType('Snack')
-    else setMealType('Dinner')
-
-    setIsModalOpen(true)
-  }
-
-  const handleCloseModal = () => {
-    if (!isSubmitting) {
-      setIsModalOpen(false)
-      setIsFoodSearchOpen(false)
-      setErrorMessage(null)
-    }
   }
 
   // 5. Submit new meal: auto-calculated calories & macros saved to database
@@ -358,7 +293,7 @@ export function LogMeals() {
     setErrorMessage(null)
 
     try {
-      const createdMeal = await addMealLog({
+      await addMealLog({
         user_id: currentUser.id,
         name: plateFoods.map((food) => food.name).join(' + '),
         calories: plateNutrition.calories,
@@ -377,22 +312,7 @@ export function LogMeals() {
         })),
       })
 
-      // Dynamically update metrics
-      setMealList((prev) => [createdMeal, ...prev])
-      setNutritionData((prev) => (prev
-        ? applyMealDelta(prev, {
-          calories: plateNutrition.calories,
-          protein: plateNutrition.protein,
-          carbs: plateNutrition.carbs,
-          fat: plateNutrition.fat,
-        }, 1)
-        : null))
-      refetchNutrition()
-
-      setIsModalOpen(false)
-      setIsFoodSearchOpen(false)
-      setFoodInput('')
-      setPlateFoods([])
+      navigate('/nutrition', { replace: true })
     } catch (err: unknown) {
       setErrorMessage(describeError(err, "We couldn't save this meal. Please try again."))
     } finally {
@@ -400,440 +320,163 @@ export function LogMeals() {
     }
   }
 
-  // 6. Delete meal item
-  const handleDeleteMeal = async (mealId: string) => {
-    const targetMeal = mealList.find((meal) => meal.id === mealId)
-    if (!targetMeal) return
-
-    try {
-      if (mealId) {
-        if (!currentUser?.id) {
-          throw new Error('Sign in again to remove this meal.')
-        }
-        await deleteMealLog(currentUser.id, mealId)
-      }
-      setMealList((prev) => prev.filter((meal) => meal.id !== mealId))
-      setNutritionData((prev) => (prev
-        ? applyMealDelta(prev, {
-          calories: targetMeal.item_calories || 0,
-          protein: targetMeal.proteins_g || 0,
-          carbs: targetMeal.carbs_g || 0,
-          fat: targetMeal.fats_g || 0,
-        }, -1)
-        : null))
-      refetchNutrition()
-    } catch (err: unknown) {
-      setErrorMessage(describeError(err, "We couldn't remove this meal. Please try again."))
-    }
-  }
-
-  // Search filter for today's logs
-  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase()
-  const filteredMeals = mealList.filter((meal) =>
-    `${meal.meal_name} ${meal.meal_type}`.toLocaleLowerCase().includes(normalizedSearchQuery)
-  )
-
-  const consumedCaloriesText = nutritionData ? nutritionData.consumed_calories.toLocaleString() : '-'
-  const targetGoal = nutritionData ? nutritionData.daily_goal : 0
-  const dailyGoalText = nutritionData ? targetGoal.toLocaleString() : '-'
-  const remainingCaloriesText = nutritionData ? Math.max(0, targetGoal - nutritionData.consumed_calories).toLocaleString() : '-'
-  const carbsText = nutritionData && nutritionData.remaining_carbs_g !== undefined ? `${nutritionData.remaining_carbs_g}g` : '-'
-  const proteinsText = nutritionData && nutritionData.remaining_proteins_g !== undefined ? `${nutritionData.remaining_proteins_g}g` : '-'
-  const fatsText = nutritionData && nutritionData.remaining_fats_g !== undefined ? `${nutritionData.remaining_fats_g}g` : '-'
-  const appliedAdjustment = adjustment && adjustment.status === 'accepted' && adjustment.has_change
-    ? adjustment.proposed_goal - adjustment.previous_goal
-    : 0
-  const adjustmentNote = appliedAdjustment !== 0
-    ? `AI adjusted your goal by ${appliedAdjustment > 0 ? '+' : ''}${appliedAdjustment.toLocaleString()} kcal`
-    : null
-  const progressPercent = nutritionData ? Math.min(Math.max(nutritionData.calories_progress_percentage, 0), 100) : 0
+  const macroBars = [
+    { label: 'Protein', value: calculatedNutrition.protein, target: nutritionData?.target_proteins_g ?? 0 },
+    { label: 'Fats', value: calculatedNutrition.fat, target: nutritionData?.target_fats_g ?? 0 },
+    { label: 'Carbs', value: calculatedNutrition.carbs, target: nutritionData?.target_carbs_g ?? 0 },
+  ]
 
   return (
-    <div className="log-meals-container">
-      <div className="log-meals-content">
-        {/* 1. HEADER */}
-        <header className="log-meals-header">
+    <div className="screen hifi-screen hifi-theme add-food-screen">
+      <header className="add-food-header">
+        <button type="button" className="scan-back" onClick={handleBack} aria-label="Go back">
+          <img src={backIcon} alt="" width={36} height={37} />
+        </button>
+        <div className="hifi-page-header">
+          <h1 className="hifi-page-title">Add food</h1>
           <button
             type="button"
-            className="btn-header-circle"
-            onClick={handleBack}
-            aria-label="Go back"
+            className="hifi-pill add-food-scan"
+            // Non-Premium users see the paywall; the server checks Premium again on every scan.
+            onClick={() => navigate(isPremiumActive() ? '/scan-meal' : '/premium')}
+            aria-label={isPremiumActive() ? 'Scan a meal' : 'Scan a meal, available with Pro'}
           >
-            <ChevronLeft size={20} />
+            Scan <Crown size={16} aria-hidden="true" />
           </button>
+        </div>
+      </header>
 
-          <h1 className="log-meals-title">Log Meals</h1>
-
-          <div className="log-meals-header-actions">
-            <button
-              type="button"
-              className="btn-star-circle"
-              aria-label="Saved Meals"
-            >
-              <Star size={17} strokeWidth={1.5} />
-            </button>
-            <PremiumUpsellButton />
+      <form onSubmit={handleSaveMeal} className="add-food-form">
+        <section className="hifi-section" aria-labelledby="meal-type-title">
+          <h2 className="hifi-section-title" id="meal-type-title">Meal type</h2>
+          <div className="add-food-types" role="group" aria-labelledby="meal-type-title">
+            {MEAL_TYPES.map((type) => (
+              <button
+                key={type}
+                type="button"
+                className="add-food-type"
+                aria-pressed={mealType === type}
+                onClick={() => setMealType(type)}
+              >
+                {type}
+              </button>
+            ))}
           </div>
-        </header>
+        </section>
 
-        {/* 2. SEARCH BAR */}
-        <div className="search-wrapper">
-          <Search size={18} className="search-icon" aria-hidden="true" />
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Search today's meals"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        <div className="add-food-fields">
+          <div className="add-food-field">
+            <label htmlFor="foodInput">Food name</label>
+            <input
+              id="foodInput"
+              type="text"
+              placeholder="e.g. Chicken breast"
+              value={foodInput}
+              onChange={(e) => {
+                setFoodInput(e.target.value)
+                setIsFoodSearchOpen(true)
+                setFoodSearchMessage(null)
+                setSelectedFoodDensity(DEFAULT_DENSITY)
+              }}
+              onFocus={() => setIsFoodSearchOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setIsFoodSearchOpen(false)
+                  setSuggestions([])
+                  setFoodSearchMessage(null)
+                }
+              }}
+              autoComplete="off"
+            />
+            {isSearchingFoods && <Loader2 size={16} className="animate-spin add-food-spinner" aria-label="Searching" />}
+            {isFoodSearchOpen && suggestions.length > 0 && (
+              <ul className="add-food-suggestions">
+                {suggestions.map((item) => (
+                  <li key={item.id}>
+                    <button type="button" onClick={() => handleSelectSuggestion(item)}>
+                      <span>{item.name}</span>
+                      <small>{item.calories_per_100g} kcal / 100g</small>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {isFoodSearchOpen && foodSearchMessage && <p className="hifi-muted" role="status">{foodSearchMessage}</p>}
+          </div>
+
+          <div className="add-food-field">
+            <label htmlFor="quantityGrams">Quantity</label>
+            <span className="add-food-quantity">
+              <input
+                id="quantityGrams"
+                type="number"
+                min="1"
+                inputMode="numeric"
+                placeholder="100"
+                value={quantityGrams}
+                onChange={(e) => setQuantityGrams(e.target.value)}
+              />
+              <span aria-hidden="true">g</span>
+            </span>
+            <span className="add-food-presets" role="group" aria-label="Quick portions">
+              {['50', '100', '150', '200', '250'].map((g) => (
+                <button key={g} type="button" aria-pressed={quantityGrams === g} onClick={() => setQuantityGrams(g)}>{g}g</button>
+              ))}
+            </span>
+          </div>
         </div>
 
-        {/* 3. DAILY SUMMARY CARD */}
-        <section className="daily-summary-card" aria-label="Daily Calorie Summary">
-          <div className="summary-header-row">
-            <span className="summary-header">TODAY CALORIES</span>
-            <button type="button" className="summary-tip-btn" onClick={handleOpenTip}>
-              <Sparkles size={14} aria-hidden="true" /> AI Tip
-            </button>
-          </div>
-
-          <div className="summary-metrics-block">
-            <div className="summary-metrics-row">
-              <span className="main-calorie-metric">
-                {consumedCaloriesText} / {dailyGoalText} kcal
+        <ul className="add-food-macros" aria-label={`Macros for ${quantityGrams || 100}g`}>
+          {macroBars.map((macro) => (
+            <li key={macro.label}>
+              <span className="add-food-macro-name">{macro.label}</span>
+              <span className="add-food-macro-value">{macro.value}g</span>
+              {/* The bar is this portion's share of the day's target for that macro. */}
+              <span className="add-food-macro-bar" aria-hidden="true">
+                <span style={{ width: `${macro.target > 0 ? Math.min(100, (macro.value / macro.target) * 100) : 0}%` }} />
               </span>
-              <span className="summary-remaining">{remainingCaloriesText} kcal left</span>
-            </div>
-            {adjustmentNote && <p className="summary-ai-note">{adjustmentNote}</p>}
-          </div>
+            </li>
+          ))}
+        </ul>
 
-          <div
-            className="progress-track"
-            role="progressbar"
-            aria-label="Calorie progress"
-            aria-valuenow={progressPercent}
-            aria-valuemin={0}
-            aria-valuemax={100}
-          >
-            <div
-              className="progress-fill"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
+        <button type="button" className="hifi-pill add-food-add" onClick={handleAddFood} disabled={!foodInput.trim()}>
+          + Add to {mealType.toLowerCase()}
+        </button>
 
-          <div className="macros-row">
-            <div className="macro-pill">
-              <span className="macro-pill-label">Carbs left</span>
-              <span className="macro-pill-value">{carbsText}</span>
-            </div>
-            <div className="macro-pill">
-              <span className="macro-pill-label">Protein left</span>
-              <span className="macro-pill-value">{proteinsText}</span>
-            </div>
-            <div className="macro-pill">
-              <span className="macro-pill-label">Fat left</span>
-              <span className="macro-pill-value">{fatsText}</span>
-            </div>
-          </div>
-        </section>
-
-        {/* 4. NEW REGISTER ACTION */}
-        <section className="new-register-card" aria-label="New Food Register">
-          <div className="new-register-header-group">
-            <div>
-              <h2 className="card-title">New Register</h2>
-              <p className="card-subtitle">Log what you just ate with automatic calorie and macro calculation.</p>
-            </div>
-            <button
-              type="button"
-              className="btn-add-register"
-              onClick={handleOpenModal}
-            >
-              <Plus size={18} aria-hidden="true" />
-              Add Register
-            </button>
-          </div>
-        </section>
-
-        {/* 5. TODAY CONSUMPTION LIST */}
-        <section className="consumption-section" aria-label="Today Consumption">
-          <div className="consumption-header">
-            <h2 className="consumption-title">Today consumption</h2>
-            <button
-              type="button"
-              className="see-all-link"
-              onClick={() => navigate('/nutrition')}
-            >
-              See all
-            </button>
-          </div>
-
-          {isLoading ? (
-            <div className="loading-indicator">
-              <Loader2 size={18} className="animate-spin" />
-              <span>Loading meals from database...</span>
-            </div>
-          ) : filteredMeals.length === 0 ? (
-            <div className="empty-meals-card">
-              {searchQuery ? 'No meals found matching your search.' : 'No meals logged yet today. Press Add Register above to log your first meal!'}
-            </div>
+        <section className="hifi-section" aria-labelledby="meal-contents-title">
+          <h2 className="hifi-section-title" id="meal-contents-title">{mealType} contents</h2>
+          {plateFoods.length === 0 ? (
+            <p className="hifi-muted">Add each food and its portion to build this meal.</p>
           ) : (
-            <div className="consumption-list">
-              {filteredMeals.map((meal, index) => (
-                <div
-                  key={meal.id ?? index}
-                  className="consumption-item-card"
-                >
-                  <div className="item-left">
-                    <div className="food-icon-badge" aria-hidden="true">
-                      <Utensils size={18} />
-                    </div>
-
-                    <div className="item-text">
-                      <span className="meal-name">{meal.meal_name || '-'}</span>
-                      <span className="meal-details">
-                        {meal.meal_type || 'Meal'} • {meal.portion_amount || '1'} portion ({meal.weight_g || '100'}g)
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="item-right">
-                    <span className="item-calories">
-                      {meal.item_calories !== undefined && meal.item_calories !== null ? `${meal.item_calories} kcal` : '-'}
-                    </span>
-                    <button
-                      type="button"
-                      className="btn-delete-item"
-                      onClick={() => handleDeleteMeal(meal.id)}
-                      aria-label={`Delete ${meal.meal_name}`}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
+            <ul className="add-food-contents">
+              {plateFoods.map((food, index) => (
+                <li key={`${food.name}-${index}`}>
+                  <span className="add-food-content-name">{food.name}</span>
+                  <span className="add-food-content-grams">{food.quantityGrams}g</span>
+                  <span className="add-food-content-kcal">{food.calories}kcal</span>
+                  <button type="button" onClick={() => setPlateFoods((foods) => foods.filter((_, i) => i !== index))} aria-label={`Remove ${food.name}`}>
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </section>
-      </div>
 
-      {/* POPUP MODAL: INPUT MEAL & AUTOMATIC CALORIE CALCULATION */}
-      {isModalOpen && (
-        <div className="modal-backdrop" onClick={handleCloseModal}>
-          <div
-            className="modal-dialog"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-meal-title"
-          >
-            <div className="modal-header">
-              <h2 id="modal-meal-title" className="modal-title">Log Meal</h2>
-              <button
-                type="button"
-                className="btn-modal-close"
-                onClick={handleCloseModal}
-                aria-label="Close modal"
-              >
-                <X size={20} />
-              </button>
-            </div>
+        <dl className="add-food-totals">
+          <div><dt>Nutrition estimate</dt><dd>{foodInput.trim() ? `${calculatedNutrition.calories}kcal` : '–'}</dd></div>
+          <div><dt>Meal total</dt><dd>{plateNutrition.calories}kcal</dd></div>
+        </dl>
 
-            <form onSubmit={handleSaveMeal} className="modal-form">
-              {/* Food Input with Live Autocomplete */}
-              <div className="form-group" style={{ position: 'relative' }}>
-                <label htmlFor="foodInput" className="form-label">
-                    Add a food
-                </label>
-                <div className="input-with-icon">
-                  <input
-                    id="foodInput"
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. Chicken breast, rice..."
-                    value={foodInput}
-                    onChange={(e) => {
-                      setFoodInput(e.target.value)
-                      setIsFoodSearchOpen(true)
-                      setFoodSearchMessage(null)
-                      setSelectedFoodDensity({ caloriesPer100g: 130, proteinPer100g: 8, carbsPer100g: 15, fatPer100g: 3.5 })
-                    }}
-                    onFocus={() => setIsFoodSearchOpen(true)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        setIsFoodSearchOpen(false)
-                        setSuggestions([])
-                        setFoodSearchMessage(null)
-                      }
-                    }}
-                    autoFocus
-                    autoComplete="off"
-                  />
-                  {isSearchingFoods && (
-                    <Loader2 size={16} className="animate-spin input-spinner" />
-                  )}
-                </div>
+        {errorMessage && <div className="inline-alert" role="alert">{errorMessage}</div>}
 
-                {/* Suggestions Dropdown */}
-                {isFoodSearchOpen && suggestions.length > 0 && (
-                  <ul className="suggestions-list">
-                    <li className="suggestions-dismiss-row">
-                      <button type="button" onClick={() => {
-                        setIsFoodSearchOpen(false)
-                        setSuggestions([])
-                      }}>
-                        Close suggestions <X size={14} aria-hidden="true" />
-                      </button>
-                    </li>
-                    {suggestions.map((item) => (
-                      <li
-                        key={item.id}
-                        className="suggestion-item"
-                        onClick={() => handleSelectSuggestion(item)}
-                      >
-                        <span className="suggestion-name">{item.name}</span>
-                        <span className="suggestion-cals">{item.calories_per_100g} kcal / 100g</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {isFoodSearchOpen && foodSearchMessage && (
-                  <p className="food-search-message" role="status">{foodSearchMessage}</p>
-                )}
-              </div>
-
-              {/* Meal Type Selection */}
-              <div className="form-group">
-                <label className="form-label">Meal Type</label>
-                <div className="meal-type-selector">
-                  {['Breakfast', 'Lunch', 'Dinner', 'Snack'].map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      className={`meal-type-chip${mealType === type ? ' is-selected' : ''}`}
-                      onClick={() => setMealType(type)}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Quantity in Grams */}
-              <div className="form-group">
-                <div className="label-with-presets">
-                  <label htmlFor="quantityGrams" className="form-label">
-                    Portion Weight (g)
-                  </label>
-                  <div className="quick-qty-chips">
-                    {['50', '100', '150', '200', '250'].map((g) => (
-                      <button
-                        key={g}
-                        type="button"
-                        className={`qty-preset-btn${quantityGrams === g ? ' is-active' : ''}`}
-                        onClick={() => setQuantityGrams(g)}
-                      >
-                        {g}g
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="input-with-suffix">
-                  <input
-                    id="quantityGrams"
-                    type="number"
-                    min="1"
-                    className="form-input"
-                    placeholder="100"
-                    value={quantityGrams}
-                    onChange={(e) => setQuantityGrams(e.target.value)}
-                    required
-                  />
-                  <span className="input-suffix">
-                    <Scale size={16} aria-hidden="true" /> grams
-                  </span>
-                </div>
-              </div>
-
-              {/* LIVE AUTO-CALCULATION BREAKDOWN (User does NOT type calories!) */}
-              <div className="calculation-preview-card">
-                <div className="calc-header-row">
-                  <span className="calc-label">Calculated Nutrition</span>
-                  <span className="calc-cals-badge">{calculatedNutrition.calories} kcal</span>
-                </div>
-                <div className="calc-macros-grid">
-                  <div className="calc-macro-item">
-                    <span className="macro-name">Protein</span>
-                    <span className="macro-num">{calculatedNutrition.protein}g</span>
-                  </div>
-                  <div className="calc-macro-item">
-                    <span className="macro-name">Carbs</span>
-                    <span className="macro-num">{calculatedNutrition.carbs}g</span>
-                  </div>
-                  <div className="calc-macro-item">
-                    <span className="macro-name">Fat</span>
-                    <span className="macro-num">{calculatedNutrition.fat}g</span>
-                  </div>
-                </div>
-                <p className="calc-disclaimer">
-                  Computed automatically from food database density per {quantityGrams || 100}g portion.
-                </p>
-              </div>
-
-              <button type="button" className="btn-add-food" onClick={handleAddFood} disabled={!foodInput.trim()}>
-                <Plus size={16} aria-hidden="true" /> Add food to meal
-              </button>
-
-              <section className="plate-foods" aria-label="Foods in this meal">
-                <div className="calc-header-row">
-                  <span className="calc-label">This meal</span>
-                  <span className="plate-food-count">{plateFoods.length} {plateFoods.length === 1 ? 'food' : 'foods'}</span>
-                </div>
-                {plateFoods.length === 0 ? (
-                  <p className="calc-disclaimer">Add each food and its portion to build one meal.</p>
-                ) : (
-                  <>
-                    <ul className="plate-food-list">
-                      {plateFoods.map((food, index) => (
-                        <li className="plate-food-row" key={`${food.name}-${index}`}>
-                          <span>{food.name} <small>{food.quantityGrams}g · {food.calories} kcal</small></span>
-                          <button type="button" onClick={() => setPlateFoods((foods) => foods.filter((_, i) => i !== index))} aria-label={`Remove ${food.name}`}>
-                            <X size={16} />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="plate-total-row"><span>Meal total · {plateNutrition.quantityGrams}g</span><strong>{plateNutrition.calories} kcal</strong></div>
-                  </>
-                )}
-              </section>
-
-              {errorMessage && (
-                <div className="inline-alert" role="alert">
-                  {errorMessage}
-                </div>
-              )}
-
-              {/* Modal Submit Button */}
-              <button
-                type="submit"
-                className="btn-modal-submit"
-                disabled={isSubmitting || plateFoods.length === 0}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Meal'
-                )}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+        <button type="submit" className="hifi-pill is-big add-food-save" disabled={isSubmitting || plateFoods.length === 0}>
+          {isSubmitting ? <><Loader2 size={18} className="animate-spin" aria-hidden="true" /> Saving...</> : 'Save meal'}
+        </button>
+        <button type="button" className="hifi-link-button add-food-tip" onClick={handleOpenTip}>
+          <Sparkles size={14} aria-hidden="true" /> AI calorie tip
+        </button>
+      </form>
 
       {isTipOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="calorie-adjustment-title">
@@ -897,7 +540,7 @@ export function LogMeals() {
                 <>
                   <button
                     type="button"
-                    className="btn-modal-submit tip-accept-btn"
+                    className="primary-button tip-accept-btn"
                     onClick={handleConfirmTip}
                     disabled={isDeciding}
                   >
@@ -921,7 +564,7 @@ export function LogMeals() {
               ) : (
                 <button
                   type="button"
-                  className="btn-modal-submit tip-accept-btn"
+                  className="primary-button tip-accept-btn"
                   onClick={handleOpenTip}
                   disabled={!adjustmentError}
                 >
