@@ -10,6 +10,7 @@ from app.core.local_day import LocalDay, utc_day
 from app.db.supabase_client import get_supabase
 from app.schemas.dashboard import CompletedWorkoutToday, DashboardSummary, NutritionDashboard, PlanExercise, WorkoutDashboard, WorkoutPlanSummary
 from app.services.ai_tips_service import kcal_bonus
+from app.services.exercise_catalog import exercise_label
 from app.services.health_service import get_activity_summary
 from app.services.user_profile_service import calculate_calorie_goal
 
@@ -121,7 +122,8 @@ def _query_todays_plan(user_id: UUID, day: LocalDay) -> WorkoutPlanSummary | Non
         is_rest_day=bool(row.get("is_rest_day")),
         ai_adjusted=bool(row.get("ai_adjusted")),
         ai_reasoning=translate_stored_plan_text(row.get("ai_reasoning")),
-        exercises=[PlanExercise(**exercise) for exercise in row.get("exercises") or []],
+        exercises=[PlanExercise(**{**exercise, "name": exercise_label(exercise.get("name"))})
+                   for exercise in row.get("exercises") or []],
     )
 
 

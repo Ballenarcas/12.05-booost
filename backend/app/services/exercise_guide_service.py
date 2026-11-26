@@ -5,7 +5,9 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
+from app.core.i18n import get_language
 from app.schemas.exercise import Exercise, ExerciseGuide
+from app.services.exercise_catalog import spanish_text
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
@@ -27,4 +29,9 @@ def guide_for(exercise: Exercise) -> ExerciseGuide | None:
     entry = guides["movements"].get(movement) if movement else guides["categories"].get(exercise.category)
     if not entry:
         return None
-    return ExerciseGuide(**entry, safety=guides["safety"])
+    entry = {**entry, "safety": guides["safety"]}
+    if get_language() == "es":
+        spanish = spanish_text()
+        entry = {key: [spanish.get(item, item) for item in value] if isinstance(value, list) else spanish.get(value, value)
+                 for key, value in entry.items()}
+    return ExerciseGuide(**entry)

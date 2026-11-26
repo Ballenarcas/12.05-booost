@@ -36,6 +36,8 @@ from app.services.ai_tip_history import (
     summarize_meals,
     summarize_workouts,
 )
+from app.services.exercise_catalog import exercise_label
+from app.services.muscle_focus import get_muscle_focus
 from app.services.nutrition_math import estimate_burned_kcal
 from app.services.premium_service import has_active_premium
 from app.services.user_profile_service import calculate_calorie_goal
@@ -262,6 +264,15 @@ def build_candidates(state: dict[str, Any], lang: str | None = None) -> list[dic
     """Return possible tips, best first. Pure: no database access."""
     active_lang = normalize_language(lang) if lang is not None else get_language()
     is_es = active_lang == "es"
+    if is_es:  # exercise names are stored in English
+        lift, plan = state.get("lift_progress"), state.get("plan")
+        state = {
+            **state,
+            "lift_progress": lift and {**lift, "exercise": exercise_label(lift["exercise"], "es")},
+            "plan": plan and {**plan, "exercises": [
+                {**item, "name": exercise_label(item.get("name"), "es")} for item in plan.get("exercises") or []
+            ]},
+        }
     goal = int(state["goal"])
     eaten = round(state["eaten_kcal"])
     meals = int(state["meals_count"])
@@ -926,12 +937,17 @@ def accepted_training_notes(user_id: UUID, day_start: datetime, session: Any) ->
     except Exception:
         logger.warning("Could not read accepted tips for the workout plan", exc_info=True)
         return []
+    focus = get_muscle_focus(session, user_id)
     notes: list[str] = []
     for row in rows:
         muscle = (row.get("action") or {}).get("muscle")
+        if muscle and focus:  # the setting outranks an accepted tip
+            continue
         note = f"Agreed to train {muscle} next: prefer it if it is available." if muscle else PLAN_NOTES.get(row.get("kind"))
         if note and note not in notes:
             notes.append(note)
+    if focus:
+        notes.append(f"Chose {focus} as their muscle focus: prefer it if it is available.")
     return notes
 
 

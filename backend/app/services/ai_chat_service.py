@@ -14,9 +14,10 @@ from app.core.local_day import LocalDay
 from app.schemas.exercise import Exercise
 from app.services.ai_tip_history import days_ago, meal_label, personal_facts, weight_text
 from app.services.ai_tips_service import MEDICAL_TERMS, NUMBER, _amounts, collect_state
-from app.services.exercise_catalog import get_cached_exercise, load_cached_exercises
+from app.services.exercise_catalog import exercise_label, get_cached_exercise, load_cached_exercises
 from app.services.fuzzy_matcher import get_fuzzy_matcher
 from app.services.meal_recommendation_service import coach_candidates
+from app.services.muscle_focus import get_muscle_focus
 from app.services.workout_program import load_staples
 from app.services.workout_service import list_user_routines, list_workout_history
 
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 MAX_REPLY_LENGTH = 1200
 MAX_CANDIDATE_EXERCISES = 40
-MAX_CANDIDATE_MEALS = 8
+MAX_CANDIDATE_MEALS = 12
 MAX_ROUTINES = 6
 RECENT_WORKOUTS = 5
 MAX_DAILY_DEFICIT_KCAL = 500
@@ -226,7 +227,7 @@ def _routine_facts(routines: list[Any]) -> list[str]:
         for item in routine.exercises:
             catalog = get_cached_exercise(item.exercise_id)
             # Catalog names are trusted; names the user typed must not become trusted figures.
-            name = catalog.name if catalog else meal_label(item.name)
+            name = exercise_label(catalog.name) if catalog else meal_label(item.name)
             reps = item.reps_by_set or []
             if reps and len(set(reps)) == 1:
                 parts.append(f"{name} {len(reps)} sets of {reps[0]} reps")
@@ -244,7 +245,7 @@ def _history_facts(entries: list[Any], day: LocalDay) -> list[str]:
         parts = []
         for item in entry.exercises:
             catalog = get_cached_exercise(str(item.exercise_id))
-            name = catalog.name if catalog else meal_label(item.name)
+            name = exercise_label(catalog.name) if catalog else meal_label(item.name)
             done = [row for row in item.sets if row.is_completed]
             if not done:
                 continue
@@ -261,8 +262,12 @@ def _history_facts(entries: list[Any], day: LocalDay) -> list[str]:
     return facts
 
 
-def user_facts(session: Any, user_id: UUID, day: LocalDay, routines: list[Any]) -> list[str]:
+def user_facts(
+    session: Any, user_id: UUID, day: LocalDay, routines: list[Any], focus: str | None = None,
+) -> list[str]:
     state = collect_state(session, user_id, day)
+    if focus:  # the setting outranks the muscle an accepted tip suggested
+        state = {**state, "accepted_recent": [item for item in state.get("accepted_recent", []) if not item.get("muscle")]}
     lift = state.get("lift_progress")
     safe_state = {
         **state,
@@ -271,6 +276,8 @@ def user_facts(session: Any, user_id: UUID, day: LocalDay, routines: list[Any]) 
         "lift_progress": {**lift, "exercise": meal_label(lift["exercise"])} if lift else None,
     }
     facts = personal_facts(safe_state)
+    if focus:
+        facts.append(f"Muscle focus they chose in settings: {focus}")
     facts.append(
         f"Left today: {max(0, state['goal'] - round(state['eaten_kcal']))} kcal, "
         f"{max(0, round(state['protein_goal']) - round(state['protein_eaten']))} g protein"
@@ -281,7 +288,7 @@ def user_facts(session: Any, user_id: UUID, day: LocalDay, routines: list[Any]) 
     return facts + _routine_facts(routines) + _history_facts(history, day)
 
 
-def candidate_exercises(question: str, routines: list[Any]) -> list[dict[str, str]]:
+def candidate_exercises(question: str, routines: list[Any], focus: str | None = None) -> list[dict[str, str]]:
     """The catalog exercises the model may recommend, most relevant first.
 
     The user's own and the ones they name come first. Everything else comes from the vetted
@@ -298,7 +305,7 @@ def candidate_exercises(question: str, routines: list[Any]) -> list[dict[str, st
     named = {name.lower() for name in pattern.findall(question)} if pattern else set()
     if named:
         for exercise in load_cached_exercises():
-            if exercise.name.lower() in named:
+            if {exercise.name.lower(), (exercise.name_es or "").lower()} & named:
                 add(exercise.id)
     for routine in routines[:MAX_ROUTINES]:
         for item in routine.exercises:
@@ -315,7 +322,8 @@ def candidate_exercises(question: str, routines: list[Any]) -> list[dict[str, st
     popular = CARDIO_STAPLES + ranked
     words = set(re.findall(r"\w+", question.lower()))
     for category, keywords in CATEGORY_WORDS.items():
-        if words & set(keywords):
+        # The chosen focus counts like a muscle named in the question, after anything actually named.
+        if words & set(keywords) or (category == focus and not any(words & set(known) for known in CATEGORY_WORDS.values())):
             for exercise_id in popular:
                 exercise = get_cached_exercise(exercise_id)
                 if exercise and exercise.category == category:
@@ -325,13 +333,13 @@ def candidate_exercises(question: str, routines: list[Any]) -> list[dict[str, st
     for exercise_id in ranked[:30] + CARDIO_STAPLES[:3] + ranked[30:]:
         add(exercise_id)
 
-    return [{"id": exercise.id, "name": exercise.name} for exercise in found.values()]
+    return [{"id": exercise.id, "name": exercise_label(exercise.name)} for exercise in found.values()]
 
 
-def candidate_meals(session: Any, user_id: UUID, day: LocalDay) -> list[dict[str, str]]:
+def candidate_meals(session: Any, user_id: UUID, day: LocalDay, question: str, earlier: str) -> list[dict[str, str]]:
     """Dishes for a Premium user. The model gets names only, so it has no meal figures to repeat."""
     try:
-        meals = coach_candidates(session, str(user_id), day, MAX_CANDIDATE_MEALS)
+        meals = coach_candidates(session, str(user_id), day, MAX_CANDIDATE_MEALS, question, earlier)
     except Exception:  # the coach can still answer without dishes
         logger.warning("Could not load dishes for the coach", exc_info=True)
         return []
@@ -339,8 +347,10 @@ def candidate_meals(session: Any, user_id: UUID, day: LocalDay) -> list[dict[str
 
 
 def build_context(
-    session: Any, user_id: UUID, day: LocalDay, question: str, premium: bool,
+    session: Any, user_id: UUID, day: LocalDay, question: str, premium: bool, earlier: str = "",
 ) -> tuple[list[str], list[dict[str, str]], list[dict[str, str]]]:
     routines = list_user_routines(user_id)
-    meals = candidate_meals(session, user_id, day) if premium else []
-    return user_facts(session, user_id, day, routines), candidate_exercises(question, routines), meals
+    meals = candidate_meals(session, user_id, day, question, earlier) if premium else []
+    focus = get_muscle_focus(session, user_id)
+    facts = user_facts(session, user_id, day, routines, focus)
+    return facts, candidate_exercises(question, routines, focus), meals

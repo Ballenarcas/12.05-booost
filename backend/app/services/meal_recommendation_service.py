@@ -8,6 +8,9 @@ the database. Without a model, or when it fails, the best rule-ranked meals are 
 import json
 import logging
 import re
+import unicodedata
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -40,6 +43,25 @@ class AlreadyHandled(RuntimeError):
     pass
 
 
+CATALOG_PATH = Path(__file__).resolve().parent.parent / "data" / "meal_catalog.json"
+# Words in a question, without accents, that narrow the dishes.
+DIET_WORDS = {
+    "vegan": r"vegan[oa]?s?",
+    "vegetarian": r"vegetarian[oa]?s?",
+    "gluten_free": r"sin gluten|gluten[- ]free|celiac[oa]?s?",
+    "dairy_free": r"sin lactosa|sin lacteos|lactose[- ]free|dairy[- ]free",
+}
+PURPOSE_WORDS = {
+    "breakfast": r"breakfast|desayun\w*",
+    "lunch": r"lunch|almuerzo|almorzar",
+    "dinner": r"dinner|supper|cen(?:a|o|e|ar|amos)",
+    "snack": r"snacks?|merienda|meriendo|merendar|tentempie|picar",
+    "pre_workout": r"pre[- ]?workout|before (?:training|a workout|working out)|antes de entrenar|preentreno",
+    "post_workout": r"post[- ]?workout|after (?:training|a workout|working out)|despues de entrenar|postentreno",
+    "high_protein": r"high[- ]protein|more protein|mas proteina|alt[oa]s? en proteinas?",
+    "light": r"light|low[- ]calorie|liger[oa]s?|pocas calorias",
+}
+
 COLUMNS = "id,name,meal_type,ingredients,calories,proteins_g,carbs_g,fats_g,quantity_g,reason,source,status,batch_id"
 
 INSTRUCTION = (
@@ -68,19 +90,72 @@ def _totals(ingredients: list[MealIngredient]) -> dict[str, Any]:
     return {"quantity_g": quantity, "calories": calories, "proteins_g": proteins, "carbs_g": carbs, "fats_g": fats}
 
 
+@lru_cache
+def _catalog() -> dict[str, Any]:
+    """Spanish names for the ready-made meals and their ingredients, and what each ingredient contains."""
+    return json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+
+
+def meal_tags(meal: dict[str, Any]) -> set[str]:
+    """What a meal is good for, worked out from its ingredients and macros rather than labelled by hand.
+
+    Diet tags need every ingredient to be known; a favorite with an unknown one gets none.
+    """
+    tags = {str(meal["meal_type"]).lower()}
+    known = _catalog()["ingredients"]
+    names = [item.name for item in meal["ingredients"]]
+    if names and all(name in known for name in names):
+        contains = {value for name in names for value in known[name]["contains"]}
+        if not contains & {"meat", "fish"}:
+            tags.add("vegetarian")
+            if not contains & {"dairy", "egg", "honey"}:
+                tags.add("vegan")
+        if "gluten" not in contains:
+            tags.add("gluten_free")
+        if "dairy" not in contains:
+            tags.add("dairy_free")
+    kcal = float(meal["calories"]) or 1.0
+    if meal["proteins_g"] >= 15 and meal["proteins_g"] * 4 / kcal >= 0.25:
+        tags.add("high_protein")
+    if meal["calories"] <= 350:
+        tags.add("light")
+    if meal["carbs_g"] * 4 / kcal >= 0.5 and meal["fats_g"] <= 12:
+        tags.add("pre_workout")
+    if meal["proteins_g"] >= 20 and meal["carbs_g"] >= 30:
+        tags.add("post_workout")
+    return tags
+
+
+def _localized(meal: dict[str, Any]) -> dict[str, Any]:
+    """A ready-made meal in the app language. Favorites keep the words the user typed."""
+    if get_language() != "es":
+        return meal
+    catalog = _catalog()
+    return {
+        **meal,
+        "name": catalog["meals_es"].get(meal["name"], meal["name"]),
+        "ingredients": [
+            item.model_copy(update={"name": catalog["ingredients"].get(item.name, {}).get("es", item.name)})
+            for item in meal["ingredients"]
+        ],
+    }
+
+
 def _pool(supabase: Any, user_id: str) -> list[dict[str, Any]]:
     """Every meal the recommender may suggest, each with ingredients and totals from stored data."""
     pool: list[dict[str, Any]] = []
     for row in supabase.table("meal_options").select("id,name,meal_type,ingredients").eq("active", True).execute().data or []:
         ingredients = [MealIngredient(**item) for item in row.get("ingredients") or []]
         if ingredients:
-            pool.append({"key": f"o{row['id']}", "name": row["name"], "meal_type": row["meal_type"],
-                         "ingredients": ingredients, "origin": "option", **_totals(ingredients)})
+            meal = {"key": f"o{row['id']}", "name": row["name"], "meal_type": row["meal_type"],
+                    "ingredients": ingredients, "origin": "option", **_totals(ingredients)}
+            pool.append({**_localized(meal), "tags": meal_tags(meal)})  # tags read the English ingredient names
     for favorite in nutrition_service.list_favorite_meals(user_id):
-        pool.append({"key": f"f{favorite.id}", "name": favorite.name, "meal_type": favorite.meal_type,
-                     "ingredients": favorite.ingredients, "origin": "favorite", "quantity_g": favorite.quantity_g,
-                     "calories": favorite.calories, "proteins_g": favorite.proteins_g,
-                     "carbs_g": favorite.carbs_g, "fats_g": favorite.fats_g})
+        meal = {"key": f"f{favorite.id}", "name": favorite.name, "meal_type": favorite.meal_type,
+                "ingredients": favorite.ingredients, "origin": "favorite", "quantity_g": favorite.quantity_g,
+                "calories": favorite.calories, "proteins_g": favorite.proteins_g,
+                "carbs_g": favorite.carbs_g, "fats_g": favorite.fats_g}
+        pool.append({**meal, "tags": meal_tags(meal)})
     return pool
 
 
@@ -244,12 +319,28 @@ def _remaining(user_id: str, day: LocalDay) -> tuple[dict[str, float], set[str]]
     return remaining, {meal.meal_name.strip().lower() for meal in today.meals}
 
 
-def coach_candidates(supabase: Any, user_id: str, day: LocalDay, limit: int) -> list[dict[str, Any]]:
-    """Dishes the AI Coach may suggest: the ones that best fit what is left today. Callers check Premium."""
+def wanted_tags(question: str) -> tuple[set[str], set[str]]:
+    """What the question asks for, as (diet restrictions, purposes), in English or Spanish."""
+    text = "".join(char for char in unicodedata.normalize("NFD", question.lower()) if not unicodedata.combining(char))
+
+    def asked(tags: dict[str, str]) -> set[str]:
+        return {tag for tag, words in tags.items() if re.search(rf"\b(?:{words})\b", text)}
+
+    return asked(DIET_WORDS), asked(PURPOSE_WORDS)
+
+
+def coach_candidates(
+    supabase: Any, user_id: str, day: LocalDay, limit: int, question: str = "", earlier: str = "",
+) -> list[dict[str, Any]]:
+    """Dishes the AI Coach may suggest: what was asked for, best fit for today first. Callers check Premium."""
     remaining, eaten = _remaining(user_id, day)
     if remaining["calories"] < GOAL_REACHED_KCAL:
         return []
-    return rank_candidates(_pool(supabase, user_id), remaining, eaten)[:limit]
+    diet, purposes = wanted_tags(question)
+    diet |= wanted_tags(earlier)[0]  # "I'm vegan" two messages ago still holds
+    # A diet restriction is never relaxed; a purpose with no match falls back to the rest.
+    fitting = [meal for meal in rank_candidates(_pool(supabase, user_id), remaining, eaten) if diet <= meal["tags"]]
+    return ([meal for meal in fitting if purposes <= meal["tags"]] or fitting)[:limit]
 
 
 def meals_by_key(supabase: Any, user_id: str) -> dict[str, dict[str, Any]]:

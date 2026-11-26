@@ -137,7 +137,7 @@ function Home() {
           ) : (
             <div className="hifi-card-footer">
               <p className="hifi-muted">{t('home.connectHealth')}</p>
-              <button className="hifi-pill" type="button" onClick={() => navigate('/profile')} disabled={!summary}>{t('home.connect')}</button>
+              <button className="hifi-pill" type="button" onClick={() => navigate('/profile?settings=1')} disabled={!summary}>{t('home.connect')}</button>
             </div>
           )}
         </section>

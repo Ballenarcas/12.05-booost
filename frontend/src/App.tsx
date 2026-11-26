@@ -108,7 +108,7 @@ function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/profile/friends" element={<ProfileFriends />} />
             <Route path="/profile/body-measurements" element={<BodyMeasurements />} />
-            <Route path="/settings" element={<Navigate to="/profile" replace />} />
+            <Route path="/settings" element={<Navigate to="/profile?settings=1" replace />} />
             <Route path="/faq" element={<Faq />} />
             <Route path="/coach/:conversationId?" element={<AiCoach />} />
             <Route path="*" element={<Navigate to="/" replace />} />

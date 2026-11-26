@@ -21,7 +21,7 @@ from app.schemas.overtraining import (
     SignalSeverity,
 )
 from app.services import health_service
-from app.services.exercise_catalog import get_cached_exercise
+from app.services.exercise_catalog import exercise_label, get_cached_exercise
 from app.services.user_profile_service import calculate_calorie_goal
 
 logger = logging.getLogger(__name__)
@@ -506,7 +506,7 @@ def evaluate_overtraining(
                 weight = float(set_row.get("weight") or 0)
                 reps = int(set_row.get("reps") or 0)
                 if weight > 0 and reps > 0:
-                    ex_name = str(ex_meta.get("name") or (cached_ex.name if cached_ex else "Exercise"))
+                    ex_name = exercise_label(str(ex_meta.get("name") or (cached_ex.name if cached_ex else "Exercise")))
                     e1rm = weight * (1.0 + min(reps, 30) / 30.0)
                     slot = per_ex_in_workout.setdefault(
                         ex_id,

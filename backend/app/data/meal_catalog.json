@@ -1,0 +1,374 @@
+{
+ "ingredients": {
+  "Oatmeal / Rolled Oats": {
+   "es": "Copos de avena",
+   "contains": [
+    "gluten"
+   ]
+  },
+  "Whole Milk": {
+   "es": "Leche entera",
+   "contains": [
+    "dairy"
+   ]
+  },
+  "Banana": {
+   "es": "Plátano",
+   "contains": []
+  },
+  "Whey Protein Powder": {
+   "es": "Proteína de suero en polvo",
+   "contains": [
+    "dairy"
+   ]
+  },
+  "Whole Eggs": {
+   "es": "Huevos",
+   "contains": [
+    "egg"
+   ]
+  },
+  "Whole Wheat Bread": {
+   "es": "Pan integral",
+   "contains": [
+    "gluten"
+   ]
+  },
+  "Fresh Spinach": {
+   "es": "Espinacas frescas",
+   "contains": []
+  },
+  "Greek Yogurt (0%)": {
+   "es": "Yogur griego 0 %",
+   "contains": [
+    "dairy"
+   ]
+  },
+  "Blueberries": {
+   "es": "Arándanos",
+   "contains": []
+  },
+  "Almonds": {
+   "es": "Almendras",
+   "contains": []
+  },
+  "Egg Whites": {
+   "es": "Claras de huevo",
+   "contains": [
+    "egg"
+   ]
+  },
+  "Peanut Butter": {
+   "es": "Crema de cacahuete",
+   "contains": []
+  },
+  "Unsweetened Almond Milk": {
+   "es": "Bebida de almendra sin azúcar",
+   "contains": []
+  },
+  "Cottage Cheese (Low Fat)": {
+   "es": "Requesón bajo en grasa",
+   "contains": [
+    "dairy"
+   ]
+  },
+  "Apple": {
+   "es": "Manzana",
+   "contains": []
+  },
+  "Avocado": {
+   "es": "Aguacate",
+   "contains": []
+  },
+  "Chicken Breast": {
+   "es": "Pechuga de pollo",
+   "contains": [
+    "meat"
+   ]
+  },
+  "White Rice": {
+   "es": "Arroz blanco",
+   "contains": []
+  },
+  "Steamed Broccoli": {
+   "es": "Brócoli al vapor",
+   "contains": []
+  },
+  "Olive Oil": {
+   "es": "Aceite de oliva",
+   "contains": []
+  },
+  "Salmon Fillet": {
+   "es": "Filete de salmón",
+   "contains": [
+    "fish"
+   ]
+  },
+  "Sweet Potato": {
+   "es": "Boniato",
+   "contains": []
+  },
+  "Lean Ground Beef (95/5)": {
+   "es": "Carne picada de ternera magra",
+   "contains": [
+    "meat"
+   ]
+  },
+  "Cooked Pasta": {
+   "es": "Pasta cocida",
+   "contains": [
+    "gluten"
+   ]
+  },
+  "Canned Tuna in Water": {
+   "es": "Atún al natural",
+   "contains": [
+    "fish"
+   ]
+  },
+  "Brown Rice": {
+   "es": "Arroz integral",
+   "contains": []
+  },
+  "Turkey Breast": {
+   "es": "Pechuga de pavo",
+   "contains": [
+    "meat"
+   ]
+  },
+  "Cooked Lentils": {
+   "es": "Lentejas cocidas",
+   "contains": []
+  },
+  "Firm Tofu": {
+   "es": "Tofu firme",
+   "contains": []
+  },
+  "Baked Potato": {
+   "es": "Patata asada",
+   "contains": []
+  },
+  "Cooked Quinoa": {
+   "es": "Quinoa cocida",
+   "contains": []
+  },
+  "Cooked Chickpeas": {
+   "es": "Garbanzos cocidos",
+   "contains": []
+  },
+  "Black Beans": {
+   "es": "Alubias negras cocidas",
+   "contains": []
+  },
+  "Soy Milk (Unsweetened)": {
+   "es": "Bebida de soja sin azúcar",
+   "contains": []
+  },
+  "Soy Yogurt": {
+   "es": "Yogur de soja",
+   "contains": []
+  },
+  "Tempeh": {
+   "es": "Tempeh",
+   "contains": []
+  },
+  "Edamame": {
+   "es": "Edamame",
+   "contains": []
+  },
+  "Shrimp": {
+   "es": "Gambas cocidas",
+   "contains": [
+    "fish"
+   ]
+  },
+  "Cod": {
+   "es": "Bacalao",
+   "contains": [
+    "fish"
+   ]
+  },
+  "Hake": {
+   "es": "Merluza",
+   "contains": [
+    "fish"
+   ]
+  },
+  "Pork Loin": {
+   "es": "Lomo de cerdo",
+   "contains": [
+    "meat"
+   ]
+  },
+  "Corn Tortilla": {
+   "es": "Tortilla de maíz",
+   "contains": []
+  },
+  "Rice Cakes": {
+   "es": "Tortitas de arroz",
+   "contains": []
+  },
+  "Honey": {
+   "es": "Miel",
+   "contains": [
+    "honey"
+   ]
+  },
+  "Dates": {
+   "es": "Dátiles",
+   "contains": []
+  },
+  "Walnuts": {
+   "es": "Nueces",
+   "contains": []
+  },
+  "Chia Seeds": {
+   "es": "Semillas de chía",
+   "contains": []
+  },
+  "Hummus": {
+   "es": "Hummus",
+   "contains": []
+  },
+  "Strawberries": {
+   "es": "Fresas",
+   "contains": []
+  },
+  "Orange": {
+   "es": "Naranja",
+   "contains": []
+  },
+  "Mango": {
+   "es": "Mango",
+   "contains": []
+  },
+  "Tomato": {
+   "es": "Tomate",
+   "contains": []
+  },
+  "Cucumber": {
+   "es": "Pepino",
+   "contains": []
+  },
+  "Bell Pepper": {
+   "es": "Pimiento",
+   "contains": []
+  },
+  "Zucchini": {
+   "es": "Calabacín",
+   "contains": []
+  },
+  "Mushrooms": {
+   "es": "Champiñones",
+   "contains": []
+  },
+  "Green Beans": {
+   "es": "Judías verdes",
+   "contains": []
+  },
+  "Feta Cheese": {
+   "es": "Queso feta",
+   "contains": [
+    "dairy"
+   ]
+  },
+  "Fresh Cheese": {
+   "es": "Queso fresco",
+   "contains": [
+    "dairy"
+   ]
+  }
+ },
+ "meals_es": {
+  "Oatmeal with banana and whey": "Avena con plátano y proteína",
+  "Scrambled eggs on toast": "Huevos revueltos con tostada",
+  "Greek yogurt with blueberries and almonds": "Yogur griego con arándanos y almendras",
+  "Egg white omelette with spinach": "Tortilla de claras con espinacas",
+  "Peanut butter banana toast": "Tostada con crema de cacahuete y plátano",
+  "Overnight oats with yogurt": "Avena remojada con yogur",
+  "Cottage cheese with apple": "Requesón con manzana",
+  "Protein smoothie": "Batido de proteína",
+  "Avocado toast with eggs": "Tostada de aguacate con huevo",
+  "Light yogurt bowl": "Bol ligero de yogur",
+  "Chicken, rice and broccoli": "Pollo con arroz y brócoli",
+  "Salmon with sweet potato": "Salmón con boniato",
+  "Lean beef pasta": "Pasta con ternera magra",
+  "Tuna rice bowl": "Bol de arroz con atún",
+  "Turkey sandwich": "Sándwich de pavo",
+  "Lentil and rice bowl": "Bol de lentejas con arroz",
+  "Tofu stir-fry with rice": "Salteado de tofu con arroz",
+  "Chicken pasta": "Pasta con pollo",
+  "Beef and potatoes": "Ternera con patatas",
+  "Tuna pasta salad": "Ensalada de pasta con atún",
+  "Chicken and sweet potato": "Pollo con boniato",
+  "Salmon with rice and broccoli": "Salmón con arroz y brócoli",
+  "Turkey with baked potato": "Pavo con patata asada",
+  "Chicken salad with avocado": "Ensalada de pollo con aguacate",
+  "Egg and potato skillet": "Sartén de huevo y patata",
+  "Beef with sweet potato": "Ternera con boniato",
+  "Tofu and lentil bowl": "Bol de tofu y lentejas",
+  "Chicken with brown rice": "Pollo con arroz integral",
+  "Salmon salad with potatoes": "Ensalada de salmón con patata",
+  "Turkey pasta": "Pasta con pavo",
+  "Tuna and potatoes": "Atún con patatas",
+  "Protein shake with milk": "Batido de proteína con leche",
+  "Apple with peanut butter": "Manzana con crema de cacahuete",
+  "Greek yogurt": "Yogur griego",
+  "Cottage cheese with blueberries": "Requesón con arándanos",
+  "Handful of almonds": "Puñado de almendras",
+  "Banana whey shake": "Batido de plátano y proteína",
+  "Boiled eggs": "Huevos cocidos",
+  "Yogurt with almonds": "Yogur con almendras",
+  "Turkey and apple": "Pavo con manzana",
+  "Tomato and olive oil toast with fresh cheese": "Tostada con tomate, aceite y queso fresco",
+  "Mushroom and spinach scramble": "Revuelto de champiñones y espinacas",
+  "Soy yogurt with strawberries and chia": "Yogur de soja con fresas y chía",
+  "Vegan banana oat porridge": "Gachas veganas de avena y plátano",
+  "Mango chia pudding": "Pudin de chía con mango",
+  "Rice cakes with banana and peanut butter": "Tortitas de arroz con plátano y cacahuete",
+  "Banana egg pancakes": "Tortitas de plátano y huevo",
+  "Tofu scramble with peppers": "Revuelto de tofu con pimientos",
+  "Cottage cheese with honey and walnuts": "Requesón con miel y nueces",
+  "Hummus and tomato toast": "Tostada de hummus y tomate",
+  "Chickpea and vegetable salad": "Ensalada de garbanzos y verduras",
+  "Quinoa bowl with chicken and avocado": "Bol de quinoa con pollo y aguacate",
+  "Black bean burrito bowl": "Bol de burrito con alubias negras",
+  "Chicken tacos": "Tacos de pollo",
+  "Shrimp and rice salad": "Ensalada de arroz con gambas",
+  "Pork loin with rice and peppers": "Lomo de cerdo con arroz y pimientos",
+  "Lentil stew with vegetables": "Guiso de lentejas con verduras",
+  "Tempeh quinoa bowl": "Bol de quinoa con tempeh",
+  "Greek salad with chickpeas": "Ensalada griega con garbanzos",
+  "Chicken and hummus wrap": "Wrap de pollo y hummus",
+  "Cod with potatoes and green beans": "Bacalao con patata y judías verdes",
+  "Beef and rice stir-fry": "Salteado de ternera con arroz",
+  "Tuna and chickpea salad": "Ensalada de garbanzos con atún",
+  "Vegetable quinoa salad": "Ensalada de quinoa y verduras",
+  "Salmon poke bowl": "Poke de salmón",
+  "Hake with vegetables": "Merluza con verduras",
+  "Baked cod with mushrooms": "Bacalao al horno con champiñones",
+  "Garlic shrimp with zucchini": "Gambas al ajillo con calabacín",
+  "Grilled chicken with roasted vegetables": "Pollo a la plancha con verduras asadas",
+  "Spinach and feta omelette": "Tortilla de espinacas y feta",
+  "Pork loin with sweet potato": "Lomo de cerdo con boniato",
+  "Tofu and vegetable curry with rice": "Curry de tofu y verduras con arroz",
+  "Chickpea and spinach stew": "Potaje de garbanzos y espinacas",
+  "Turkey fajitas": "Fajitas de pavo",
+  "Tempeh with green beans and rice": "Tempeh con judías verdes y arroz",
+  "Zucchini noodles with beef": "Espaguetis de calabacín con ternera",
+  "Mushroom pasta": "Pasta con champiñones",
+  "Black bean and sweet potato bowl": "Bol de boniato y alubias negras",
+  "Banana and dates": "Plátano con dátiles",
+  "Rice cakes with honey": "Tortitas de arroz con miel",
+  "Hummus with vegetable sticks": "Hummus con bastones de verdura",
+  "Edamame": "Edamame al vapor",
+  "Strawberries with fresh cheese": "Fresas con queso fresco",
+  "Orange and walnuts": "Naranja con nueces",
+  "Soy yogurt with mango": "Yogur de soja con mango",
+  "Tuna toast": "Tostada de atún",
+  "Mango protein shake": "Batido de proteína con mango",
+  "Soy banana shake": "Batido de soja y plátano",
+  "Dates with almonds": "Dátiles con almendras",
+  "Cucumber and fresh cheese salad": "Ensalada de pepino y queso fresco"
+ }
+}

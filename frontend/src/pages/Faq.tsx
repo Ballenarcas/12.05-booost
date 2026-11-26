@@ -18,7 +18,7 @@ export default function Faq() {
   return (
     <div className="screen hifi-theme faq-screen">
       <header className="active-workout-header">
-        <button className="icon-button" type="button" onClick={() => navigate('/profile')} aria-label={t('faq.back')}>
+        <button className="icon-button" type="button" onClick={() => navigate('/profile?settings=1')} aria-label={t('faq.back')}>
           <ChevronLeft size={22} />
         </button>
         <div className="workout-title">

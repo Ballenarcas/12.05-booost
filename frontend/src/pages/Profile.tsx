@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { usePageNavigate } from '../utils/usePageNavigate'
-import { AlertCircle, CheckCircle2, ChevronRight, Loader2, LogOut, Minus, Plus } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, Loader2, LogOut, Minus, Plus, Settings } from 'lucide-react'
 import {
   cancelPremium,
   clearSession,
@@ -21,6 +22,7 @@ import LiquidToggle from '../components/ui/LiquidToggle'
 import LanguageSwitch from '../components/ui/LanguageSwitch'
 import { locale, useT, valueLabel } from '../i18n'
 import HealthConnectCard from '../components/profile/HealthConnectCard'
+import MuscleFocusCard from '../components/profile/MuscleFocusCard'
 import '../styles/profile.css'
 
 type Notice = { kind: 'success' | 'error'; text: string }
@@ -46,6 +48,7 @@ function Profile() {
   const t = useT()
   const user = getCurrentUser()
   const navigate = usePageNavigate()
+  const location = useLocation()
   const [isDark, setIsDark] = useState(getTheme() === 'dark')
   const toggleDark = (dark: boolean) => { setIsDark(dark); applyTheme(dark ? 'dark' : 'light') }
 
@@ -62,6 +65,10 @@ function Profile() {
   const [quickNotice, setQuickNotice] = useState<Notice | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isLogoutOpen, setIsLogoutOpen] = useState(false)
+  // Settings are their own view of this page (/profile?settings=1), so Back closes them and edits are kept.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const settingsOpen = searchParams.has('settings')
+  const settingsTarget = useRef<'height' | 'subscription' | null>(null)
   const [isCancelOpen, setIsCancelOpen] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [isCancelled, setIsCancelled] = useState(Boolean(user?.premium_cancel_at_period_end))
@@ -73,7 +80,6 @@ function Profile() {
 
   const cancelDialogRef = useDialogBehavior(isCancelOpen, () => setIsCancelOpen(false))
   const logoutDialogRef = useDialogBehavior(isLogoutOpen, () => setIsLogoutOpen(false))
-  const settingsSectionRef = useRef<HTMLElement | null>(null)
   const subscriptionSectionRef = useRef<HTMLElement | null>(null)
   const heightInputRef = useRef<HTMLInputElement | null>(null)
   const weightInputRef = useRef<HTMLInputElement | null>(null)
@@ -220,10 +226,26 @@ function Profile() {
     setWeight(next.toFixed(1))
   }
 
-  const scrollToSettings = () => {
-    settingsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    window.setTimeout(() => heightInputRef.current?.focus({ preventScroll: true }), 260)
+  const openSettings = (target: 'height' | 'subscription' | null = null) => {
+    settingsTarget.current = target
+    setSearchParams({ settings: '1' }, { state: { fromProfile: true } })
   }
+
+  const closeSettings = () => {
+    if (location.state?.fromProfile) navigate(-1)
+    else setSearchParams({}, { replace: true })
+  }
+
+  useEffect(() => {
+    const target = settingsTarget.current
+    settingsTarget.current = null
+    if (!settingsOpen || !target) {
+      window.scrollTo(0, 0)
+      return
+    }
+    if (target === 'height') heightInputRef.current?.focus()
+    else subscriptionSectionRef.current?.scrollIntoView({ block: 'start' })
+  }, [settingsOpen])
 
   const confirmLogout = () => {
     clearSession()
@@ -245,12 +267,16 @@ function Profile() {
 
   return (
     <div className="screen hifi-screen hifi-theme profile-screen">
+      {!settingsOpen && <>
       {/* Centered Figma Identity ("8/PERFIL") */}
       <header className="profile-hero">
+        <button type="button" className="icon-button profile-gear" aria-label={t('profile.settings')} onClick={() => openSettings()}>
+          <Settings size={22} aria-hidden="true" />
+        </button>
         <div className="profile-hero-avatar" aria-hidden="true">{initials || '?'}</div>
         <h1 className="profile-hero-name">{fullName || t('profile.title')}</h1>
         <div className="profile-hero-pills">
-          <button type="button" className="profile-chip-btn" onClick={scrollToSettings}>
+          <button type="button" className="profile-chip-btn" onClick={() => openSettings('height')}>
             {t('common.edit')}
           </button>
           <button
@@ -258,7 +284,7 @@ function Profile() {
             className={`profile-chip-btn${isPremium ? ' is-premium' : ''}`}
             onClick={() => {
               if (isPremium) {
-                subscriptionSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                openSettings('subscription')
               } else {
                 navigate('/premium', { state: { from: '/profile' } })
               }
@@ -509,14 +535,15 @@ function Profile() {
         </div>
       </section>
 
-      {/* All Existing Settings Functionalities Preserved */}
-      <section
-        ref={settingsSectionRef}
-        id="profile-settings"
-        className="profile-settings-stack"
-        aria-labelledby="settings-heading"
-      >
-        <h2 className="hifi-section-title" id="settings-heading">{t('profile.settings')}</h2>
+      </>}
+
+      {settingsOpen && <section className="profile-settings-stack" aria-labelledby="settings-heading">
+        <header className="profile-settings-header">
+          <button type="button" className="icon-button" aria-label={t('common.back')} onClick={closeSettings}>
+            <ArrowLeft size={20} aria-hidden="true" />
+          </button>
+          <h1 className="hifi-page-title" id="settings-heading">{t('profile.settings')}</h1>
+        </header>
 
         <form onSubmit={handleSave}>
           <section className="section" aria-labelledby="profile-body">
@@ -570,6 +597,8 @@ function Profile() {
             </button>
           )}
         </form>
+
+        <MuscleFocusCard />
 
         <HealthConnectCard userId={user?.id} />
 
@@ -645,7 +674,7 @@ function Profile() {
             </button>
           </div>
         </section>
-      </section>
+      </section>}
 
       {isCancelOpen && (
         <div className="modal-backdrop">
