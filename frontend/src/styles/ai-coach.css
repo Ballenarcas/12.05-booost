@@ -29,6 +29,12 @@
 .coach-message ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
 .coach-message li button { min-height: 36px; padding: 4px 12px; border: 0; border-radius: var(--radius-pill); color: var(--hifi-ink); background: var(--hifi-button); box-shadow: inset 0 0 4px var(--hifi-shadow); cursor: pointer; font-size: 13px; }
 
+.coach-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.coach-message .coach-actions .hifi-pill { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; }
+.coach-meal { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.coach-meal div { display: grid; gap: 2px; min-width: 0; font-size: 14px; }
+.coach-meal span { color: var(--hifi-muted); font-size: 12px; }
+
 .coach-composer { position: sticky; bottom: max(0.75rem, env(safe-area-inset-bottom)); display: grid; gap: 8px; transition: transform var(--motion) var(--ease-out), opacity var(--motion) var(--ease-out); }
 /* Out of the way while reading older messages; typing or tabbing into it brings it back. */
 .coach-composer.is-away:not(:focus-within) { transform: translateY(calc(100% + 1.5rem)); opacity: 0; pointer-events: none; }

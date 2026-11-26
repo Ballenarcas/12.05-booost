@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.nutrition import MealIngredient
+
 
 class ChatMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -15,6 +17,20 @@ class ChatMessageRequest(BaseModel):
 class ChatExercise(BaseModel):
     id: str
     name: str
+    is_cardio: bool = False
+
+
+class ChatMeal(BaseModel):
+    """A dish from the app's meal list or the user's favorites. Every figure comes from the database."""
+
+    key: str
+    name: str
+    meal_type: str
+    calories: int
+    proteins_g: float
+    carbs_g: float
+    fats_g: float
+    ingredients: list[MealIngredient]
 
 
 class ChatMessage(BaseModel):
@@ -22,6 +38,7 @@ class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
     exercises: list[ChatExercise] = Field(default_factory=list)
+    meals: list[ChatMeal] = Field(default_factory=list)
     created_at: datetime
 
 

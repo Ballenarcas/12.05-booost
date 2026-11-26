@@ -94,6 +94,18 @@ export interface CustomExercisePayload {
 export interface ChatExercise {
   id: string
   name: string
+  is_cardio?: boolean
+}
+
+export interface ChatMeal {
+  key: string
+  name: string
+  meal_type: string
+  calories: number
+  proteins_g: number
+  carbs_g: number
+  fats_g: number
+  ingredients: import('../services/api').MealIngredient[]
 }
 
 export interface ChatMessage {
@@ -101,6 +113,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   exercises: ChatExercise[]
+  meals?: ChatMeal[]
   created_at: string
 }
 

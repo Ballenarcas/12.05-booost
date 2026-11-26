@@ -16,6 +16,7 @@ from app.services.ai_tip_history import days_ago, meal_label, personal_facts, we
 from app.services.ai_tips_service import MEDICAL_TERMS, NUMBER, _amounts, collect_state
 from app.services.exercise_catalog import get_cached_exercise, load_cached_exercises
 from app.services.fuzzy_matcher import get_fuzzy_matcher
+from app.services.meal_recommendation_service import coach_candidates
 from app.services.workout_program import load_staples
 from app.services.workout_service import list_user_routines, list_workout_history
 
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 MAX_REPLY_LENGTH = 1200
 MAX_CANDIDATE_EXERCISES = 40
+MAX_CANDIDATE_MEALS = 8
 MAX_ROUTINES = 6
 RECENT_WORKOUTS = 5
 MAX_DAILY_DEFICIT_KCAL = 500
@@ -157,11 +159,19 @@ def named_exercises(reply: str, candidates: list[dict[str, str]]) -> list[str]:
     return [item["id"] for item in candidates if named & _names_of(item["id"])]
 
 
+def named_meals(reply: str, meals: list[dict[str, str]]) -> list[str]:
+    """Ids of the offered dishes the reply names."""
+    text = reply.translate(PLAIN_CHARACTERS).lower()
+    return [meal["id"] for meal in meals if meal["name"].lower() in text]
+
+
 def is_safe_chat_reply(
     reply: Any,
     exercise_ids: Any,
     facts: list[str],
     candidates: list[dict[str, str]],
+    meal_ids: Any = (),
+    meals: list[dict[str, str]] | tuple = (),
 ) -> bool:
     """Accept a model's answer only with real numbers, catalog exercises and no medical or restrictive advice.
 
@@ -179,6 +189,9 @@ def is_safe_chat_reply(
     allowed_ids = {item["id"] for item in candidates}
     if not all(isinstance(value, str) and value in allowed_ids for value in exercise_ids):
         return reject("exercise id outside the candidates")
+    offered = {meal["id"] for meal in meals}
+    if not isinstance(meal_ids, (list, tuple)) or not all(isinstance(value, str) and value in offered for value in meal_ids):
+        return reject("meal id outside the offered dishes")
 
     text = EQUIPMENT_PHRASES.sub(" ", reply.translate(PLAIN_CHARACTERS))
     if MEDICAL_WORDING.search(text) or BLOCKED_ADVICE.search(text):
@@ -193,6 +206,8 @@ def is_safe_chat_reply(
             return reject("exercise name outside the candidates")
         text = pattern.sub(" ", text)  # a name such as "3/4 Sit-Up" carries no figure
 
+    for meal in meals:  # a favorite's name may hold digits, which are not a figure
+        text = re.sub(re.escape(meal["name"]), " ", text, flags=re.IGNORECASE)
     text = _plain_numbers(LIST_MARKER.sub("", text))
     known = _plain_numbers(" ".join(facts))
     if not set(NUMBER.findall(text)) <= set(NUMBER.findall(known)) or not _amounts(text) <= _amounts(known):
@@ -313,6 +328,19 @@ def candidate_exercises(question: str, routines: list[Any]) -> list[dict[str, st
     return [{"id": exercise.id, "name": exercise.name} for exercise in found.values()]
 
 
-def build_context(session: Any, user_id: UUID, day: LocalDay, question: str) -> tuple[list[str], list[dict[str, str]]]:
+def candidate_meals(session: Any, user_id: UUID, day: LocalDay) -> list[dict[str, str]]:
+    """Dishes for a Premium user. The model gets names only, so it has no meal figures to repeat."""
+    try:
+        meals = coach_candidates(session, str(user_id), day, MAX_CANDIDATE_MEALS)
+    except Exception:  # the coach can still answer without dishes
+        logger.warning("Could not load dishes for the coach", exc_info=True)
+        return []
+    return [{"id": meal["key"], "name": meal["name"]} for meal in meals]
+
+
+def build_context(
+    session: Any, user_id: UUID, day: LocalDay, question: str, premium: bool,
+) -> tuple[list[str], list[dict[str, str]], list[dict[str, str]]]:
     routines = list_user_routines(user_id)
-    return user_facts(session, user_id, day, routines), candidate_exercises(question, routines)
+    meals = candidate_meals(session, user_id, day) if premium else []
+    return user_facts(session, user_id, day, routines), candidate_exercises(question, routines), meals

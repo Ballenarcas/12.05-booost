@@ -244,6 +244,18 @@ def _remaining(user_id: str, day: LocalDay) -> tuple[dict[str, float], set[str]]
     return remaining, {meal.meal_name.strip().lower() for meal in today.meals}
 
 
+def coach_candidates(supabase: Any, user_id: str, day: LocalDay, limit: int) -> list[dict[str, Any]]:
+    """Dishes the AI Coach may suggest: the ones that best fit what is left today. Callers check Premium."""
+    remaining, eaten = _remaining(user_id, day)
+    if remaining["calories"] < GOAL_REACHED_KCAL:
+        return []
+    return rank_candidates(_pool(supabase, user_id), remaining, eaten)[:limit]
+
+
+def meals_by_key(supabase: Any, user_id: str) -> dict[str, dict[str, Any]]:
+    return {meal["key"]: meal for meal in _pool(supabase, user_id)}
+
+
 def _generate(supabase: Any, user_id: str, remaining: dict[str, float], eaten: set[str]) -> list[dict[str, Any]]:
     if remaining["calories"] < GOAL_REACHED_KCAL:
         return []

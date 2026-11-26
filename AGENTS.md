@@ -25,6 +25,7 @@
 ## AI Coach (chat)
 - Backend: `api/ai_chat.py` → `facades/ai_chat_facade.py` → `services/ai_chat_service.py`; UI: `frontend/src/pages/AiCoach.tsx`.
 - The model sees only facts about the user and a short list of catalog exercises. `is_safe_chat_reply` must stay the gate for its output: catalog exercises only, no number that is not in the facts (numbers the user typed do not count), no medical or eat-less advice, no deficit above 500 kcal/day, no load increase above 10% per week. Medical questions are refused without calling the model.
+- Dishes are Premium only and come from `meal_options` and the user's favorites; the model gets names, never figures. Answer buttons (`components/coach/CoachActions.tsx`) change data only when the user taps them.
 - Limit: 10 messages (Free) or 50 (Premium) per rolling 24 hours, counted from stored messages. Never count it from the browser's day. Conversations are read only by their owner, and history sent to the model comes from the database, not the client.
 
 ## Coordination
