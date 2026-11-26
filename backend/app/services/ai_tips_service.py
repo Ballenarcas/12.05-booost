@@ -78,9 +78,13 @@ AMOUNT = re.compile(r"(\d+(?:[.,]\d+)*)[\s\-‐‑]*(kcal|kg|g)\b", re.IGNORECAS
 PAIRED_AMOUNT = re.compile(r"(\d+(?:[.,]\d+)*) of (\d+(?:[.,]\d+)*)\s*(kcal|kg|g)\b", re.IGNORECASE)
 # Medical advice, eating less, spelled-out amounts the number check cannot see, claiming
 # a change was already made, and the model talking about its own rewriting.
+MEDICAL_TERMS = (  # shared with the AI Coach chat
+    r"diagnos\w*|treat\w*|cure\w*|disease\w*|disorder\w*|illness\w*|medic\w*|deficien\w*|diabet\w*"
+    r"|symptom\w*|therap\w*|injur\w*|supplement\w*|doctor\w*"
+)
 BLOCKED_WORDING = re.compile(
-    r"\b(diagnos\w*|treat\w*|cure\w*|disease\w*|disorder\w*|illness\w*|medic\w*|deficien\w*|diabet\w*"
-    r"|symptom\w*|therap\w*|injur\w*|supplement\w*|doctor\w*|eat less|skip\w*|fast|fasting|starv\w*|detox\w*"
+    rf"\b({MEDICAL_TERMS}"
+    r"|eat less|skip\w*|fast|fasting|starv\w*|detox\w*"
     r"|restrict\w*|cut back|cut down|cut calories|burn it off|burn off"
     r"|percent|hundred|thousand|double|twice|triple|i added|i['’]ve added|we added|been added|was added|already added"
     r"|rephras\w*|rewr[io]\w*|reword\w*|the tip|this tip|meaning|tone|instructions?)\b",

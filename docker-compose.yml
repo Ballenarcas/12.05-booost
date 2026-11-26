@@ -31,7 +31,7 @@ services:
       SUPABASE_KEY: ${SUPABASE_KEY:?SUPABASE_KEY is required}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}
       AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:?AUTH_SECRET_KEY is required}
-      AUTH_TOKEN_TTL_HOURS: ${AUTH_TOKEN_TTL_HOURS:-12}
+      AUTH_TOKEN_TTL_HOURS: ${AUTH_TOKEN_TTL_HOURS:-720}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}
       # Any OpenAI-compatible API. The GROQ_* values still work when the AI_* ones are not set.

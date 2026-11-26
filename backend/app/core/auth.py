@@ -3,7 +3,9 @@
 Tokens are ``<user_id>.<issued_at_ms>.<expires_at>.<hmac>`` (legacy 3-part
 ``<user_id>.<expires_at>.<hmac>`` tokens remain accepted with ``issued_at_ms=0``)
 signed with HMAC-SHA256. The signing key never leaves the backend, so a client
-cannot mint or extend a session by editing local storage. Sessions issued at or
+cannot mint or extend a session by editing local storage. A session in use is
+renewed by the server once past half its life, keeping the original sign-in time,
+so only an unused session expires. Sessions issued at or
 before ``users.password_changed_at`` (or an in-process revocation mark) are
 rejected; rotating ``AUTH_SECRET_KEY`` still revokes every session globally.
 """
@@ -19,13 +21,14 @@ import threading
 import time
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.config import get_settings
 from app.db.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
+RENEWED_TOKEN_HEADER = "X-Session-Token"
 _bearer = HTTPBearer(auto_error=False)
 _lock = threading.Lock()
 _MAX_REVOCATION_CACHE_ENTRIES = 10_000
@@ -149,9 +152,12 @@ def _sign(payload: str) -> str:
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
 
+def _ttl_seconds() -> int:
+    return max(1, min(get_settings().auth_token_ttl_hours, 24 * 30)) * 3600
+
+
 def issue_access_token(user_id: str) -> tuple[str, int]:
     """Return ``(token, expires_at_unix)`` for an authenticated user."""
-    ttl_hours = max(1, min(get_settings().auth_token_ttl_hours, 24 * 30))
     now_ms = int(time.time() * 1000)
     key = _normalize_user_key(user_id)
     with _lock:
@@ -160,7 +166,7 @@ def issue_access_token(user_id: str) -> tuple[str, int]:
         if cached is not None and cached[0] > time.monotonic() and cached[1] is not None:
             revoked_ms = max(revoked_ms or 0, cached[1])
     issued_at_ms = max(now_ms, revoked_ms + 1) if revoked_ms is not None else now_ms
-    expires_at = issued_at_ms // 1000 + ttl_hours * 3600
+    expires_at = issued_at_ms // 1000 + _ttl_seconds()
     payload = f"{user_id}.{issued_at_ms}.{expires_at}"
     return f"{payload}.{_sign(payload)}", expires_at
 
@@ -203,19 +209,46 @@ def _verify_token(token: str) -> str:
     return normalized_uid
 
 
+def _renewed_token(token: str) -> str | None:
+    """A longer-lived copy of an already verified token past half its life.
+
+    The sign-in time is copied, not reset, so a password change still revokes the copy
+    even if this process has not yet seen the change.
+    """
+    parts = token.split(".")
+    if len(parts) != 4:
+        return None
+    user_id, issued_at_ms, expires_at, _ = parts
+    now, ttl = int(time.time()), _ttl_seconds()
+    if int(expires_at) - now >= ttl // 2:
+        return None
+    payload = f"{user_id}.{issued_at_ms}.{now + ttl}"
+    return f"{payload}.{_sign(payload)}"
+
+
+def _signed_in_user(token: str, response: Response | None) -> UUID:
+    user_id = UUID(_verify_token(token))
+    renewed = _renewed_token(token) if response is not None else None
+    if renewed:
+        response.headers[RENEWED_TOKEN_HEADER] = renewed
+    return user_id
+
+
 def current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    response: Response = None,  # FastAPI injects it
 ) -> UUID:
     if credentials is None:
         raise _unauthorized()
-    return UUID(_verify_token(credentials.credentials))
+    return _signed_in_user(credentials.credentials, response)
 
 
 def optional_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    response: Response = None,
 ) -> UUID | None:
     """The signed-in user, or None without a token. A bad token is still rejected."""
     if credentials is None:
         return None
-    return UUID(_verify_token(credentials.credentials))
+    return _signed_in_user(credentials.credentials, response)
 

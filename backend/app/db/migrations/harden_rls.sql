@@ -23,7 +23,9 @@ BEGIN
     'subscriptions',
     'workout_plans',
     'ai_calorie_adjustments',
-    'ai_tips'
+    'ai_tips',
+    'ai_chat_conversations',
+    'ai_chat_messages'
   ] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', target);
 

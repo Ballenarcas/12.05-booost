@@ -8,6 +8,7 @@ const SCAN_TIMEOUT_MS = 70000
 const LOGIN_TIMEOUT_MS = 15000
 const DASHBOARD_TIMEOUT_MS = 15000
 const LLM_TIMEOUT_MS = 20000
+const CHAT_TIMEOUT_MS = 30000 // the server reads the user's data before it asks the model
 const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
 const DASHBOARD_CACHE_PREFIX = 'booost_dashboard:'
 const DASHBOARD_CACHE_TTL_MS = 30_000
@@ -34,7 +35,14 @@ import type {
 import type { WorkoutLogCreate } from '../types/workout'
 import { DEFAULT_STATISTICS_RANGE } from '../utils/workoutStatistics'
 import { getLanguage, onLanguageChange, t } from '../i18n'
-import type { PremiumPlan, UserProfile } from '../types'
+import type {
+  ChatQuota,
+  ChatReply,
+  ConversationDetail,
+  ConversationSummary,
+  PremiumPlan,
+  UserProfile,
+} from '../types'
 import type {
   HealthActivityDay,
   HealthActivitySummary,
@@ -112,10 +120,10 @@ export function getActiveDeloadPct(userId: string | undefined = getCurrentUser()
   }
 }
 
-function clearStorageByPrefix(storage: Storage, prefix: string): void {
+function clearStorageByPrefix(storage: Storage, prefix: string, kept: string[] = []): void {
   try {
     Object.keys(storage)
-      .filter((key) => key.startsWith(prefix))
+      .filter((key) => key.startsWith(prefix) && !kept.some((start) => key.startsWith(start)))
       .forEach((key) => storage.removeItem(key))
   } catch {
     // Storage can be unavailable in restricted browsing contexts.
@@ -130,7 +138,11 @@ export function getAccessToken(): string | null {
   }
 }
 
-export function clearSession(): void {
+/**
+ * keepWorkouts leaves workouts in progress on the device: an expired session or a new sign-in must
+ * not lose them. Their keys carry the user id, so another account never sees them.
+ */
+export function clearSession({ keepWorkouts = false } = {}): void {
   shortCache.clear()
   dashboardRequests.clear()
   insightRequests.clear()
@@ -141,7 +153,10 @@ export function clearSession(): void {
   routinesRequests.clear()
   exerciseListCache.clear()
   exerciseListInflight.clear()
-  clearStorageByPrefix(localStorage, STORAGE_PREFIX)
+  const kept = keepWorkouts
+    ? [`${STORAGE_PREFIX}active_workout:`, `${STORAGE_PREFIX}overtraining_mod_pct:`]
+    : []
+  clearStorageByPrefix(localStorage, STORAGE_PREFIX, kept)
   clearStorageByPrefix(sessionStorage, STORAGE_PREFIX)
 }
 
@@ -156,8 +171,17 @@ async function apiFetch(input: string, init: RequestInit = {}): Promise<Response
   // The server answers messages, tips and plans in the app language.
   headers.set('Accept-Language', getLanguage())
   const response = await fetch(input, { ...init, headers })
+  // The server renews a session in use. Ignored if the user signed out or switched meanwhile.
+  const renewed = response.headers.get('X-Session-Token')
+  if (renewed && token && getAccessToken() === token) {
+    try {
+      localStorage.setItem(SESSION_KEY, renewed)
+    } catch {
+      // The current token keeps working until it expires.
+    }
+  }
   if (response.status === 401) {
-    clearSession()
+    clearSession({ keepWorkouts: true })
     if (window.location.pathname !== '/login') window.location.assign('/login')
     throw new Error(t('api.sessionExpired'))
   }
@@ -749,7 +773,7 @@ export async function loginUser(email: string, password: string): Promise<import
   }
 
   const profile = await response.json() as import('../types').UserProfile & { access_token: string }
-  clearSession()
+  clearSession({ keepWorkouts: true })
   try {
     localStorage.setItem(SESSION_KEY, profile.access_token)
     localStorage.setItem('booost_user', JSON.stringify(profile))
@@ -1424,6 +1448,44 @@ export async function undoTip(tipId: string): Promise<AiTipDecision> {
   forgetCachedTip()
   clearGoalCaches()
   return response.json() as Promise<AiTipDecision>
+}
+
+export class ChatLimitError extends Error {}
+
+async function chatRequest<T>(path: string, fallback: string, init: RequestInit = {}, timeout = WRITE_TIMEOUT_MS): Promise<T> {
+  let response: Response
+  try {
+    response = await apiFetch(`${API_URL}/api/v1/ai/chat/${path}`, { ...init, signal: AbortSignal.timeout(timeout) })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') throw new Error(t('api.trainerSlow'), { cause: error })
+    throw error
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: unknown }
+    const detail = typeof body.detail === 'string' ? body.detail : fallback
+    throw response.status === 429 ? new ChatLimitError(detail) : new Error(detail)
+  }
+  return response.json() as Promise<T>
+}
+
+export function sendChatMessage(content: string, conversationId?: string): Promise<ChatReply> {
+  return chatRequest<ChatReply>(`messages?${localDayQuery()}`, t('coach.errorSend'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, conversation_id: conversationId ?? null }),
+  }, CHAT_TIMEOUT_MS)
+}
+
+export function listChatConversations(): Promise<ConversationSummary[]> {
+  return chatRequest<ConversationSummary[]>('conversations', t('coach.errorLoad'))
+}
+
+export function getChatConversation(conversationId: string): Promise<ConversationDetail> {
+  return chatRequest<ConversationDetail>(`conversations/${encodeURIComponent(conversationId)}`, t('coach.errorLoad'))
+}
+
+export function getChatQuota(): Promise<ChatQuota> {
+  return chatRequest<ChatQuota>('quota', t('coach.errorLoad'))
 }
 
 export interface FoodSearchItem {
