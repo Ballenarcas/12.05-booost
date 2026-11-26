@@ -3,6 +3,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from app.core.auth import current_user
+from app.schemas.weekly_routine import (
+    WeeklyRoutineAcceptRequest,
+    WeeklyRoutineAcceptResponse,
+    WeeklyRoutineDraft,
+    WeeklyRoutineGenerateRequest,
+    WeeklyRoutineModifyRequest,
+)
 from app.schemas.workout import RoutineCreate, RoutineSummary
 from app.facades.workout_facade import workout_facade
 
@@ -38,3 +45,27 @@ def delete_routine(
 ) -> dict[str, str]:
     workout_facade.delete_routine(user_id, routine_id)
     return {"status": "deleted"}
+
+
+@router.post("/ai-weekly/generate", response_model=WeeklyRoutineDraft)
+def generate_ai_weekly_routine(
+    payload: WeeklyRoutineGenerateRequest,
+    user_id: UUID = Depends(current_user),
+) -> WeeklyRoutineDraft:
+    return workout_facade.generate_weekly_routine(user_id, payload)
+
+
+@router.post("/ai-weekly/modify", response_model=WeeklyRoutineDraft)
+def modify_ai_weekly_routine(
+    payload: WeeklyRoutineModifyRequest,
+    user_id: UUID = Depends(current_user),
+) -> WeeklyRoutineDraft:
+    return workout_facade.modify_weekly_routine(user_id, payload)
+
+
+@router.post("/ai-weekly/accept", response_model=WeeklyRoutineAcceptResponse)
+def accept_ai_weekly_routine(
+    payload: WeeklyRoutineAcceptRequest,
+    user_id: UUID = Depends(current_user),
+) -> WeeklyRoutineAcceptResponse:
+    return workout_facade.accept_weekly_routine(user_id, payload)

@@ -27,6 +27,11 @@ import type {
   RoutineCreatePayload,
   WarmupRecommendation,
   WarmupRecommendationRequest,
+  WeeklyRoutineAcceptResponse,
+  WeeklyRoutineDay,
+  WeeklyRoutineDraft,
+  WeeklyRoutineGenerateRequest,
+  WeeklyRoutineModifyRequest,
   WorkoutHistoryEntry,
   WorkoutStatistics,
   WorkoutStatisticsRange,
@@ -1970,6 +1975,43 @@ export function dismissOvertrainingAlert(): Promise<OvertrainingAlertStatus> {
     'POST',
     t('ot.errorDismiss'),
   )
+}
+
+const WEEKLY_AI_TIMEOUT_MS = 35_000
+
+async function postWeeklyRoutineAction<T>(path: string, body: unknown, timeoutMs = WEEKLY_AI_TIMEOUT_MS): Promise<T> {
+  const userId = getCurrentUser()?.id
+  if (!userId) throw new Error(t('api.onboardingCreateRoutine'))
+  const response = await apiFetch(`${API_URL}/api/v1/routines${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
+  })
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof errBody?.detail === 'string' ? errBody.detail : 'Request failed')
+  }
+  return await response.json() as T
+}
+
+export function generateAiWeeklyRoutine(payload: WeeklyRoutineGenerateRequest): Promise<WeeklyRoutineDraft> {
+  return postWeeklyRoutineAction<WeeklyRoutineDraft>('/ai-weekly/generate', payload)
+}
+
+export function modifyAiWeeklyRoutine(payload: WeeklyRoutineModifyRequest): Promise<WeeklyRoutineDraft> {
+  return postWeeklyRoutineAction<WeeklyRoutineDraft>('/ai-weekly/modify', payload)
+}
+
+export async function acceptAiWeeklyRoutine(days: WeeklyRoutineDay[]): Promise<WeeklyRoutineAcceptResponse> {
+  const result = await postWeeklyRoutineAction<WeeklyRoutineAcceptResponse>(
+    '/ai-weekly/accept',
+    { days },
+    WRITE_TIMEOUT_MS,
+  )
+  clearRoutinesCache()
+  clearDashboardCache()
+  return result
 }
 
 // Saved copies hold server text in the old language; drop them so the next load is in the new one.

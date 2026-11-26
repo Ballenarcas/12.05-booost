@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Crown, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
@@ -10,6 +10,7 @@ import WorkoutPhoto from '../components/workout/WorkoutPhoto'
 import { planWorkoutState } from '../utils/workoutPlan'
 import { locale, t as tr, useT } from '../i18n'
 import '../styles/workouts.css'
+import '../styles/ai-weekly-routine.css'
 import type { ActiveExercise, JointLocation, Routine, WorkoutHistoryEntry } from '../types/workout'
 
 function formatWorkoutDuration(seconds: number): string {
@@ -442,6 +443,22 @@ function Workouts() {
               {showAllRoutines ? t('workouts.showLess') : t('workouts.seeAll')}
             </button>
           )}
+        </div>
+        <div className="workouts-ai-weekly-banner">
+          <div className="workouts-ai-weekly-copy">
+            <p className="workouts-ai-weekly-title">
+              <Sparkles size={15} aria-hidden="true" />
+              <span>{t('workouts.aiWeeklyTitle')}</span>
+              <span className="workouts-ai-weekly-badge">
+                <Crown size={11} aria-hidden="true" />
+                {t('workouts.aiWeeklyPremiumTag')}
+              </span>
+            </p>
+            <p className="hifi-muted">{t('workouts.aiWeeklyBody')}</p>
+          </div>
+          <button className="hifi-pill" type="button" onClick={() => navigate('/workouts/ai-weekly')}>
+            {t('workouts.aiWeeklyCta')}
+          </button>
         </div>
         {!isLoading && !error && routines.length === 0 && <p className="hifi-card hifi-muted">{t('workouts.noRoutines')}</p>}
         <div className="workouts-list">

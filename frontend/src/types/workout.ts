@@ -232,3 +232,68 @@ export interface WarmupRecommendationRequest {
     target_reps?: number | null
   }>
 }
+
+export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+
+export type EquipmentKey =
+  | 'full_gym'
+  | 'barbell'
+  | 'dumbbell'
+  | 'machine'
+  | 'cable'
+  | 'bodyweight'
+  | 'kettlebell'
+  | 'bands'
+
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced'
+
+export type TrainingPhilosophy = 'heavy_duty' | 'high_volume' | 'powerbuilding' | 'minimalist'
+
+export interface WeeklyRoutineExercise {
+  exercise_id: string
+  name: string
+  muscle_group: string
+  equipment: string[]
+  target_sets: number
+  target_reps: number
+}
+
+export interface WeeklyRoutineDay {
+  day: Weekday
+  routine_name: string
+  focus: string
+  estimated_duration_minutes: number
+  exercises: WeeklyRoutineExercise[]
+}
+
+export interface WeeklyRoutineDraft {
+  plan_title: string
+  split_name: string
+  objective: string
+  experience_level?: ExperienceLevel
+  training_philosophy?: TrainingPhilosophy | null
+  summary: string
+  change_summary: string | null
+  days: WeeklyRoutineDay[]
+}
+
+export interface WeeklyRoutineGenerateRequest {
+  days: Weekday[]
+  duration_minutes: number
+  equipment: EquipmentKey[]
+  objective?: string | null
+  experience_level?: ExperienceLevel
+  training_philosophy?: TrainingPhilosophy | null
+  notes?: string | null
+}
+
+export interface WeeklyRoutineModifyRequest {
+  preferences: WeeklyRoutineGenerateRequest
+  current_draft: WeeklyRoutineDraft
+  feedback: string
+  feedback_history: string[]
+}
+
+export interface WeeklyRoutineAcceptResponse {
+  routines: Routine[]
+}

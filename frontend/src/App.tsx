@@ -47,6 +47,7 @@ if (typeof window !== 'undefined') {
 
 const Home = lazy(pages.Home)
 const ActiveWorkout = lazy(pages.ActiveWorkout)
+const AiWeeklyRoutine = lazy(() => import('./pages/AiWeeklyRoutine'))
 const CreateRoutine = lazy(pages.CreateRoutine)
 const CustomExercise = lazy(pages.CustomExercise)
 const ExercisePicker = lazy(pages.ExercisePicker)
@@ -88,6 +89,7 @@ function App() {
           <Route element={<ProtectedLayout />}>
             <Route path="/" element={<Home />} />
             <Route path="/workouts" element={<Workouts />} />
+            <Route path="/workouts/ai-weekly" element={<AiWeeklyRoutine />} />
             <Route path="/workouts/statistics" element={<WorkoutStatistics />} />
             <Route path="/statistics" element={<WorkoutStatistics />} />
             <Route path="/workouts/create" element={<CreateRoutine />} />
