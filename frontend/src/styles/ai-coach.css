@@ -4,7 +4,9 @@
 
 .coach-screen { display: flex; flex-direction: column; min-height: calc(100svh - 2.5rem - env(safe-area-inset-bottom)); }
 
-.coach-header { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 12px; }
+.coach-header { position: sticky; z-index: 5; top: max(0.5rem, env(safe-area-inset-top)); display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 12px; transition: transform var(--motion) var(--ease-out), opacity var(--motion) var(--ease-out); }
+.coach-header.is-away:not(:has(:focus-visible)) { transform: translateY(calc(-100% - 1.5rem)); opacity: 0; pointer-events: none; }
+.coach-header:has(~ .coach-thread) { padding: 8px; border-radius: 28px; background: color-mix(in srgb, var(--background) 82%, transparent); backdrop-filter: blur(12px); }
 .coach-header h1 { margin: 0; font-size: 24px; font-weight: 500; text-align: center; }
 .coach-round { display: grid; width: 44px; height: 44px; place-items: center; padding: 0; border: 0; border-radius: 50%; color: var(--hifi-ink); background: transparent; box-shadow: inset 1px 1px 3px var(--hifi-shadow); cursor: pointer; }
 .coach-menu { position: relative; }
@@ -27,7 +29,12 @@
 .coach-message ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
 .coach-message li button { min-height: 36px; padding: 4px 12px; border: 0; border-radius: var(--radius-pill); color: var(--hifi-ink); background: var(--hifi-button); box-shadow: inset 0 0 4px var(--hifi-shadow); cursor: pointer; font-size: 13px; }
 
-.coach-composer { position: sticky; bottom: max(0.75rem, env(safe-area-inset-bottom)); display: grid; gap: 8px; }
+.coach-composer { position: sticky; bottom: max(0.75rem, env(safe-area-inset-bottom)); display: grid; gap: 8px; transition: transform var(--motion) var(--ease-out), opacity var(--motion) var(--ease-out); }
+/* Out of the way while reading older messages; typing or tabbing into it brings it back. */
+.coach-composer.is-away:not(:focus-within) { transform: translateY(calc(100% + 1.5rem)); opacity: 0; pointer-events: none; }
+/* Frosted backing so messages passing underneath don't run into the note. The empty screen has none, as in the mockup. */
+.coach-thread + .coach-composer { padding: 8px; border-radius: 28px; background: color-mix(in srgb, var(--background) 82%, transparent); backdrop-filter: blur(12px); }
+@media (prefers-reduced-motion: reduce) { .coach-header, .coach-composer { transition: none; } }
 .coach-input { display: flex; align-items: center; gap: 4px; padding: 2px 6px 2px 16px; border-radius: var(--radius-pill); background: var(--hifi-card); box-shadow: inset 1px 1px 4px var(--hifi-shadow); }
 .coach-input:focus-within { outline: 2px solid #0052b1; outline-offset: 2px; }
 .coach-input input { flex: 1; min-width: 0; min-height: 44px; border: 0; outline: 0; color: var(--hifi-ink); background: transparent; font: inherit; font-size: 16px; }

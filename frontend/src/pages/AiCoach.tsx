@@ -37,6 +37,8 @@ export default function AiCoach() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [history, setHistory] = useState<ConversationSummary[] | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  // True while the user scrolls up through older messages: the header and input box slide out of the way.
+  const [scrolledAway, setScrolledAway] = useState(false)
   const dialogRef = useDialogBehavior(showHistory, () => setShowHistory(false))
   // The conversation already on screen, so saving a new chat's URL does not reload it.
   const shownId = useRef<string | undefined>(undefined)
@@ -63,6 +65,7 @@ export default function AiCoach() {
     setMessages([])
     setError(null)
     setSending(false)
+    setScrolledAway(false)
     setLoading(Boolean(conversationId))
     if (!conversationId) return
     getChatConversation(conversationId)
@@ -82,6 +85,19 @@ export default function AiCoach() {
   useEffect(() => {
     if (messages.length) endRef.current?.scrollIntoView({ block: 'end' })
   }, [messages, sending])
+
+  useEffect(() => {
+    let last = window.scrollY
+    function onScroll() {
+      const y = window.scrollY
+      const atEnd = document.documentElement.scrollHeight - window.innerHeight - y < 48
+      if (!atEnd && Math.abs(y - last) < 6) return // ignores finger jitter
+      setScrolledAway(!atEnd && y > 48 && y < last)
+      last = y
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   const send = useCallback(async (text: string) => {
     const content = text.trim()
@@ -155,7 +171,7 @@ export default function AiCoach() {
 
   return (
     <div className="screen hifi-screen coach-screen">
-      <header className="coach-header">
+      <header className={`coach-header${scrolledAway && !empty && !menuOpen ? ' is-away' : ''}`}>
         <button type="button" className="coach-round" aria-label={t('common.back')} onClick={goBack}>
           <ArrowLeft size={20} aria-hidden="true" />
         </button>
@@ -208,7 +224,7 @@ export default function AiCoach() {
         </div>
       )}
 
-      <div className="coach-composer">
+      <div className={`coach-composer${scrolledAway && !empty && !error && !limitReached ? ' is-away' : ''}`}>
         {error && <p className="coach-error" role="alert">{error}</p>}
         {limitReached ? (
           <div className="coach-limit" role="status">
