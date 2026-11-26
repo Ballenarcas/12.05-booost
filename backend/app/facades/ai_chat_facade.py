@@ -185,7 +185,8 @@ class AIChatFacade:
     ) -> tuple[str, list[str]]:
         if medical:
             return coach.medical_refusal(), []
-        facts, candidates, meals = coach.build_context(session, user_id, day, content, premium)
+        earlier = " ".join(item["content"] for item in history if item["role"] == "user")
+        facts, candidates, meals = coach.build_context(session, user_id, day, content, premium, earlier)
         try:
             answer = chat_reply(history + [{"role": "user", "content": content}], facts, candidates, meals, get_language())
         except json.JSONDecodeError:  # a cut-off reply is a bad answer, not an unavailable coach

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 MAX_REPLY_LENGTH = 1200
 MAX_CANDIDATE_EXERCISES = 40
-MAX_CANDIDATE_MEALS = 8
+MAX_CANDIDATE_MEALS = 12
 MAX_ROUTINES = 6
 RECENT_WORKOUTS = 5
 MAX_DAILY_DEFICIT_KCAL = 500
@@ -328,10 +328,10 @@ def candidate_exercises(question: str, routines: list[Any]) -> list[dict[str, st
     return [{"id": exercise.id, "name": exercise.name} for exercise in found.values()]
 
 
-def candidate_meals(session: Any, user_id: UUID, day: LocalDay) -> list[dict[str, str]]:
+def candidate_meals(session: Any, user_id: UUID, day: LocalDay, question: str, earlier: str) -> list[dict[str, str]]:
     """Dishes for a Premium user. The model gets names only, so it has no meal figures to repeat."""
     try:
-        meals = coach_candidates(session, str(user_id), day, MAX_CANDIDATE_MEALS)
+        meals = coach_candidates(session, str(user_id), day, MAX_CANDIDATE_MEALS, question, earlier)
     except Exception:  # the coach can still answer without dishes
         logger.warning("Could not load dishes for the coach", exc_info=True)
         return []
@@ -339,8 +339,8 @@ def candidate_meals(session: Any, user_id: UUID, day: LocalDay) -> list[dict[str
 
 
 def build_context(
-    session: Any, user_id: UUID, day: LocalDay, question: str, premium: bool,
+    session: Any, user_id: UUID, day: LocalDay, question: str, premium: bool, earlier: str = "",
 ) -> tuple[list[str], list[dict[str, str]], list[dict[str, str]]]:
     routines = list_user_routines(user_id)
-    meals = candidate_meals(session, user_id, day) if premium else []
+    meals = candidate_meals(session, user_id, day, question, earlier) if premium else []
     return user_facts(session, user_id, day, routines), candidate_exercises(question, routines), meals
