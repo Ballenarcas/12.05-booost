@@ -16,6 +16,7 @@ from app.services.ai_tip_history import days_ago, meal_label, personal_facts, we
 from app.services.ai_tips_service import MEDICAL_TERMS, NUMBER, _amounts, collect_state
 from app.services.exercise_catalog import get_cached_exercise, load_cached_exercises
 from app.services.fuzzy_matcher import get_fuzzy_matcher
+from app.services.workout_program import load_staples
 from app.services.workout_service import list_user_routines, list_workout_history
 
 logger = logging.getLogger(__name__)
@@ -69,11 +70,14 @@ SPELLED_AMOUNT = re.compile(
 FOOD_TREAT = re.compile(r"\b(?:a|an occasional|the occasional|cheat) treats?\b", re.IGNORECASE)
 LIST_MARKER = re.compile(r"(?m)^\s*\d+[.)]\s+")
 
+# exercise_staples.json only covers strength work: run, bike, elliptical, incline walk, jump rope.
+CARDIO_STAPLES = ["0685", "0798", "2141", "3666", "2612"]
+
 # Question words that point to a catalog category.
 CATEGORY_WORDS = {
     "Chest": ("chest", "pecho", "bench", "banca"),
     "Back": ("back", "lats", "espalda", "dorsal"),
-    "Legs": ("leg", "legs", "squat", "glute", "glutes", "pierna", "piernas", "glúteo", "glúteos", "sentadilla"),
+    "Legs": ("leg", "legs", "squat", "squats", "sentadillas", "glute", "glutes", "pierna", "piernas", "glúteo", "glúteos", "sentadilla"),
     "Arms": ("arm", "arms", "biceps", "triceps", "brazo", "brazos", "bíceps", "tríceps"),
     "Shoulders": ("shoulder", "shoulders", "hombro", "hombros"),
     "Abs": ("abs", "core", "abdomen", "abdominales"),
@@ -263,7 +267,11 @@ def user_facts(session: Any, user_id: UUID, day: LocalDay, routines: list[Any]) 
 
 
 def candidate_exercises(question: str, routines: list[Any]) -> list[dict[str, str]]:
-    """The catalog exercises the model may recommend: the user's own, then ones matching the question."""
+    """The catalog exercises the model may recommend, most relevant first.
+
+    The user's own and the ones they name come first. Everything else comes from the vetted
+    staples, in priority order, so the coach suggests common exercises and not obscure variants.
+    """
     found: dict[str, Exercise] = {}
 
     def add(exercise_id: str) -> None:
@@ -271,26 +279,36 @@ def candidate_exercises(question: str, routines: list[Any]) -> list[dict[str, st
         if exercise and len(found) < MAX_CANDIDATE_EXERCISES:
             found.setdefault(exercise.id, exercise)
 
-    for match in get_fuzzy_matcher().match(question).exercises:
-        add(match.id)
+    pattern = _catalog_names()
+    named = {name.lower() for name in pattern.findall(question)} if pattern else set()
+    if named:
+        for exercise in load_cached_exercises():
+            if exercise.name.lower() in named:
+                add(exercise.id)
     for routine in routines[:MAX_ROUTINES]:
         for item in routine.exercises:
             add(item.exercise_id)
 
-    catalog = sorted(load_cached_exercises(), key=lambda item: (len(item.name), item.name))
-    by_category: dict[str, list[Exercise]] = {}
-    for exercise in catalog:
-        by_category.setdefault(exercise.category, []).append(exercise)
+    staples = load_staples()
+    # Loose name matches bring in junk ("la" matches "Flag"), so only staples count.
+    for match in get_fuzzy_matcher().match(question, limit_per_category=20).exercises:
+        if match.id in staples:
+            add(match.id)
+
+    # Priority is the pick order within a movement, so this sort takes the first choice of every movement first.
+    ranked = sorted(staples, key=lambda key: (staples[key].get("priority", 50), staples[key].get("tier", "B")))
+    popular = CARDIO_STAPLES + ranked
     words = set(re.findall(r"\w+", question.lower()))
     for category, keywords in CATEGORY_WORDS.items():
         if words & set(keywords):
-            for exercise in by_category.get(category, [])[:12]:
-                add(exercise.id)
-    # A few of everything, so a general question can still be answered with real exercises.
-    for position in range(3):
-        for exercises in by_category.values():
-            if position < len(exercises):
-                add(exercises[position].id)
+            for exercise_id in popular:
+                exercise = get_cached_exercise(exercise_id)
+                if exercise and exercise.category == category:
+                    add(exercise_id)
+    # A general question can still be answered with real exercises.
+    # Strength first picks lead; a little cardio follows, before the list is full.
+    for exercise_id in ranked[:30] + CARDIO_STAPLES[:3] + ranked[30:]:
+        add(exercise_id)
 
     return [{"id": exercise.id, "name": exercise.name} for exercise in found.values()]
 
