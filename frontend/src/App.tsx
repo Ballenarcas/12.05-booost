@@ -79,6 +79,8 @@ function App() {
   const t = useT()
   return (
     <BrowserRouter>
+      {/* Shown by CSS only on a phone held sideways; the page stays mounted underneath. */}
+      <p className="rotate-notice" role="alert">{t('common.rotate')}</p>
       <Suspense fallback={<p className="visually-hidden" role="status" data-page-loading>{t('common.loading')}</p>}>
         <Routes>
           <Route path="/welcome" element={<Welcome />} />

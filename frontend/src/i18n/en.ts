@@ -8,6 +8,7 @@ export const en = {
   'common.cancel': 'Cancel',
   'common.close': 'Close',
   'common.back': 'Back',
+  'common.rotate': 'Turn your phone upright to use BOOOST.',
   'common.edit': 'Edit',
   'common.delete': 'Delete',
   'common.remove': 'Remove',

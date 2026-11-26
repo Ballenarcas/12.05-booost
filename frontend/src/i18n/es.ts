@@ -9,6 +9,7 @@ export const es: Record<MessageKey, string> = {
   'common.cancel': 'Cancelar',
   'common.close': 'Cerrar',
   'common.back': 'Atrás',
+  'common.rotate': 'Pon el móvil en vertical para usar BOOOST.',
   'common.edit': 'Editar',
   'common.delete': 'Eliminar',
   'common.remove': 'Quitar',
