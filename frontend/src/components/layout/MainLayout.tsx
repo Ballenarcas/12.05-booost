@@ -11,7 +11,7 @@ function MainLayout() {
   useLayoutEffect(() => {
     if (navigationType !== 'POP') window.scrollTo(0, 0)
   }, [pathname, navigationType])
-  const hideDock = pathname.startsWith('/workouts/active') || pathname === '/premium'
+  const hideDock = pathname.startsWith('/workouts/active') || pathname === '/premium' || pathname.startsWith('/coach')
   return (
     <div className={`app-shell${hideDock ? ' session-shell' : ''}`}>
       <main className={`app-main${hideDock ? ' session-main' : ''}`}><Outlet /></main>

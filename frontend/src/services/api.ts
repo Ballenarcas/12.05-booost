@@ -8,6 +8,7 @@ const SCAN_TIMEOUT_MS = 70000
 const LOGIN_TIMEOUT_MS = 15000
 const DASHBOARD_TIMEOUT_MS = 15000
 const LLM_TIMEOUT_MS = 20000
+const CHAT_TIMEOUT_MS = 30000 // the server reads the user's data before it asks the model
 const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
 const DASHBOARD_CACHE_PREFIX = 'booost_dashboard:'
 const DASHBOARD_CACHE_TTL_MS = 30_000
@@ -34,7 +35,14 @@ import type {
 import type { WorkoutLogCreate } from '../types/workout'
 import { DEFAULT_STATISTICS_RANGE } from '../utils/workoutStatistics'
 import { getLanguage, onLanguageChange, t } from '../i18n'
-import type { PremiumPlan, UserProfile } from '../types'
+import type {
+  ChatQuota,
+  ChatReply,
+  ConversationDetail,
+  ConversationSummary,
+  PremiumPlan,
+  UserProfile,
+} from '../types'
 import type {
   HealthActivityDay,
   HealthActivitySummary,
@@ -1424,6 +1432,44 @@ export async function undoTip(tipId: string): Promise<AiTipDecision> {
   forgetCachedTip()
   clearGoalCaches()
   return response.json() as Promise<AiTipDecision>
+}
+
+export class ChatLimitError extends Error {}
+
+async function chatRequest<T>(path: string, fallback: string, init: RequestInit = {}, timeout = WRITE_TIMEOUT_MS): Promise<T> {
+  let response: Response
+  try {
+    response = await apiFetch(`${API_URL}/api/v1/ai/chat/${path}`, { ...init, signal: AbortSignal.timeout(timeout) })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') throw new Error(t('api.trainerSlow'), { cause: error })
+    throw error
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: unknown }
+    const detail = typeof body.detail === 'string' ? body.detail : fallback
+    throw response.status === 429 ? new ChatLimitError(detail) : new Error(detail)
+  }
+  return response.json() as Promise<T>
+}
+
+export function sendChatMessage(content: string, conversationId?: string): Promise<ChatReply> {
+  return chatRequest<ChatReply>(`messages?${localDayQuery()}`, t('coach.errorSend'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, conversation_id: conversationId ?? null }),
+  }, CHAT_TIMEOUT_MS)
+}
+
+export function listChatConversations(): Promise<ConversationSummary[]> {
+  return chatRequest<ConversationSummary[]>('conversations', t('coach.errorLoad'))
+}
+
+export function getChatConversation(conversationId: string): Promise<ConversationDetail> {
+  return chatRequest<ConversationDetail>(`conversations/${encodeURIComponent(conversationId)}`, t('coach.errorLoad'))
+}
+
+export function getChatQuota(): Promise<ChatQuota> {
+  return chatRequest<ChatQuota>('quota', t('coach.errorLoad'))
 }
 
 export interface FoodSearchItem {

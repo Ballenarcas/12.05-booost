@@ -90,3 +90,38 @@ export interface CustomExercisePayload {
   equipment?: string[]
   description?: string
 };
+
+export interface ChatExercise {
+  id: string
+  name: string
+}
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  exercises: ChatExercise[]
+  created_at: string
+}
+
+export interface ChatQuota {
+  used: number
+  limit: number
+  is_premium: boolean
+}
+
+export interface ChatReply {
+  conversation_id: string
+  message: ChatMessage
+  quota: ChatQuota
+}
+
+export interface ConversationSummary {
+  id: string
+  title: string
+  updated_at: string
+}
+
+export interface ConversationDetail extends ConversationSummary {
+  messages: ChatMessage[]
+}

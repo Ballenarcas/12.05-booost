@@ -1,0 +1,46 @@
+/* AI Coach: Figma screen 12/IA. The thread and history have no mockup and follow the same glass style. */
+.app-shell:has(.coach-screen) { background: linear-gradient(180deg, #f6f6fe 0%, #f6f6fe 78%, #cfe2f7 100%); }
+:root[data-theme="dark"] .app-shell:has(.coach-screen) { background: linear-gradient(180deg, #0a0f1c 0%, #0a0f1c 78%, #0b1c3d 100%); }
+
+.coach-screen { display: flex; flex-direction: column; min-height: calc(100svh - 2.5rem - env(safe-area-inset-bottom)); }
+
+.coach-header { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 12px; }
+.coach-header h1 { margin: 0; font-size: 24px; font-weight: 500; text-align: center; }
+.coach-round { display: grid; width: 44px; height: 44px; place-items: center; padding: 0; border: 0; border-radius: 50%; color: var(--hifi-ink); background: transparent; box-shadow: inset 1px 1px 3px var(--hifi-shadow); cursor: pointer; }
+.coach-menu { position: relative; }
+.coach-menu-list { position: absolute; z-index: 5; top: 50px; right: 0; display: grid; min-width: 10rem; padding: 6px; border-radius: var(--radius-card); background: var(--hifi-card); box-shadow: 0 4px 16px var(--hifi-shadow); }
+.coach-menu-list button { min-height: 44px; padding: 0 12px; border: 0; color: var(--hifi-ink); background: transparent; cursor: pointer; text-align: left; }
+
+.coach-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; }
+.coach-orb { width: 8rem; height: 8rem; margin-bottom: 2.5rem; border: 1px solid rgba(255, 255, 255, 0.7); border-radius: 50%; background: radial-gradient(circle, #1f6fb2 0%, #8fbbe2 65%, #a9cdee 100%); box-shadow: 0 0 32px 8px rgba(90, 150, 215, 0.55); }
+:root[data-theme="dark"] .coach-orb { border-color: rgba(255, 255, 255, 0.35); background: radial-gradient(circle, #6272a8 0%, #3d5183 70%, #34487a 100%); box-shadow: 0 0 32px 8px rgba(80, 115, 180, 0.45); }
+.coach-hello { margin: 0; color: var(--hifi-muted); font-size: 16px; }
+.coach-empty h2 { max-width: 15ch; margin: 0 0 2.5rem; font-size: 32px; font-weight: 500; line-height: 1.15; }
+.coach-suggestions { display: grid; justify-items: center; gap: 10px; }
+.coach-suggestion { min-height: 44px; padding: 8px 16px; border: 0; border-radius: var(--radius-pill); color: var(--hifi-ink); background: transparent; box-shadow: inset 1px 1px 4px var(--hifi-shadow); cursor: pointer; font-size: 15px; }
+
+.coach-thread { display: flex; flex: 1; flex-direction: column; justify-content: flex-end; gap: 10px; padding: 16px 0; }
+.coach-message { max-width: 85%; padding: 12px 14px; border-radius: 18px; overflow-wrap: anywhere; }
+.coach-message p { margin: 0; line-height: 1.45; white-space: pre-wrap; }
+.coach-message.is-user { align-self: flex-end; border-bottom-right-radius: 4px; background: var(--hifi-fill); }
+.coach-message.is-assistant { align-self: flex-start; border-bottom-left-radius: 4px; background: var(--hifi-card); box-shadow: inset 0 0 4px var(--hifi-shadow); }
+.coach-message ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.coach-message li button { min-height: 36px; padding: 4px 12px; border: 0; border-radius: var(--radius-pill); color: var(--hifi-ink); background: var(--hifi-button); box-shadow: inset 0 0 4px var(--hifi-shadow); cursor: pointer; font-size: 13px; }
+
+.coach-composer { position: sticky; bottom: max(0.75rem, env(safe-area-inset-bottom)); display: grid; gap: 8px; }
+.coach-input { display: flex; align-items: center; gap: 4px; padding: 2px 6px 2px 16px; border-radius: var(--radius-pill); background: var(--hifi-card); box-shadow: inset 1px 1px 4px var(--hifi-shadow); }
+.coach-input:focus-within { outline: 2px solid #0052b1; outline-offset: 2px; }
+.coach-input input { flex: 1; min-width: 0; min-height: 44px; border: 0; outline: 0; color: var(--hifi-ink); background: transparent; font: inherit; font-size: 16px; }
+.coach-input button { display: grid; width: 44px; height: 44px; place-items: center; padding: 0; border: 0; border-radius: 50%; color: var(--hifi-ink); background: transparent; cursor: pointer; }
+.coach-input button:disabled { color: var(--hifi-faint); cursor: not-allowed; }
+.coach-note { margin: 0; color: var(--hifi-muted); font-size: 12px; text-align: center; }
+.coach-error { margin: 0; color: var(--negative); font-size: 14px; text-align: center; }
+.coach-limit { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: var(--radius-card); background: var(--hifi-card); font-size: 14px; }
+.coach-limit p { margin: 0; }
+
+.coach-history { display: grid; gap: 12px; max-height: 80svh; overflow-y: auto; }
+.coach-history ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.coach-history li button { width: 100%; min-height: 44px; padding: 8px 12px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-control); color: inherit; background: transparent; cursor: pointer; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.coach-history li button[aria-current="true"] { border-color: var(--primary); }
+
+.coach-screen button:focus-visible, .coach-history li button:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }

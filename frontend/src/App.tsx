@@ -7,6 +7,7 @@ import { useT } from './i18n'
 const pages = {
   Home: () => import('./pages/Home'),
   ActiveWorkout: () => import('./pages/ActiveWorkout'),
+  AiCoach: () => import('./pages/AiCoach'),
   CreateRoutine: () => import('./pages/CreateRoutine'),
   CustomExercise: () => import('./pages/CustomExercise'),
   ExercisePicker: () => import('./pages/ExercisePicker'),
@@ -47,6 +48,7 @@ if (typeof window !== 'undefined') {
 
 const Home = lazy(pages.Home)
 const ActiveWorkout = lazy(pages.ActiveWorkout)
+const AiCoach = lazy(pages.AiCoach)
 const CreateRoutine = lazy(pages.CreateRoutine)
 const CustomExercise = lazy(pages.CustomExercise)
 const ExercisePicker = lazy(pages.ExercisePicker)
@@ -106,6 +108,7 @@ function App() {
             <Route path="/profile/body-measurements" element={<BodyMeasurements />} />
             <Route path="/settings" element={<Navigate to="/profile" replace />} />
             <Route path="/faq" element={<Faq />} />
+            <Route path="/coach/:conversationId?" element={<AiCoach />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
