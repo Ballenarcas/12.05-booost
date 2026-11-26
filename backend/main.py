@@ -47,7 +47,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept-Language"],
-    expose_headers=["WWW-Authenticate"],
+    expose_headers=["WWW-Authenticate", "X-Session-Token"],
     max_age=600,
 )
 

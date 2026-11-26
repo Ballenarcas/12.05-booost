@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # dedicated secret is configured, so existing deployments keep working;
     # ``AUTH_SECRET_KEY`` is preferred and should be set in production.
     auth_secret_key: str = ""
-    auth_token_ttl_hours: int = 12
+    auth_token_ttl_hours: int = 24 * 30  # renewed while in use
 
     # Password reset emails go through Resend. Without a key, no email is sent.
     resend_api_key: str = ""
