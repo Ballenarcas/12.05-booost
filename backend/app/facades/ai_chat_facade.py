@@ -20,7 +20,7 @@ from app.schemas.ai_chat import (
 )
 from app.services import ai_chat_service as coach
 from app.services.ai_service import chat_reply
-from app.services.exercise_catalog import get_cached_exercise
+from app.services.exercise_catalog import exercise_label, get_cached_exercise
 from app.services.meal_recommendation_service import meals_by_key
 from app.services.premium_service import has_active_premium
 
@@ -82,7 +82,7 @@ def _message(row: dict[str, Any], dishes: dict[str, dict[str, Any]]) -> ChatMess
         id=row["id"],
         role=row["role"],
         content=row["content"],
-        exercises=[ChatExercise(id=item.id, name=item.name, is_cardio=item.category == "Cardio")
+        exercises=[ChatExercise(id=item.id, name=exercise_label(item.name), is_cardio=item.category == "Cardio")
                    for item in exercises if item],
         meals=[ChatMeal(**{key: meal[key] for key in ChatMeal.model_fields}) for meal in meals if meal],
         created_at=row["created_at"],

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { fetchExerciseById } from '../services/api'
 import { describeError } from '../utils/errors.js'
-import { useT } from '../i18n'
+import { useT, valueLabel } from '../i18n'
 import '../styles/exercise-guide.css'
 import MediaCredit from '../components/workout/MediaCredit'
 import type { Exercise } from '../types'
@@ -49,7 +49,12 @@ function ExerciseGuide() {
   const shown = (playing ? animation : still) ?? animation
   const steps = toSteps(exercise?.description)
   const guide = exercise?.guide
-  const chips = exercise ? [exercise.category, ...exercise.equipment, ...exercise.muscles_secondary.slice(0, 2)].filter(Boolean) : []
+  const muscle = (value: string) => valueLabel(t, 'muscle', value)
+  const chips = exercise ? [
+    muscle(exercise.category),
+    ...exercise.equipment.map((item) => valueLabel(t, 'equipment', item)),
+    ...exercise.muscles_secondary.slice(0, 2).map(muscle),
+  ].filter(Boolean) : []
 
   function addToWorkout() {
     if (!exercise) return
@@ -73,7 +78,7 @@ function ExerciseGuide() {
         </button>
         <div>
           <h1 className="hifi-page-title">{exercise?.name ?? t('guide.title')}</h1>
-          {exercise && <p className="hifi-caption">{exercise.muscles.join(' · ') || exercise.category} / {exercise.category}</p>}
+          {exercise && <p className="hifi-caption">{exercise.muscles.map(muscle).join(' · ') || muscle(exercise.category)} / {muscle(exercise.category)}</p>}
         </div>
       </header>
 
@@ -95,7 +100,7 @@ function ExerciseGuide() {
         <MediaCredit />
 
         <ul className="exercise-guide-chips" aria-label={t('guide.details')}>
-          {chips.map((chip) => <li key={chip}>{chip}</li>)}
+          {chips.map((chip, index) => <li key={`${index}-${chip}`}>{chip}</li>)}
         </ul>
 
         {!steps.length && !guide && <p className="exercise-guide-empty">{t('guide.none')}</p>}

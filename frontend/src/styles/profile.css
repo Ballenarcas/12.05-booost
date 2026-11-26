@@ -479,18 +479,23 @@
   gap: 20px;
   padding-top: 8px;
 }
+/* Design system card: white, 12px corners, 16px padding, with its uppercase light label inside. */
 .profile-settings-stack .section {
   margin-top: 0;
-}
-.profile-settings-stack .settings-card {
+  padding: 16px;
   border-radius: 12px;
   background: var(--hifi-card);
-  /* Figma "sombra mediana", the same light edge as the meal and routine cards. */
-  box-shadow: inset -1px -1px 5px #ececec;
+}
+.profile-settings-stack .settings-card,
+.profile-settings-stack .settings-card.health-card {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 /* Sections inside the form get the same spacing as the ones after it. */
 .profile-settings-stack form { display: grid; gap: 20px; }
-.profile-settings-stack .section-title { margin: 0 0 10px; padding: 0 4px; font-size: 20px; font-weight: 400; }
+.profile-settings-stack .section-title { margin: 0 0 8px; padding: 0; color: var(--hifi-ink); font-family: var(--hifi-sans); font-size: 16px; font-weight: 300; line-height: 1; text-transform: uppercase; }
 .profile-settings-stack .settings-row { min-height: 56px; border-bottom-color: var(--hifi-track); }
 .profile-settings-stack .settings-label { font-weight: 400; }
 .profile-settings-stack .settings-label small { color: var(--hifi-faint); }
@@ -505,9 +510,6 @@
 .profile-settings-stack .profile-field .settings-input { font-family: var(--hifi-mono); font-size: 15px; }
 .profile-settings-stack :is(.settings-input:focus, .profile-field:focus-within) { box-shadow: inset 0 0 0 1.5px #0052b1; }
 .profile-settings-stack .subscription-value { font-family: var(--hifi-mono); font-size: 14px; font-weight: 400; }
-:root[data-theme="dark"] .profile-settings-stack .settings-card {
-  box-shadow: none;
-}
 .profile-settings-stack .primary-button.profile-save {
   color: var(--hifi-on-selected);
   background: var(--hifi-selected);
@@ -938,3 +940,9 @@
     animation: none;
   }
 }
+
+/* Settings open from the gear in the corner of the profile. */
+.profile-screen .profile-hero { position: relative; }
+.profile-screen .profile-gear { position: absolute; top: 0; right: 0; width: 44px; height: 44px; }
+.profile-settings-header { display: flex; align-items: center; gap: 12px; }
+.profile-settings-header h1 { margin: 0; }

@@ -2,8 +2,8 @@ export type WorkoutFocus = 'legs' | 'pull' | 'upper'
 
 // Word stems that point to a focus; matched against the workout name and its exercise names.
 const KEYWORDS: Record<Exclude<WorkoutFocus, 'upper'>, string[]> = {
-  legs: ['leg', 'lower', 'squat', 'lunge', 'deadlift', 'rdl', 'hip thrust', 'glute', 'calf', 'calves', 'hamstring', 'quad', 'step-up', 'step up'],
-  pull: ['pull', 'row', 'lat ', 'chin', 'curl', 'bicep', 'back', 'shrug', 'rear delt'],
+  legs: ['leg', 'lower', 'squat', 'lunge', 'deadlift', 'rdl', 'hip thrust', 'glute', 'calf', 'calves', 'hamstring', 'quad', 'step-up', 'step up', 'pierna', 'sentadilla', 'zancada', 'peso muerto', 'glúteo', 'gemelo', 'femoral', 'cuádriceps', 'isquio', 'subida al'],
+  pull: ['pull', 'row', 'lat ', 'chin', 'curl', 'bicep', 'back', 'shrug', 'rear delt', 'tirón', 'remo', 'dominada', 'jalón', 'bíceps', 'espalda', 'encogimiento', 'pájaro'],
 }
 
 function hits(text: string, words: string[]): number {

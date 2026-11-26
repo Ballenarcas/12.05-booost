@@ -19,8 +19,10 @@ from app.schemas.workout_log import (
     WorkoutLogUpdate,
 )
 from app.services.exercise_catalog import (
+    exercise_label,
     get_cached_exercise,
     load_cached_exercises,
+    localized_exercise,
     muscle_group_for,
     resolve_exercise_log_id,
     supabase_uuid_for,
@@ -183,14 +185,14 @@ def list_exercises(
     total = len(filtered)
     start_idx = max(0, (page - 1) * limit)
     end_idx = start_idx + limit
-    return filtered[start_idx:end_idx], total
+    return [localized_exercise(e) for e in filtered[start_idx:end_idx]], total
 
 
 def get_exercise_by_id(exercise_id: str, user_id: UUID | None = None) -> Exercise | None:
     """Find an exercise in the catalog, or among the signed-in user's own custom exercises."""
     cached = get_cached_exercise(exercise_id)
     if cached:
-        return cached.model_copy(update={"muscle_group": muscle_group_for(cached), "is_custom": False})
+        return localized_exercise(cached.model_copy(update={"muscle_group": muscle_group_for(cached), "is_custom": False}))
     if user_id is None:
         return None
     row = _owned_custom_row(_require_supabase(), user_id, exercise_id)
@@ -199,7 +201,8 @@ def get_exercise_by_id(exercise_id: str, user_id: UUID | None = None) -> Exercis
 
 def _check_custom_name(supabase: Any, user_id: UUID, name: str, exclude_id: str | None = None) -> None:
     lowered = name.lower()
-    clash = next((e.name for e in load_cached_exercises() if e.name.strip().lower() == lowered), None)
+    clash = next((e.name for e in load_cached_exercises()
+                  if lowered in (e.name.strip().lower(), (e.name_es or "").strip().lower())), None)
     if clash is None:
         clash = next(
             (row["name"] for row in _user_custom_rows(user_id, supabase)
@@ -318,7 +321,7 @@ def list_user_routines(user_id: UUID) -> list[RoutineSummary]:
         exercise = row.get("exercises") or {}
         if isinstance(exercise, list):
             exercise = exercise[0] if exercise else {}
-        name = exercise.get("name", "Exercise")
+        name = exercise_label(exercise.get("name", "Exercise"))
         if exercise.get("archived_at"):
             name = f"{name} ({pick('Removed - pick a replacement', 'Eliminado - elige un sustituto')})"
         grouped.setdefault(str(row["routine_id"]), []).append(
@@ -416,7 +419,7 @@ def create_user_routine(user_id: UUID, payload: RoutineCreate) -> RoutineSummary
         exercises=[
             RoutineExerciseSummary(
                 exercise_id=resolved_exercise_id,
-                name=exercise_names.get(resolved_exercise_id, "Exercise"),
+                name=exercise_label(exercise_names.get(resolved_exercise_id, "Exercise")),
                 target_sets=exercise.target_sets,
                 target_reps=exercise.target_reps,
                 reps_by_set=exercise.reps_by_set or [exercise.target_reps] * exercise.target_sets,
@@ -506,7 +509,7 @@ def update_user_routine(user_id: UUID, routine_id: UUID, payload: RoutineCreate)
         exercises=[
             RoutineExerciseSummary(
                 exercise_id=exercise_id,
-                name=exercise_names[exercise_id],
+                name=exercise_label(exercise_names[exercise_id]),
                 target_sets=exercise.target_sets,
                 target_reps=exercise.target_reps,
                 reps_by_set=exercise.reps_by_set or [exercise.target_reps] * exercise.target_sets,
@@ -759,7 +762,7 @@ def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryRespon
             exercise = set_row.get("exercises") or {}
             if isinstance(exercise, list):
                 exercise = exercise[0] if exercise else {}
-            ex_name = exercise.get("name") or "Exercise"
+            ex_name = exercise_label(exercise.get("name") or "Exercise")
             is_cardio = (
                 _is_cardio_exercise(exercise_id, exercise)
                 or set_row.get("duration_seconds") is not None

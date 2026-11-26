@@ -1,13 +1,68 @@
 import json
 import logging
+import re
 import uuid
+from functools import lru_cache
 from pathlib import Path
 
+from app.core.i18n import get_language
 from app.schemas.exercise import Exercise
 
 logger = logging.getLogger(__name__)
 
 CATALOG_PATH = Path(__file__).resolve().parent.parent / "data" / "exercises_catalog.json"
+NAMES_ES_PATH = CATALOG_PATH.with_name("exercise_names_es.json")
+
+
+@lru_cache
+def _spanish_names() -> dict[str, str]:
+    try:
+        return json.loads(NAMES_ES_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        logger.warning("Spanish exercise names are unavailable", exc_info=True)
+        return {}
+
+
+def exercise_label(name: str, lang: str | None = None) -> str:
+    """A catalog name in the app language. Names the user typed are not in the list and stay as they are."""
+    return _spanish_names().get(name, name) if (lang or get_language()) == "es" else name
+
+
+TEXT_ES_PATH = CATALOG_PATH.with_name("exercise_text_es.json")
+
+
+@lru_cache(maxsize=1)
+def _read_text(_modified: float) -> dict[str, str]:
+    return json.loads(TEXT_ES_PATH.read_text(encoding="utf-8"))
+
+
+def spanish_text() -> dict[str, str]:
+    """English instruction sentence to Spanish. Reread when the file changes, like the catalog."""
+    try:
+        return _read_text(TEXT_ES_PATH.stat().st_mtime)
+    except (OSError, ValueError):
+        logger.warning("Spanish exercise instructions are unavailable", exc_info=True)
+        return {}
+
+
+def _description_es(description: str | None) -> str | None:
+    """The Spanish instructions, or the English ones whole: a half-translated list helps nobody."""
+    parts = [part.strip() for part in re.split(r"(?<=\.)\s+", description or "") if part.strip()]
+    # The guide page hides this closing line; its English filter would miss the translation.
+    parts = [part for part in parts if not part.lower().startswith("repeat for the desired")]
+    translated = [spanish_text().get(part) for part in parts]
+    return " ".join(translated) if parts and all(translated) else description
+
+
+def localized_exercise(exercise: Exercise) -> Exercise:
+    """The exercise in the app language. Custom exercises keep the words the user typed."""
+    if get_language() != "es" or exercise.is_custom:
+        return exercise
+    return exercise.model_copy(update={
+        "name": exercise_label(exercise.name), "description": _description_es(exercise.description),
+    })
+
+
 _cached_exercises: list[Exercise] | None = None
 _cached_mtime: float | None = None
 _cached_by_key: dict[str, Exercise] | None = None
@@ -24,7 +79,8 @@ def load_cached_exercises() -> list[Exercise]:
             return _cached_exercises
         with open(CATALOG_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
-        exercises = [Exercise(**item) for item in data]
+        spanish = _spanish_names()
+        exercises = [Exercise(**{"name_es": spanish.get(item.get("name")), **item}) for item in data]
         _cached_exercises = exercises
         _cached_mtime = mtime
         # Workouts and routines store the Supabase UUID, so index by both ids.

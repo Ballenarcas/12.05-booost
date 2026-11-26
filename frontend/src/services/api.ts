@@ -1194,6 +1194,20 @@ export async function cancelPremium(): Promise<void> {
   window.dispatchEvent(new Event(PREMIUM_UPDATED_EVENT))
 }
 
+async function muscleFocusRequest(init: RequestInit): Promise<string | null> {
+  const response = await apiFetch(`${API_URL}/api/v1/settings/muscle-focus`, { ...init, signal: AbortSignal.timeout(WRITE_TIMEOUT_MS) })
+  if (!response.ok) throw new Error(t('api.saveSettings'))
+  return ((await response.json()) as { muscle: string | null }).muscle
+}
+
+export function fetchMuscleFocus(): Promise<string | null> {
+  return muscleFocusRequest({})
+}
+
+export function saveMuscleFocus(muscle: string | null): Promise<string | null> {
+  return muscleFocusRequest({ method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ muscle }) })
+}
+
 export async function updateUserSettings(
   userId: string,
   settings: { age: number; weight: number; height: number; gender: string; objective: string },
