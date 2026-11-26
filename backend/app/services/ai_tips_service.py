@@ -53,6 +53,7 @@ MAX_MESSAGE_LENGTH = 120  # before the next step is added
 MAX_REASONING_LENGTH = 240
 PROTEIN_REMINDER_HOUR = 14  # earlier than this, a low protein total only means the day is young
 HARD_SESSION_RPE = 8.5
+HARD_SESSION_EFFORT_LOAD = 18.0
 LOW_WEEK_PROTEIN_RATIO = 0.8
 MIN_DAYS_FOR_WEEK_TIPS = 3
 GOOD_WEEK_DAYS_ON_GOAL = 5
@@ -342,7 +343,8 @@ def build_candidates(state: dict[str, Any], lang: str | None = None) -> list[dic
             "action": None,
         })
     effort = state.get("today_rpe")
-    if effort and effort >= HARD_SESSION_RPE:
+    today_effort_load = float(state.get("today_effort_load") or 0)
+    if effort and effort >= HARD_SESSION_RPE and today_effort_load >= HARD_SESSION_EFFORT_LOAD:
         tips.append({
             "kind": "hard_session",
             "state_key": reading,
@@ -357,9 +359,9 @@ def build_candidates(state: dict[str, Any], lang: str | None = None) -> list[dic
                 else "Have a protein-rich meal and get a good night's sleep."
             ),
             "reasoning": (
-                "Valoraste las series de hoy como muy duras. Tu cuerpo se recupera tras la sesión, así que descansar forma parte del trabajo."
+                "Combinaste series cerca del fallo con un volumen de trabajo alto hoy. Tu cuerpo se recupera tras la sesión, así que descansar forma parte del trabajo."
                 if is_es
-                else "You rated today's sets as very hard. Your body rebuilds after the session, so recovery is part of the work."
+                else "You combined near-failure effort with substantial session volume today. Your body rebuilds after the session, so recovery is part of the work."
             ),
             "action": None,
         })

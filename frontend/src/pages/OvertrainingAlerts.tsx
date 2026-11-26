@@ -1,57 +1,19 @@
-import { AlertCircle, CheckCircle2, ChevronLeft, Plus, Sparkles, Trash2 } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { AlertCircle, CalendarCheck2, CheckCircle2, ChevronLeft, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import {
   applyOvertrainingMods,
   clearOvertrainingMods,
-  deleteFatigueFeedback,
   dismissOvertrainingAlert,
   fetchOvertrainingAlerts,
   getCurrentUser,
   getSavedOvertrainingAlerts,
   scheduleRecoveryRestDay,
-  submitFatigueFeedback,
   type OvertrainingAlertStatus,
 } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import { usePageNavigate } from '../utils/usePageNavigate'
-import { locale, t as tr, useT, valueLabel, type MessageKey } from '../i18n'
+import { t as tr, useT, valueLabel } from '../i18n'
 import '../styles/overtraining.css'
-
-type SleepQuality = 'restorative' | 'average' | 'poor'
-type JointStrain = 'none' | 'mild' | 'sharp'
-
-const MUSCLE_OPTIONS = ['Chest', 'Shoulders', 'Back', 'Quads', 'Hamstrings', 'Glutes', 'Arms', 'Core']
-
-const SLEEP_OPTIONS: Array<{ id: SleepQuality; label: MessageKey }> = [
-  { id: 'restorative', label: 'ot.sleep.restorative' },
-  { id: 'average', label: 'ot.sleep.average' },
-  { id: 'poor', label: 'ot.sleep.poor' },
-]
-
-const JOINT_OPTIONS: Array<{ id: JointStrain; label: MessageKey }> = [
-  { id: 'none', label: 'ot.joint.none' },
-  { id: 'mild', label: 'ot.joint.mild' },
-  { id: 'sharp', label: 'ot.joint.sharp' },
-]
-
-function describeScale(value: number, kind: 'cns' | 'doms'): string {
-  if (kind === 'cns') {
-    if (value <= 3) return tr('ot.cns1')
-    if (value <= 6) return tr('ot.cns2')
-    if (value <= 8) return tr('ot.cns3')
-    return tr('ot.cns4')
-  }
-  if (value <= 3) return tr('ot.doms1')
-  if (value <= 6) return tr('ot.doms2')
-  if (value <= 8) return tr('ot.doms3')
-  return tr('ot.doms4')
-}
-
-function formatShortDate(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return tr('ot.recently')
-  return date.toLocaleString(locale(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
 
 function MuscleBodyMap({ muscles }: { muscles: Array<{ muscle_group: string; status: 'ok' | 'watch' | 'high' }> }) {
   const toneFor = (targets: string[]): string => {
@@ -118,16 +80,7 @@ export default function OvertrainingAlerts() {
     userId ? null : tr('ot.signIn')
   ))
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
-  const [busy, setBusy] = useState<'apply' | 'clear' | 'rest' | 'dismiss' | 'checkin' | string | null>(null)
-  const [showForm, setShowForm] = useState(false)
-
-  // Neutral defaults so check-ins reflect actual feeling rather than biasing toward severe fatigue.
-  const [fatigueLevel, setFatigueLevel] = useState(5)
-  const [sorenessLevel, setSorenessLevel] = useState(4)
-  const [sleepQuality, setSleepQuality] = useState<SleepQuality>('average')
-  const [jointStrain, setJointStrain] = useState<JointStrain>('none')
-  const [selectedMuscles, setSelectedMuscles] = useState<string[]>([])
-  const [notes, setNotes] = useState('')
+  const [busy, setBusy] = useState<'apply' | 'clear' | 'rest' | 'dismiss' | null>(null)
 
   useEffect(() => {
     // Signed out: the initial state already shows the sign-in message.
@@ -150,50 +103,6 @@ export default function OvertrainingAlerts() {
     }
   }, [userId, t])
 
-  const resetCheckInForm = () => {
-    setFatigueLevel(5)
-    setSorenessLevel(4)
-    setSleepQuality('average')
-    setJointStrain('none')
-    setSelectedMuscles([])
-    setNotes('')
-  }
-
-  const toggleMuscle = (muscle: string) => {
-    setSelectedMuscles((current) =>
-      current.includes(muscle) ? current.filter((item) => item !== muscle) : [...current, muscle],
-    )
-  }
-
-  const handleSubmitCheckIn = async (event: FormEvent) => {
-    event.preventDefault()
-    setBusy('checkin')
-    setNotice(null)
-    try {
-      const next = await submitFatigueFeedback({
-        fatigue_level: fatigueLevel,
-        soreness_level: sorenessLevel,
-        sleep_quality: sleepQuality,
-        joint_strain: jointStrain,
-        sore_muscles: selectedMuscles,
-        notes: notes.trim() || undefined,
-      })
-      setStatus(next)
-      setShowForm(false)
-      resetCheckInForm()
-      setNotice({
-        kind: 'success',
-        text: next.has_alert
-          ? t('ot.checkInLoggedAlert')
-          : t('ot.checkInLogged'),
-      })
-    } catch (err) {
-      setNotice({ kind: 'error', text: describeError(err, t('ot.errorCheckIn')) })
-    } finally {
-      setBusy(null)
-    }
-  }
-
   const runAction = async (
     key: 'apply' | 'clear' | 'rest' | 'dismiss',
     action: () => Promise<OvertrainingAlertStatus>,
@@ -214,26 +123,17 @@ export default function OvertrainingAlerts() {
     }
   }
 
-  const handleDeleteCheckIn = async (entryId: string) => {
-    setBusy(entryId)
-    setNotice(null)
-    try {
-      const next = await deleteFatigueFeedback(entryId)
-      setStatus(next)
-      setNotice({ kind: 'success', text: t('ot.checkInRemoved') })
-    } catch (err) {
-      setNotice({ kind: 'error', text: describeError(err, t('ot.errorDeleteCheckIn')) })
-    } finally {
-      setBusy(null)
-    }
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1)
+    else navigate('/workouts')
   }
 
   if (loading) {
     return (
       <div className="screen hifi-screen ot-screen">
         <header className="ot-header">
-          <button type="button" className="ot-back" onClick={() => navigate('/workouts')}>
-            <ChevronLeft size={18} aria-hidden="true" /> {t('nav.workouts')}
+          <button type="button" className="ot-back" onClick={goBack}>
+            <ChevronLeft size={18} aria-hidden="true" /> {t('common.back')}
           </button>
         </header>
         <p className="hifi-card hifi-muted" role="status">{t('ot.analyzing')}</p>
@@ -245,8 +145,8 @@ export default function OvertrainingAlerts() {
     return (
       <div className="screen hifi-screen ot-screen">
         <header className="ot-header">
-          <button type="button" className="ot-back" onClick={() => navigate('/workouts')}>
-            <ChevronLeft size={18} aria-hidden="true" /> {t('nav.workouts')}
+          <button type="button" className="ot-back" onClick={goBack}>
+            <ChevronLeft size={18} aria-hidden="true" /> {t('common.back')}
           </button>
         </header>
         <div className="hifi-card" role="alert">
@@ -258,26 +158,26 @@ export default function OvertrainingAlerts() {
 
   const risk = status?.risk_level ?? 'none'
   const modifier = risk === 'high' ? 'is-high' : risk === 'moderate' ? 'is-moderate' : 'is-ready'
-  const tierLabel = risk === 'high' ? t('otBanner.deloadRecommended') : risk === 'moderate' ? t('ot.watchFatigue') : t('ot.ready')
+  const tierLabel = risk === 'high'
+    ? t('otBanner.deloadWeekRecommended')
+    : risk === 'moderate'
+      ? t('ot.watchFatigue')
+      : t('ot.ready')
+  const showDeloadCard = Boolean(status && (status.deload_week_recommended || status.deload_active))
+  const showAllClearOnly = Boolean(
+    status && status.risk_level === 'none' && !status.deload_active && !status.deload_week_recommended,
+  )
 
   return (
     <div className="screen hifi-screen ot-screen">
       <header className="ot-header">
-        <button type="button" className="ot-back" onClick={() => navigate('/workouts')}>
-          <ChevronLeft size={18} aria-hidden="true" /> {t('nav.workouts')}
-        </button>
-        <button
-          type="button"
-          className="hifi-pill"
-          aria-expanded={showForm}
-          onClick={() => setShowForm((open) => !open)}
-        >
-          {showForm ? t('ot.closeCheckIn') : t('ot.logCheckIn')}
+        <button type="button" className="ot-back" onClick={goBack}>
+          <ChevronLeft size={18} aria-hidden="true" /> {t('common.back')}
         </button>
       </header>
 
       <div className="ot-page-title-row">
-        <h1 className="hifi-page-title">{t('otBanner.readinessTitle')}</h1>
+        <h1 className="hifi-page-title">{t('ot.pageTitle')}</h1>
         <p>{t('ot.subtitle')}</p>
       </div>
 
@@ -286,98 +186,6 @@ export default function OvertrainingAlerts() {
           {notice.kind === 'error' ? <AlertCircle size={17} aria-hidden="true" /> : <CheckCircle2 size={17} aria-hidden="true" />}
           <span>{notice.text}</span>
         </div>
-      )}
-
-      {showForm && (
-        <form className="hifi-card ot-form" onSubmit={handleSubmitCheckIn}>
-          <h2 className="hifi-card-label">{t('ot.checkInTitle')}</h2>
-
-          <label className="ot-slider-field">
-            <span className="ot-slider-head">
-              <span>{t('ot.systemicFatigue')}</span>
-              <strong>{fatigueLevel}/10</strong>
-            </span>
-            <input type="range" min={1} max={10} value={fatigueLevel} onChange={(e) => setFatigueLevel(Number(e.target.value))} />
-            <span className="hifi-muted">{describeScale(fatigueLevel, 'cns')}</span>
-          </label>
-
-          <label className="ot-slider-field">
-            <span className="ot-slider-head">
-              <span>{t('ot.soreness')}</span>
-              <strong>{sorenessLevel}/10</strong>
-            </span>
-            <input type="range" min={1} max={10} value={sorenessLevel} onChange={(e) => setSorenessLevel(Number(e.target.value))} />
-            <span className="hifi-muted">{describeScale(sorenessLevel, 'doms')}</span>
-          </label>
-
-          <div>
-            <p className="hifi-muted" style={{ marginBottom: 6 }}>{t('ot.sleepTitle')}</p>
-            <div className="ot-choice-grid">
-              {SLEEP_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`ot-choice${sleepQuality === opt.id ? ' is-selected' : ''}`}
-                  aria-pressed={sleepQuality === opt.id}
-                  onClick={() => setSleepQuality(opt.id)}
-                >
-                  {t(opt.label)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="hifi-muted" style={{ marginBottom: 6 }}>{t('ot.jointTitle')}</p>
-            <div className="ot-choice-grid">
-              {JOINT_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`ot-choice${jointStrain === opt.id ? ' is-selected' : ''}`}
-                  aria-pressed={jointStrain === opt.id}
-                  onClick={() => setJointStrain(opt.id)}
-                >
-                  {t(opt.label)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="hifi-muted" style={{ marginBottom: 6 }}>{t('ot.soreMuscles')}</p>
-            <div className="ot-chips">
-              {MUSCLE_OPTIONS.map((muscle) => {
-                const selected = selectedMuscles.includes(muscle)
-                return (
-                  <button
-                    key={muscle}
-                    type="button"
-                    className={`ot-chip${selected ? ' is-selected' : ''}`}
-                    aria-pressed={selected}
-                    onClick={() => toggleMuscle(muscle)}
-                  >
-                    {valueLabel(t, 'muscle', muscle)}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <input
-            type="text"
-            className="ot-notes-input"
-            maxLength={300}
-            placeholder={t('ot.notesPlaceholder')}
-            aria-label={t('ot.notesAria')}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-
-          <button type="submit" className="ot-action-btn is-primary" disabled={busy !== null}>
-            {busy === 'checkin' ? t('ot.savingCheckIn') : t('ot.saveCheckIn')}
-          </button>
-        </form>
       )}
 
       {status && (
@@ -393,7 +201,12 @@ export default function OvertrainingAlerts() {
                     <span className="ot-tier-badge">ACWR {status.acwr.toFixed(2)}x</span>
                   )}
                   {status.deload_active && (
-                    <span className="ot-tier-badge">{t('ot.deloadBadge', { pct: status.volume_reduction_pct })}</span>
+                    <span className="ot-tier-badge is-deload">
+                      {t('ot.deloadWeekBadge', { pct: status.volume_reduction_pct })} · {t(
+                        status.deload_days_remaining === 1 ? 'ot.daysLeftOne' : 'ot.daysLeftMany',
+                        { count: status.deload_days_remaining },
+                      )}
+                    </span>
                   )}
                   {status.rest_day_scheduled && (
                     <span className="ot-tier-badge is-ready">{t('ot.restDaySet')}</span>
@@ -423,6 +236,64 @@ export default function OvertrainingAlerts() {
               </div>
             </div>
           </section>
+
+          {showDeloadCard && (
+            <section className="hifi-card ot-deload-card" aria-labelledby="ot-deload-heading">
+              <div className="ot-deload-head">
+                <h2 className="ot-deload-title" id="ot-deload-heading">
+                  <CalendarCheck2 size={18} aria-hidden="true" />
+                  {status.deload_active ? t('otBanner.deloadWeekActiveTitle') : t('ot.deloadWeekTitle')}
+                </h2>
+                {status.deload_active && (
+                  <span className="ot-tier-badge is-deload">
+                    {t(status.deload_days_remaining === 1 ? 'ot.daysLeftOne' : 'ot.daysLeftMany', {
+                      count: status.deload_days_remaining,
+                    })}
+                  </span>
+                )}
+              </div>
+              <p className="ot-deload-copy">
+                {status.deload_active
+                  ? t('ot.deloadWeekActiveBody', {
+                      pct: status.volume_reduction_pct,
+                      days: status.deload_days_remaining,
+                    })
+                  : status.deload_week_reason || t('ot.deloadWeekFallback', { pct: status.volume_reduction_pct })}
+              </p>
+              <div className="ot-actions">
+                {status.deload_active ? (
+                  <button
+                    type="button"
+                    className="ot-action-btn"
+                    disabled={busy !== null}
+                    onClick={() => runAction(
+                      'clear',
+                      clearOvertrainingMods,
+                      t('ot.deloadOff'),
+                      t('ot.errorDeloadOff'),
+                    )}
+                  >
+                    {busy === 'clear' ? t('ot.updating') : t('ot.endDeloadWeek')}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="ot-action-btn is-primary"
+                    disabled={busy !== null}
+                    onClick={() => runAction(
+                      'apply',
+                      applyOvertrainingMods,
+                      t('ot.deloadApplied', { pct: status.volume_reduction_pct }),
+                      t('ot.errorDeloadApply'),
+                    )}
+                  >
+                    <Sparkles size={15} aria-hidden="true" style={{ marginRight: 6, verticalAlign: 'text-bottom' }} />
+                    {busy === 'apply' ? t('ot.applying') : t('ot.startDeloadWeek', { pct: status.volume_reduction_pct })}
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
 
           <section className="hifi-card" aria-labelledby="ot-signals-heading">
             <h2 className="hifi-card-label" id="ot-signals-heading">{t('ot.signals')}</h2>
@@ -454,7 +325,6 @@ export default function OvertrainingAlerts() {
                       <span className="ot-muscle-meta">
                         {t('workouts.setMany', { count: item.sets_7d })}
                         {item.hours_since_trained !== null ? ` · ${t('ot.hoursAgo', { h: item.hours_since_trained })}` : ''}
-                        {item.reported_sore ? ` · ${t('ot.sore')}` : ''}
                       </span>
                     </li>
                   ))}
@@ -464,119 +334,77 @@ export default function OvertrainingAlerts() {
           )}
 
           <section className="hifi-card" aria-labelledby="ot-actions-heading">
-            <h2 className="hifi-card-label" id="ot-actions-heading">{t('ot.actions')}</h2>
+            <h2 className="hifi-card-label" id="ot-actions-heading">
+              {showAllClearOnly ? t('ot.noOvertrainingTitle') : t('ot.actions')}
+            </h2>
             <ul className="ot-recommendations">
               {status.recommendations.map((rec) => (
                 <li key={rec}>{rec}</li>
               ))}
             </ul>
             <div className="ot-actions">
-              {status.deload_active ? (
+              {showAllClearOnly ? (
                 <button
                   type="button"
                   className="ot-action-btn"
-                  disabled={busy !== null}
-                  onClick={() => runAction(
-                    'clear',
-                    clearOvertrainingMods,
-                    t('ot.deloadOff'),
-                    t('ot.errorDeloadOff'),
-                  )}
+                  onClick={() => navigate('/workouts/statistics')}
                 >
-                  {busy === 'clear' ? t('ot.updating') : t('ot.disableDeload', { pct: status.volume_reduction_pct })}
+                  {t('ot.viewStats')}
                 </button>
               ) : (
-                <button
-                  type="button"
-                  className="ot-action-btn is-primary"
-                  disabled={busy !== null}
-                  onClick={() => runAction(
-                    'apply',
-                    applyOvertrainingMods,
-                    t('ot.deloadApplied', { pct: status.volume_reduction_pct }),
-                    t('ot.errorDeloadApply'),
-                  )}
-                >
-                  {busy === 'apply' ? t('ot.applying') : t('ot.applyDeload', { pct: status.volume_reduction_pct })}
-                </button>
-              )}
-
-              <button
-                type="button"
-                className="ot-action-btn"
-                disabled={busy !== null || status.rest_day_scheduled}
-                onClick={() => runAction(
-                  'rest',
-                  scheduleRecoveryRestDay,
-                  t('ot.restSwapped'),
-                  t('ot.errorRestSwap'),
-                )}
-              >
-                {busy === 'rest'
-                  ? t('ot.updatingPlan')
-                  : status.rest_day_scheduled
-                    ? t('ot.restScheduled')
-                    : t('ot.swapRest')}
-              </button>
-
-              {status.has_alert && (
-                <button
-                  type="button"
-                  className="ot-action-btn is-ghost"
-                  disabled={busy !== null}
-                  onClick={() => runAction(
-                    'dismiss',
-                    dismissOvertrainingAlert,
-                    t('ot.dismissed'),
-                    t('ot.errorDismiss'),
-                  )}
-                >
-                  {busy === 'dismiss' ? t('ot.dismissing') : t('ot.dismiss')}
-                </button>
-              )}
-            </div>
-          </section>
-
-          <section className="hifi-card" aria-labelledby="ot-checkins-heading">
-            <div className="hifi-card-footer">
-              <h2 className="hifi-card-label" id="ot-checkins-heading">{t('ot.recentCheckIns')}</h2>
-              {!showForm && (
-                <button type="button" className="hifi-pill" onClick={() => setShowForm(true)}>
-                  <Plus size={14} aria-hidden="true" /> {t('hydration.add')}
-                </button>
-              )}
-            </div>
-            {status.recent_checkins.length === 0 ? (
-              <p className="hifi-muted">
-                {t('ot.noCheckIns')}
-              </p>
-            ) : (
-              <ul className="ot-checkins">
-                {status.recent_checkins.map((entry) => (
-                  <li className="ot-checkin-item" key={entry.id}>
-                    <div className="ot-checkin-body">
-                      <span className="ot-checkin-scores">
-                        {t('ot.checkInScores', { fatigue: entry.fatigue_level, soreness: entry.soreness_level })}
-                      </span>
-                      <span className="ot-checkin-meta">
-                        {formatShortDate(entry.created_at)} · {t('ot.sleepLabel', { value: valueLabel(t, 'ot.sleepShort', entry.sleep_quality) })} · {t('ot.jointsLabel', { value: valueLabel(t, 'ot.jointShort', entry.joint_strain) })}
-                        {entry.sore_muscles.length > 0 ? ` · ${entry.sore_muscles.map((muscle) => valueLabel(t, 'muscle', muscle)).join(', ')}` : ''}
-                      </span>
-                      {entry.notes && <span className="ot-checkin-meta">“{entry.notes}”</span>}
-                    </div>
+                <>
+                  {!showDeloadCard && (
                     <button
                       type="button"
-                      className="ot-checkin-delete"
+                      className="ot-action-btn is-primary"
                       disabled={busy !== null}
-                      aria-label={t('ot.deleteCheckIn', { date: formatShortDate(entry.created_at) })}
-                      onClick={() => handleDeleteCheckIn(entry.id)}
+                      onClick={() => runAction(
+                        'apply',
+                        applyOvertrainingMods,
+                        t('ot.deloadApplied', { pct: status.volume_reduction_pct }),
+                        t('ot.errorDeloadApply'),
+                      )}
                     >
-                      {busy === entry.id ? <Sparkles size={15} aria-hidden="true" /> : <Trash2 size={15} aria-hidden="true" />}
+                      {busy === 'apply' ? t('ot.applying') : t('ot.startDeloadWeek', { pct: status.volume_reduction_pct })}
                     </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  )}
+
+                  <button
+                    type="button"
+                    className="ot-action-btn"
+                    disabled={busy !== null || status.rest_day_scheduled}
+                    onClick={() => runAction(
+                      'rest',
+                      scheduleRecoveryRestDay,
+                      t('ot.restSwapped'),
+                      t('ot.errorRestSwap'),
+                    )}
+                  >
+                    {busy === 'rest'
+                      ? t('ot.updatingPlan')
+                      : status.rest_day_scheduled
+                        ? t('ot.restScheduled')
+                        : t('ot.swapRest')}
+                  </button>
+
+                  {status.has_alert && (
+                    <button
+                      type="button"
+                      className="ot-action-btn is-ghost"
+                      disabled={busy !== null}
+                      onClick={() => runAction(
+                        'dismiss',
+                        dismissOvertrainingAlert,
+                        t('ot.dismissed'),
+                        t('ot.errorDismiss'),
+                      )}
+                    >
+                      {busy === 'dismiss' ? t('ot.dismissing') : t('ot.dismiss')}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </section>
         </>
       )}

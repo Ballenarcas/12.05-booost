@@ -427,6 +427,7 @@ export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate):
   }
   invalidateWorkoutStatisticsCache(userId)
   clearDashboardCache()
+  clearOvertrainingCache()
   return response.json() as Promise<{ id: string; status: string }>
 }
 
@@ -524,7 +525,7 @@ async function loadWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]
 export async function updateWorkoutHistoryEntry(
   userId: string,
   workoutId: string,
-  payload: Pick<WorkoutLogCreate, 'name' | 'exercises' | 'fatigue_level'>,
+  payload: Pick<WorkoutLogCreate, 'name' | 'exercises' | 'fatigue_level' | 'joint_pain'>,
 ): Promise<{ id: string; status: string }> {
   const query = new URLSearchParams({ user_id: userId })
   const response = await apiFetch(`${API_URL}/api/v1/workouts/history/${encodeURIComponent(workoutId)}?${query}`, {
@@ -538,6 +539,7 @@ export async function updateWorkoutHistoryEntry(
     throw new Error(typeof body?.detail === 'string' ? body.detail : t('api.updateWorkout'))
   }
   clearDashboardCache()
+  clearOvertrainingCache()
   return response.json()
 }
 
@@ -552,6 +554,7 @@ export async function deleteWorkoutHistoryEntry(userId: string, workoutId: strin
   }
   invalidateWorkoutStatisticsCache(userId)
   clearDashboardCache()
+  clearOvertrainingCache()
 }
 
 // The last statistics for each range are also kept on the device, so the page can show them at
@@ -1810,26 +1813,6 @@ export async function dismissMealRecommendation(id: string): Promise<void> {
   await recommendationRequest(`/${encodeURIComponent(id)}/dismiss`, 'POST', t('api.hideSuggestion'))
 }
 
-export interface FatigueFeedbackPayload {
-  fatigue_level: number
-  soreness_level: number
-  sleep_quality: 'restorative' | 'average' | 'poor'
-  joint_strain: 'none' | 'mild' | 'sharp'
-  sore_muscles: string[]
-  notes?: string
-}
-
-export interface FatigueFeedbackEntry {
-  id: string
-  fatigue_level: number
-  soreness_level: number
-  sleep_quality: 'restorative' | 'average' | 'poor'
-  joint_strain: 'none' | 'mild' | 'sharp'
-  sore_muscles: string[]
-  notes?: string | null
-  created_at: string
-}
-
 export type OvertrainingSeverity = 'ok' | 'watch' | 'high'
 
 export interface OvertrainingSignal {
@@ -1844,7 +1827,6 @@ export interface MuscleStrainSummary {
   muscle_group: string
   sets_7d: number
   hours_since_trained: number | null
-  reported_sore: boolean
   status: OvertrainingSeverity
 }
 
@@ -1858,19 +1840,22 @@ export interface OvertrainingAlertStatus {
   total_sets_last_7_days: number
   high_rpe_sets_count: number
   consecutive_training_days: number
+  consecutive_high_load_weeks: number
   avg_workout_fatigue_7d: number | null
   latest_workout_fatigue: number | null
-  repeated_fatigue_reports: number
+  repeated_joint_pain: string[]
   strained_muscles: string[]
   muscle_strain: MuscleStrainSummary[]
   signals: OvertrainingSignal[]
-  recent_checkins: FatigueFeedbackEntry[]
   headline: string
   summary: string
   recommendations: string[]
+  deload_week_recommended: boolean
+  deload_week_reason: string | null
   volume_reduction_pct: number
   deload_active: boolean
   deload_expires_at: string | null
+  deload_days_remaining: number
   rest_day_scheduled: boolean
   dismissed: boolean
 }
@@ -1911,7 +1896,7 @@ export async function fetchOvertrainingAlerts(
   return cachedRequest(cacheKey, async () => {
     const response = await apiFetch(
       `${API_URL}/api/v1/workouts/overtraining-alerts?${localDayQuery()}`,
-      { cache: 'no-store', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
+      { cache: 'no-store', signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS) },
     )
     if (!response.ok) {
       throw new Error(t('api.checkRecovery'))
@@ -1947,23 +1932,6 @@ async function postOvertrainingMutation(
   saveCopy(`overtraining:${userId}`, status)
   syncDeloadMirror(userId, status)
   return status
-}
-
-export function submitFatigueFeedback(payload: FatigueFeedbackPayload): Promise<OvertrainingAlertStatus> {
-  return postOvertrainingMutation(
-    '/fatigue-feedback',
-    'POST',
-    t('api.saveCheckIn'),
-    payload,
-  )
-}
-
-export function deleteFatigueFeedback(entryId: string): Promise<OvertrainingAlertStatus> {
-  return postOvertrainingMutation(
-    `/fatigue-feedback/${encodeURIComponent(entryId)}`,
-    'DELETE',
-    t('ot.errorDeleteCheckIn'),
-  )
 }
 
 export function applyOvertrainingMods(): Promise<OvertrainingAlertStatus> {

@@ -8,6 +8,7 @@ import type { Exercise } from '../types'
 import type {
   ActiveExercise,
   ActiveSession,
+  JointLocation,
   LiveWorkoutAdjustmentAction,
   LiveWorkoutAdjustmentRequest,
   LiveWorkoutAdjustmentSuggestion,
@@ -455,7 +456,9 @@ function ActiveWorkout() {
   const [session, setSession] = useState<ActiveSession | null>(() => routeSession ?? readSavedSession())
   const [workoutName, setWorkoutName] = useState(() => session?.name ?? '')
   const [fatigueLevel, setFatigueLevel] = useState<number | null>(() => session?.fatigueLevel ?? null)
+  const [jointPain, setJointPain] = useState<JointLocation[]>(() => session?.jointPain ?? [])
   const [showFinish, setShowFinish] = useState(false)
+  const [showFatigueGuide, setShowFatigueGuide] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [showAiAdjustment, setShowAiAdjustment] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -537,6 +540,7 @@ function ActiveWorkout() {
   const warmupDialogRef = useDialogBehavior(showWarmup, () => setShowWarmup(false))
   const closeFinish = () => {
     setShowFinish(false)
+    setShowFatigueGuide(false)
     setConfirmDiscard(false)
   }
   const finishDialogRef = useDialogBehavior(showFinish, closeFinish)
@@ -931,6 +935,16 @@ function ActiveWorkout() {
     setSession((current) => current ? { ...current, fatigueLevel: level } : current)
   }
 
+  function toggleJointPain(joint: JointLocation) {
+    setJointPain((current) => {
+      const next = current.includes(joint)
+        ? current.filter((item) => item !== joint)
+        : [...current, joint]
+      setSession((prev) => prev ? { ...prev, jointPain: next } : prev)
+      return next
+    })
+  }
+
   async function finishWorkout() {
     const user = getCurrentUser()
     const currentSession = session
@@ -953,6 +967,7 @@ function ActiveWorkout() {
       started_at: currentSession.startedAt,
       completed_at: new Date().toISOString(),
       fatigue_level: fatigueLevel,
+      joint_pain: jointPain,
       exercises: currentSession.exercises.map(({ exercise_id, sets, is_cardio, is_bodyweight }, exerciseIndex) => ({
         exercise_id,
         is_cardio: Boolean(is_cardio),
@@ -983,6 +998,7 @@ function ActiveWorkout() {
           name: payload.name,
           exercises: payload.exercises,
           fatigue_level: payload.fatigue_level,
+          joint_pain: payload.joint_pain,
         })
       } else {
         await saveWorkoutLog(user.id, payload)
@@ -1764,7 +1780,47 @@ function ActiveWorkout() {
               />
             </div>
             <fieldset className="fatigue-field" aria-describedby="fatigue-hint">
-              <legend>{t('aw.fatigueQuestion')}</legend>
+              <legend>
+                <span className="fatigue-legend-row">
+                  <span>{t('aw.fatigueQuestion')}</span>
+                  <button
+                    type="button"
+                    className="fatigue-help-button"
+                    aria-expanded={showFatigueGuide}
+                    aria-controls="fatigue-guide-panel"
+                    aria-label={t('aw.fatigueGuideToggle')}
+                    title={t('aw.fatigueGuideToggle')}
+                    onClick={() => setShowFatigueGuide((open) => !open)}
+                    disabled={isSaving}
+                  >
+                    ?
+                  </button>
+                </span>
+              </legend>
+              {showFatigueGuide && (
+                <div id="fatigue-guide-panel" className="fatigue-guide" role="region" aria-label={t('aw.fatigueGuideTitle')}>
+                  <div className="fatigue-guide-row">
+                    <span className="fatigue-guide-score">1–3</span>
+                    <span>{t('aw.fatigueGuide13')}</span>
+                  </div>
+                  <div className="fatigue-guide-row">
+                    <span className="fatigue-guide-score">4–5</span>
+                    <span>{t('aw.fatigueGuide45')}</span>
+                  </div>
+                  <div className="fatigue-guide-row">
+                    <span className="fatigue-guide-score">6–7</span>
+                    <span>{t('aw.fatigueGuide67')}</span>
+                  </div>
+                  <div className="fatigue-guide-row">
+                    <span className="fatigue-guide-score">8–9</span>
+                    <span>{t('aw.fatigueGuide89')}</span>
+                  </div>
+                  <div className="fatigue-guide-row fatigue-guide-row-max">
+                    <span className="fatigue-guide-score">10</span>
+                    <span>{t('aw.fatigueGuide10')}</span>
+                  </div>
+                </div>
+              )}
               <div className="fatigue-scale">
                 {FATIGUE_LABELS.map((label, index) => {
                   const level = index + 1
@@ -1793,6 +1849,26 @@ function ActiveWorkout() {
                   {t('aw.fatigueHigh')}
                 </p>
               )}
+            </fieldset>
+            <fieldset className="fatigue-field" aria-describedby="joint-pain-hint">
+              <legend>{t('aw.jointPainQuestion')}</legend>
+              <div className="joint-pain-chips">
+                {(['shoulder', 'elbow', 'wrist', 'lower_back', 'hip', 'knee', 'ankle'] as JointLocation[]).map((joint) => (
+                  <button
+                    key={joint}
+                    type="button"
+                    className="joint-pain-chip"
+                    aria-pressed={jointPain.includes(joint)}
+                    onClick={() => toggleJointPain(joint)}
+                    disabled={isSaving}
+                  >
+                    {t(`joint.${joint}`)}
+                  </button>
+                ))}
+              </div>
+              <p className="fatigue-hint" id="joint-pain-hint">
+                {jointPain.length > 0 ? t('aw.jointPainHint') : t('aw.jointPainNone')}
+              </p>
             </fieldset>
             {saveError && <p className="form-error">{saveError}</p>}
             <div className="modal-actions">

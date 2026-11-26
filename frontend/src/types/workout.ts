@@ -25,6 +25,8 @@ export interface RoutineCreatePayload {
 
 export type SetKind = 'normal' | 'warmup' | 'drop' | 'failure'
 
+export type JointLocation = 'shoulder' | 'elbow' | 'wrist' | 'lower_back' | 'hip' | 'knee' | 'ankle'
+
 export interface WorkoutSet {
   set_number: number
   weight_kg: number
@@ -62,6 +64,7 @@ export interface ActiveSession {
   routineId?: string
   editWorkoutId?: string
   fatigueLevel?: number | null
+  jointPain?: JointLocation[]
   name: string
   startedAt: string
   exercises: ActiveExercise[]
@@ -80,6 +83,7 @@ export interface WorkoutLogCreate {
   started_at: string
   completed_at: string
   fatigue_level?: number | null
+  joint_pain?: JointLocation[]
   exercises: Array<{
     exercise_id: string
     is_cardio?: boolean
@@ -95,6 +99,7 @@ export interface WorkoutHistoryEntry {
   completed_at: string | null
   duration_seconds: number
   fatigue_level: number | null
+  joint_pain?: string[]
   exercises: Array<{
     exercise_id: string
     name: string

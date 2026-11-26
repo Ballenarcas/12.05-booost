@@ -21,6 +21,7 @@ from app.core.i18n import (
     translate_stored_plan_text,
 )
 from app.core.local_day import LocalDay
+from app.services import overtraining_service
 from app.services.ai_tip_history import clean_name, instant
 from app.services.ai_tips_service import accepted_training_notes
 from app.services.health_service import get_activity_summary
@@ -190,6 +191,35 @@ def _recent_fatigue(db_session: Any, user_id: UUID) -> dict[str, Any]:
         latest = 0.0
     average = round(sum(levels) / len(levels), 1) if levels else 0.0
     return {"average": average, "latest": latest, "workouts": len(levels)}
+
+
+def _recent_joint_pain(db_session: Any, user_id: UUID) -> dict[str, list[str]]:
+    """Recent and repeated post-workout joint pain over the last 14 days."""
+    since = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+    recent_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    try:
+        rows = _data(
+            db_session.table("workouts").select("joint_pain,start_time")
+            .eq("user_id", str(user_id)).gte("start_time", since).execute()
+        )
+    except Exception:
+        return {"recent": [], "repeated": []}
+    counts: Counter[str] = Counter()
+    recent: set[str] = set()
+    for row in rows:
+        raw_joints = row.get("joint_pain") or []
+        if not isinstance(raw_joints, list):
+            continue
+        unique = {str(j).strip().lower() for j in raw_joints if isinstance(j, str) and j.strip()}
+        for j in unique:
+            counts[j] += 1
+        started = instant(row.get("start_time"))
+        if started is None or started >= recent_cutoff:
+            recent.update(unique)
+    return {
+        "recent": sorted(recent),
+        "repeated": sorted(j for j, count in counts.items() if count >= 2),
+    }
 
 
 def _exercise_name(row: dict[str, Any]) -> str:
@@ -558,6 +588,8 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
     objective = user.get("objective")
     fatigue = _recent_fatigue(db_session, user_id)
     fatigue_is_high = fatigue["latest"] >= FATIGUE_HIGH
+    joint_pain = _recent_joint_pain(db_session, user_id)
+    active_deload_pct = overtraining_service.get_active_deload_pct(user_id, db_session)
     guidance = fatigue_adjusted_guidance(objective_guidance(objective), fatigue["latest"])
     from_history = False
     if not safe_routines:
@@ -703,6 +735,8 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
             "workouts": fatigue["workouts"],
             "status": "high" if fatigue_is_high else "normal",
         } if fatigue["workouts"] else None,
+        "joint_pain": joint_pain if (joint_pain["recent"] or joint_pain["repeated"]) else None,
+        "deload_week": {"active": True, "reduction_pct": active_deload_pct, "rpe_cap": 6} if active_deload_pct > 0 else None,
         "program": program_context,
         "available_routines": routine_context,
         "available_exercises": exercise_context if not routine_context else [],
@@ -717,6 +751,15 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
                 " Keep sets at the lower end of the range, hold or lower the load, and prefer technique and recovery"
                 " over extra volume while respecting the user's goal."
                 if fatigue_is_high else ""
+            )
+            + (
+                f" Recent or repeated joint pain was reported in {', '.join(joint_pain['repeated'] or joint_pain['recent'])}."
+                " Avoid heavy axial or high-stress loading on those joints and prefer lower-stress alternatives."
+                if (joint_pain["repeated"] or joint_pain["recent"]) else ""
+            )
+            + (
+                f" A 7-day deload week (-{active_deload_pct}% volume and load, RPE 6 cap) is active; keep volume light."
+                if active_deload_pct > 0 else ""
             )
             + (
                 " Write \"reasoning\" (and \"workout_name\" when creating a new workout or rest day) in natural Spanish."
@@ -830,6 +873,17 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         )
         existing = result["reasoning"].strip()
         result["reasoning"] = f"{existing} {note}" if existing else note
+        result["adjusted"] = True
+
+    if active_deload_pct > 0:
+        plan_exercises = overtraining_service._apply_deload_to_exercises(plan_exercises, active_deload_pct)
+        deload_note = pick(
+            f"Deload week active: volume and load reduced by {active_deload_pct}%, target RPE capped at 6.",
+            f"Semana de descarga activa: volumen y carga reducidos un {active_deload_pct} %, RPE objetivo limitado a 6.",
+        )
+        existing = result["reasoning"].strip()
+        if deload_note not in existing:
+            result["reasoning"] = f"{existing} {deload_note}".strip() if existing else deload_note
         result["adjusted"] = True
 
     try:

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.core.local_day import LocalDay
+from app.services.training_load import set_effort_weight
 
 HISTORY_DAYS = 30
 ON_GOAL_BAND = 0.10
@@ -81,6 +82,7 @@ def summarize_workouts(rows: list[dict[str, Any]], day: LocalDay) -> dict[str, A
     best_before: dict[str, float] = {}
     muscle_age: dict[str, int] = {}
     today_rpe: list[float] = []
+    today_effort_load = 0.0
     latest: tuple[int, str] | None = None
 
     for workout in rows:
@@ -97,8 +99,12 @@ def summarize_workouts(rows: list[dict[str, Any]], day: LocalDay) -> dict[str, A
             muscle = exercise.get("muscle_group")
             if muscle and muscle not in IGNORED_MUSCLES:
                 muscle_age[muscle] = min(age, muscle_age.get(muscle, age))
-            if age == 0 and item.get("rpe") is not None:
-                today_rpe.append(float(item["rpe"]))
+            if age == 0:
+                if item.get("rpe") is not None:
+                    today_rpe.append(float(item["rpe"]))
+                if muscle not in IGNORED_MUSCLES:
+                    rpe_raw = item.get("rpe")
+                    today_effort_load += set_effort_weight(float(rpe_raw) if rpe_raw is not None else None)
             name = clean_name(exercise.get("name"))
             weight = float(item.get("weight") or 0)
             if name and weight > 0:
@@ -123,6 +129,7 @@ def summarize_workouts(rows: list[dict[str, Any]], day: LocalDay) -> dict[str, A
         "days_since_workout": latest[0] if latest else None,
         "last_workout_name": latest[1] if latest else "",
         "today_rpe": round(sum(today_rpe) / len(today_rpe), 1) if today_rpe else None,
+        "today_effort_load": round(today_effort_load, 1),
         "lift_progress": lift_progress,
         "muscle_gap": muscle_gap,
     }

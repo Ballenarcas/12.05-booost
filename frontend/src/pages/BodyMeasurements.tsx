@@ -132,7 +132,7 @@ export default function BodyMeasurements() {
               setPreviewNotice(t('body.tapeSoon'))
             }
           >
-            {t('ot.logCheckIn')}
+            {t('body.logMeasurement')}
           </button>
         </div>
 

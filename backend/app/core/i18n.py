@@ -252,7 +252,7 @@ _STORED_PLAN_EXACT_ES: dict[str, str] = {
 }
 
 _DELOAD_NOTE_RE = re.compile(
-    r"Deload active: volume and load reduced by (\d+)%, target RPE capped at 6\."
+    r"Deload(?: week)? active: volume and load reduced by (\d+)%, target RPE capped at 6\."
 )
 
 
@@ -379,6 +379,6 @@ def translate_stored_plan_text(text: str | None, lang: str | None = None) -> str
     if text in _STORED_PLAN_EXACT_ES:
         return _STORED_PLAN_EXACT_ES[text]
     return _DELOAD_NOTE_RE.sub(
-        lambda m: f"Descarga activa: volumen y carga reducidos un {m.group(1)} %, RPE objetivo limitado a 6.",
+        lambda m: f"Semana de descarga activa: volumen y carga reducidos un {m.group(1)} %, RPE objetivo limitado a 6.",
         text,
     )

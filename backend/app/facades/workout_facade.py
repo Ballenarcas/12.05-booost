@@ -8,10 +8,7 @@ from app.core.ai_quota import use_ai_call
 from app.core.local_day import LocalDay
 from app.db.supabase_client import get_supabase
 from app.schemas.exercise import Exercise
-from app.schemas.overtraining import (
-    FatigueFeedbackCreate,
-    OvertrainingStatusResponse,
-)
+from app.schemas.overtraining import OvertrainingStatusResponse
 from app.schemas.workout import (
     CustomExerciseCreate,
     LiveWorkoutAdjustmentRequest,
@@ -130,22 +127,6 @@ class WorkoutFacade:
 
     def get_overtraining_status(self, user_id: UUID, day: LocalDay | None = None) -> OvertrainingStatusResponse:
         return overtraining_service.evaluate_overtraining(user_id, day)
-
-    def submit_fatigue_feedback(
-        self,
-        user_id: UUID,
-        payload: FatigueFeedbackCreate,
-        day: LocalDay | None = None,
-    ) -> OvertrainingStatusResponse:
-        return overtraining_service.record_fatigue_feedback(user_id, payload, day)
-
-    def delete_fatigue_feedback(
-        self,
-        user_id: UUID,
-        entry_id: str,
-        day: LocalDay | None = None,
-    ) -> OvertrainingStatusResponse:
-        return overtraining_service.delete_fatigue_feedback(user_id, entry_id, day)
 
     def apply_overtraining_mods(self, user_id: UUID, day: LocalDay | None = None) -> OvertrainingStatusResponse:
         return overtraining_service.apply_overtraining_mods(user_id, day)
