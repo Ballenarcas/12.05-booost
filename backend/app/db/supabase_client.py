@@ -34,6 +34,13 @@ def get_supabase(admin: bool = False) -> Any | None:
     return create_client(settings.supabase_url, key, options=ClientOptions(httpx_client=http_client))
 
 
+@lru_cache
+def get_storage() -> Any | None:
+    """Storage on its own client, so file requests never touch the connection table queries use."""
+    client = get_supabase.__wrapped__(admin=True)
+    return None if client is None else client.storage
+
+
 def _warm_client(admin: bool) -> None:
     try:
         client = get_supabase(admin=True) if admin else get_supabase()

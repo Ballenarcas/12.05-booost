@@ -1,4 +1,4 @@
-import { Dumbbell, House, TrendingUp, UserRound, type LucideProps } from 'lucide-react'
+import { Dumbbell, House, TrendingUp, UserRound, UsersRound, type LucideProps } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { useLocation } from 'react-router-dom'
 import { usePageNavigate } from '../../utils/usePageNavigate'
@@ -23,6 +23,7 @@ const items: DockItem[] = [
   { path: '/workouts', label: 'nav.workouts', Icon: Dumbbell },
   { path: '/nutrition', label: 'nav.nutrition', Icon: FoodApple },
   { path: '/workouts/statistics', label: 'nav.statistics', Icon: TrendingUp },
+  { path: '/community', label: 'nav.community', Icon: UsersRound },
   { path: '/profile', label: 'nav.profile', Icon: UserRound },
 ]
 

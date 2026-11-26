@@ -17,7 +17,9 @@ import { useDialogBehavior } from '../utils/useDialogBehavior'
 import { applyTheme, getTheme } from '../utils/theme'
 import type { WorkoutStatistics } from '../types/workout'
 import { formatWorkoutCount } from '../utils/workoutStatistics'
-import { BODY_COMPOSITION_PREVIEW, PROFILE_FRIENDS_PREVIEW } from '../data/profileMockups'
+import { BODY_COMPOSITION_PREVIEW } from '../data/profileMockups'
+import { CommunitySettings, FriendsCard, ProfilePhoto } from '../components/community/ProfileCommunity'
+import { useSocialMe } from '../utils/useSocialMe'
 import LiquidToggle from '../components/ui/LiquidToggle'
 import LanguageSwitch from '../components/ui/LanguageSwitch'
 import { locale, useT, valueLabel } from '../i18n'
@@ -48,6 +50,7 @@ function Profile() {
   const t = useT()
   const user = getCurrentUser()
   const navigate = usePageNavigate()
+  const [socialMe, setSocialMe] = useSocialMe()
   const location = useLocation()
   const [isDark, setIsDark] = useState(getTheme() === 'dark')
   const toggleDark = (dark: boolean) => { setIsDark(dark); applyTheme(dark ? 'dark' : 'light') }
@@ -262,8 +265,6 @@ function Profile() {
   const weightParts = splitWeight(weight)
   const timeSplit = formatProgressHours(workoutStats?.total_duration_seconds ?? 0)
   const totalWorkoutsLabel = formatWorkoutCount(workoutStats?.total_workouts ?? 0)
-  const previewFriends = PROFILE_FRIENDS_PREVIEW.slice(0, 4)
-  const remainingFriendsCount = Math.max(0, PROFILE_FRIENDS_PREVIEW.length - previewFriends.length)
 
   return (
     <div className="screen hifi-screen hifi-theme profile-screen">
@@ -273,7 +274,7 @@ function Profile() {
         <button type="button" className="icon-button profile-gear" aria-label={t('profile.settings')} onClick={() => openSettings()}>
           <Settings size={22} aria-hidden="true" />
         </button>
-        <div className="profile-hero-avatar" aria-hidden="true">{initials || '?'}</div>
+        <ProfilePhoto me={socialMe} onChange={setSocialMe} initials={initials} />
         <h1 className="profile-hero-name">{fullName || t('profile.title')}</h1>
         <div className="profile-hero-pills">
           <button type="button" className="profile-chip-btn" onClick={() => openSettings('height')}>
@@ -498,42 +499,7 @@ function Profile() {
         </div>
       </section>
 
-      {/* Friends / Social Preview Card */}
-      <section className="hifi-section" aria-labelledby="friends-heading">
-        <div className="profile-section-head">
-          <h2 className="hifi-section-title" id="friends-heading">{t('profile.friends')}</h2>
-          <span className="profile-soon-tag">{t('common.comingSoon')}</span>
-        </div>
-
-        <div className="profile-preview-card">
-          <p className="profile-preview-copy">
-            {t('profile.friendsCopy')}<strong>{t('profile.friendsCopyStrong')}</strong>
-          </p>
-          <div className="profile-preview-foot">
-            <div className="profile-avatar-stack" aria-hidden="true">
-              {previewFriends.map((friend) => (
-                <span
-                  key={friend.id}
-                  className="profile-mini-avatar"
-                  style={{ background: friend.tone }}
-                >
-                  {friend.initials}
-                </span>
-              ))}
-              {remainingFriendsCount > 0 && (
-                <span className="profile-mini-avatar is-count">+{remainingFriendsCount}</span>
-              )}
-            </div>
-            <button
-              type="button"
-              className="hifi-pill"
-              onClick={() => navigate('/profile/friends')}
-            >
-              {t('common.viewAll')}
-            </button>
-          </div>
-        </div>
-      </section>
+      <FriendsCard me={socialMe} />
 
       </>}
 
@@ -597,6 +563,8 @@ function Profile() {
             </button>
           )}
         </form>
+
+        <CommunitySettings me={socialMe} onChange={setSocialMe} />
 
         <MuscleFocusCard />
 

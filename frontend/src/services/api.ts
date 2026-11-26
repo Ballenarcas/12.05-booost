@@ -22,6 +22,17 @@ const NUTRITION_CACHE_PREFIX = 'booost_nutrition:'
 const NUTRITION_CACHE_TTL_MS = 60_000
 import type { NutritionStatistics, NutritionStatisticsRange } from '../types/nutrition'
 import type {
+  Attachables,
+  CardRef,
+  Comment,
+  FeedMode,
+  FeedPage,
+  Member,
+  MemberProfile,
+  Post,
+  SocialMe,
+} from '../types/social'
+import type {
   LiveWorkoutAdjustmentRequest,
   LiveWorkoutAdjustmentResponse,
   Routine,
@@ -144,6 +155,8 @@ export function getAccessToken(): string | null {
  */
 export function clearSession({ keepWorkouts = false } = {}): void {
   shortCache.clear()
+  feedRequests.clear()
+  lastFeeds.clear()
   dashboardRequests.clear()
   insightRequests.clear()
   nutritionRequests.clear()
@@ -2085,3 +2098,105 @@ onLanguageChange(() => {
   clearDashboardCache()
   forgetSavedCopies()
 })
+
+// --- Community ---
+
+/** Photo links from the server are signed paths on the API host. */
+export function mediaUrl(path: string): string {
+  return `${API_URL}${path}`
+}
+
+const SOCIAL_ME_KEY = 'social:me'
+// The first page of each feed: the request in flight is shared, and the last answer is shown at once
+// next time while a fresh one loads. Memory only, because photo links expire.
+const feedRequests = new Map<FeedMode, Promise<FeedPage>>()
+const lastFeeds = new Map<FeedMode, FeedPage>()
+
+async function social<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // Any change (follow, block, photo, settings…) can change the counts and photo on /me.
+  if (init.method && init.method !== 'GET') shortCache.delete(SOCIAL_ME_KEY)
+  const response = await apiFetch(`${API_URL}/api/v1/social${path}`, {
+    ...init,
+    signal: AbortSignal.timeout(init.body instanceof FormData ? SCAN_TIMEOUT_MS : WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('community.error'))
+  }
+  return (response.status === 204 ? undefined : await response.json()) as T
+}
+
+function jsonBody(method: string, body: unknown): RequestInit {
+  return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+}
+
+// URLSearchParams matters: a cursor holds a "+", which would otherwise arrive as a space.
+function beforeQuery(before?: string): string {
+  return before ? new URLSearchParams({ before }).toString() : ''
+}
+
+// Community, Profile and Friends all need it; shared for 30 seconds instead of asked three times.
+export const fetchSocialMe = () => cachedRequest(SOCIAL_ME_KEY, () => social<SocialMe>('/me'))
+export const joinCommunity = (username: string, isPrivate: boolean) =>
+  social<SocialMe>('/me/join', jsonBody('POST', { username, is_private: isPrivate }))
+export const updateSocialMe = (changes: { username?: string; is_private?: boolean }) =>
+  social<SocialMe>('/me', jsonBody('PATCH', changes))
+export const removeAvatar = () => social<SocialMe>('/me/avatar', { method: 'DELETE' })
+
+export function uploadAvatar(photo: Blob): Promise<SocialMe> {
+  const form = new FormData()
+  form.append('file', photo, 'avatar.jpg')
+  return social<SocialMe>('/me/avatar', { method: 'PUT', body: form })
+}
+
+export function fetchFeed(mode: FeedMode, before?: string): Promise<FeedPage> {
+  if (before) return social<FeedPage>(`/feed?mode=${mode}&${beforeQuery(before)}`)
+  const running = feedRequests.get(mode)
+  if (running) return running
+  const request = social<FeedPage>(`/feed?mode=${mode}`)
+    .then((page) => {
+      lastFeeds.set(mode, page)
+      return page
+    })
+    .finally(() => feedRequests.delete(mode))
+  feedRequests.set(mode, request)
+  return request
+}
+
+/** The feed page shown last time, to display at once while a fresh one loads. */
+export const lastFeedPage = (mode: FeedMode): FeedPage | null => lastFeeds.get(mode) ?? null
+export const fetchPost = (id: string) => social<Post>(`/posts/${encodeURIComponent(id)}`)
+export const deletePost = (id: string) => social<void>(`/posts/${id}`, { method: 'DELETE' })
+export const setPostLike = (id: string, liked: boolean) =>
+  social<Post>(`/posts/${id}/like`, { method: liked ? 'PUT' : 'DELETE' })
+
+export function createPost(body: string, card: CardRef | null, photos: Blob[]): Promise<Post> {
+  const form = new FormData()
+  form.append('body', body)
+  if (card) form.append('card', JSON.stringify(card))
+  photos.forEach((photo, index) => form.append('images', photo, `photo-${index}.jpg`))
+  return social<Post>(`/posts?${localDayQuery()}`, { method: 'POST', body: form })
+}
+
+export const fetchAttachables = () => social<Attachables>(`/attachables?${localDayQuery()}`)
+export const fetchComments = (postId: string) => social<Comment[]>(`/posts/${encodeURIComponent(postId)}/comments`)
+export const addComment = (postId: string, body: string) =>
+  social<Comment>(`/posts/${encodeURIComponent(postId)}/comments`, jsonBody('POST', { body }))
+export const deleteComment = (id: string) => social<void>(`/comments/${id}`, { method: 'DELETE' })
+
+export const searchMembers = (q: string) => social<Member[]>(`/users?${new URLSearchParams({ q })}`)
+export const fetchMember = (username: string) => social<MemberProfile>(`/users/${encodeURIComponent(username)}`)
+export const fetchMemberPosts = (username: string, before?: string) =>
+  social<FeedPage>(`/users/${encodeURIComponent(username)}/posts?${beforeQuery(before)}`)
+export const fetchMemberList = (username: string, kind: 'followers' | 'following') =>
+  social<Member[]>(`/users/${encodeURIComponent(username)}/${kind}`)
+
+export const followMember = (id: string) => social<MemberProfile>(`/users/${id}/follow`, { method: 'PUT' })
+export const unfollowMember = (id: string) => social<void>(`/users/${id}/follow`, { method: 'DELETE' })
+export const removeFollower = (id: string) => social<void>(`/followers/${id}`, { method: 'DELETE' })
+export const fetchFollowRequests = () => social<Member[]>('/follow-requests')
+export const acceptFollowRequest = (id: string) => social<void>(`/follow-requests/${id}/accept`, { method: 'POST' })
+export const declineFollowRequest = (id: string) => social<void>(`/follow-requests/${id}`, { method: 'DELETE' })
+export const blockMember = (id: string) => social<void>(`/users/${id}/block`, { method: 'PUT' })
+export const unblockMember = (id: string) => social<void>(`/users/${id}/block`, { method: 'DELETE' })
+export const fetchBlocked = () => social<Member[]>('/blocks')

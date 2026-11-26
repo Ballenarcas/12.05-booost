@@ -1,3 +1,4 @@
+import { resizeImage } from '../utils/resizeImage'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -62,29 +63,6 @@ function editableItem(item: MealScanItem): EditableItem {
 function per100(total: number, grams: number, maximum: number): number {
   if (!Number.isFinite(total) || !Number.isFinite(grams) || grams <= 0) return 0
   return Math.max(0, Math.min(maximum, Math.round(((total / grams) * 100) * 10) / 10))
-}
-
-async function prepareImage(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file)
-  const maximumSide = 1600
-  const scale = Math.min(1, maximumSide / Math.max(bitmap.width, bitmap.height))
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-  const context = canvas.getContext('2d')
-  if (!context) {
-    bitmap.close()
-    throw new Error(tr('scan.errorRead'))
-  }
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-  bitmap.close()
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error(tr('scan.errorPrepare')))),
-      'image/jpeg',
-      0.85,
-    )
-  })
 }
 
 function todayLabel(): string {
@@ -202,7 +180,7 @@ export default function ScanMeal() {
     }
     setPhase('analyzing')
     try {
-      const blob = await prepareImage(file)
+      const blob = await resizeImage(file, tr('scan.errorRead'), tr('scan.errorPrepare'))
       if (blob.size > 8 * 1024 * 1024) {
         throw new Error(t('scan.errorStillLarge'))
       }

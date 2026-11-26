@@ -12,9 +12,9 @@
   min-height: calc(68px + env(safe-area-inset-bottom));
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: clamp(2px, 2vw, 12px);
   margin: 0 auto;
-  padding: 0 1rem env(safe-area-inset-bottom);
+  padding: 0 0.5rem env(safe-area-inset-bottom);
   border-radius: 50px 50px 0 0;
   background: color-mix(in srgb, var(--background) 40%, transparent);
   box-shadow: 0 -2px 8px rgba(131, 131, 131, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.6);
@@ -80,6 +80,8 @@
 
 .gdock-item {
   display: grid;
+  min-width: 0;
+  flex: 0 1 48px;
   width: 48px;
   height: 48px;
   place-items: center;
