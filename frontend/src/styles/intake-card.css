@@ -1,5 +1,5 @@
 /* Calorie ball and macro bars from the Figma "Nutrition card", shared by Home and Meals. */
-.home-nutrition { display: flex; align-items: center; justify-content: center; gap: 36px; padding-bottom: 16px; }
+.home-nutrition { display: flex; align-items: center; justify-content: center; gap: 16px; padding-bottom: 16px; }
 .home-orb {
   position: relative;
   flex: none;
@@ -56,13 +56,14 @@
 :root[data-theme="dark"] .home-orb-stop-front-mid { stop-color: #0d3b6e; stop-opacity: 0.94; }
 :root[data-theme="dark"] .home-orb-stop-front-bottom { stop-color: #041f3d; stop-opacity: 0.98; }
 :root[data-theme="dark"] .home-orb-value { color: #fff; }
-.home-macros { display: grid; flex: 1; gap: 12px; max-width: 160px; margin: 0; padding: 0; list-style: none; }
-.home-macros li { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 0; }
+.home-macros { display: grid; flex: 1; gap: 12px; max-width: 220px; margin: 0; padding: 0; list-style: none; }
+.home-macros li { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 6px; white-space: nowrap; }
 .home-macro-name { padding-left: 2px; color: var(--hifi-faint); font-size: 14px; text-transform: uppercase; }
 .home-macro-value { padding-right: 2px; color: var(--hifi-faint); font-family: var(--hifi-mono); font-size: 14px; }
 .home-macro-value strong { color: var(--hifi-ink); font-size: 18px; font-weight: 400; line-height: 1.2; }
 .home-macros .hifi-bar { grid-column: 1 / -1; }
-@media (max-width: 360px) {
+/* Beside the ball the longest Spanish row needs about 150px; narrower phones put the bars underneath. */
+@media (max-width: 374px) {
   .home-nutrition { flex-direction: column; gap: 16px; }
   .home-macros { width: 100%; max-width: none; }
 }
