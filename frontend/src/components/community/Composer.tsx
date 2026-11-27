@@ -1,7 +1,7 @@
 import { ImagePlus, Paperclip, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { createPost, fetchAttachables } from '../../services/api'
-import type { Attachables, CardRef } from '../../types/social'
+import type { Attachables, CardRef, Post } from '../../types/social'
 import { describeError } from '../../utils/errors.js'
 import { resizeImage } from '../../utils/resizeImage'
 import { useT } from '../../i18n'
@@ -12,7 +12,7 @@ const MAX_PHOTOS = 4
 type Photo = { blob: Blob; url: string }
 type Attached = { ref: CardRef; label: string }
 
-export default function Composer({ onPosted }: { onPosted: () => void }) {
+export default function Composer({ onPosted }: { onPosted: (post: Post) => void }) {
   const t = useT()
   const [body, setBody] = useState('')
   const [photos, setPhotos] = useState<Photo[]>([])
@@ -72,12 +72,12 @@ export default function Composer({ onPosted }: { onPosted: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      await createPost(body, attached?.ref ?? null, photos.map((photo) => photo.blob))
+      const created = await createPost(body, attached?.ref ?? null, photos.map((photo) => photo.blob))
       photos.forEach((photo) => URL.revokeObjectURL(photo.url))
       setBody('')
       setPhotos([])
       setAttached(null)
-      onPosted()
+      onPosted(created)
     } catch (failure) {
       fail(failure)
     } finally {

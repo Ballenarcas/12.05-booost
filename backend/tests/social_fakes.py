@@ -194,6 +194,7 @@ class FakeBucket:
         self.storage, self.name = storage, name
 
     def upload(self, path, file, file_options=None):
+        time.sleep(self.storage.latency)
         self.storage.uploads += 1
         if self.storage.fail_on_upload == self.storage.uploads:
             raise RuntimeError("upload failed")
@@ -201,6 +202,7 @@ class FakeBucket:
         self.storage.objects[(self.name, path)] = file
 
     def download(self, path):
+        time.sleep(self.storage.latency)
         self.storage.downloads += 1
         return self.storage.objects[(self.name, path)]
 
@@ -210,8 +212,9 @@ class FakeBucket:
 
 
 class FakeStorage:
-    def __init__(self):
+    def __init__(self, latency=0.0):
         self.objects, self.uploads, self.downloads, self.fail_on_upload = {}, 0, 0, None
+        self.latency = latency
 
     def from_(self, name):
         return FakeBucket(self, name)
@@ -221,7 +224,7 @@ class FakeSupabase:
     def __init__(self, max_rows=1000, latency=0.0):
         self.tables = {name: [] for name in TABLES}
         self.latency = latency
-        self.max_rows, self.selects, self.storage, self._ticks = max_rows, [], FakeStorage(), 0
+        self.max_rows, self.selects, self.storage, self._ticks = max_rows, [], FakeStorage(latency), 0
 
     def table(self, name):
         return FakeTable(self, name)

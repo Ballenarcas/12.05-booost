@@ -1,5 +1,5 @@
 import { Heart, MessageCircle, MoreHorizontal, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { blockMember, deletePost, mediaUrl, setPostLike } from '../../services/api'
 import type { Post, PrCardData, StreakCardData, WorkoutCardData } from '../../types/social'
@@ -86,7 +86,26 @@ export default function PostCard({ post, onChange, onDeleted, onBlocked }: Props
     }
   }
 
-  const toggleLike = () => run(async () => onChange(await setPostLike(post.id, !post.liked_by_me)))
+  // Taps reach the server in order (each waits for the one before), and only the latest
+  // tap's answer is shown, so quick taps never flip the heart back.
+  const likeRequest = useRef(0)
+  const likeQueue = useRef<Promise<unknown>>(Promise.resolve())
+  function toggleLike() {
+    const before = post
+    const liked = !post.liked_by_me
+    const request = ++likeRequest.current
+    setError(null)
+    onChange({ ...post, liked_by_me: liked, like_count: Math.max(0, post.like_count + (liked ? 1 : -1)) })
+    const sent = likeQueue.current.catch(() => undefined).then(() => setPostLike(post.id, liked))
+    likeQueue.current = sent
+    sent
+      .then((saved) => { if (request === likeRequest.current) onChange(saved) })
+      .catch((failure) => {
+        if (request !== likeRequest.current) return
+        onChange(before)
+        setError(describeError(failure, t('community.error')))
+      })
+  }
   const remove = () => {
     if (confirming !== 'delete') return setConfirming('delete')
     void run(async () => { await deletePost(post.id); onDeleted(post.id) })
@@ -136,7 +155,6 @@ export default function PostCard({ post, onChange, onDeleted, onBlocked }: Props
           className="cm-action"
           aria-pressed={post.liked_by_me}
           aria-label={`${post.liked_by_me ? t('community.unlike') : t('community.like')} (${post.like_count})`}
-          disabled={busy}
           onClick={toggleLike}
         >
           <Heart size={18} aria-hidden="true" fill={post.liked_by_me ? 'currentColor' : 'none'} />

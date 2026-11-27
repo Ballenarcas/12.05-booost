@@ -2165,10 +2165,26 @@ export function fetchFeed(mode: FeedMode, before?: string): Promise<FeedPage> {
 
 /** The feed page shown last time, to display at once while a fresh one loads. */
 export const lastFeedPage = (mode: FeedMode): FeedPage | null => lastFeeds.get(mode) ?? null
+
+/** Keeps the remembered feeds in step with a post that just changed, so going back shows it. */
+function rememberPost(post: Post) {
+  for (const [mode, page] of lastFeeds) {
+    lastFeeds.set(mode, { ...page, items: page.items.map((item) => (item.id === post.id ? post : item)) })
+  }
+}
+
+/** Your new post goes to the top of the remembered Following feed; the next fetch confirms it. */
+export function rememberNewPost(post: Post) {
+  const page = lastFeeds.get('following')
+  if (page) lastFeeds.set('following', { ...page, items: [post, ...page.items.filter((item) => item.id !== post.id)] })
+}
 export const fetchPost = (id: string) => social<Post>(`/posts/${encodeURIComponent(id)}`)
 export const deletePost = (id: string) => social<void>(`/posts/${id}`, { method: 'DELETE' })
 export const setPostLike = (id: string, liked: boolean) =>
-  social<Post>(`/posts/${id}/like`, { method: liked ? 'PUT' : 'DELETE' })
+  social<Post>(`/posts/${id}/like`, { method: liked ? 'PUT' : 'DELETE' }).then((post) => {
+    rememberPost(post)
+    return post
+  })
 
 export function createPost(body: string, card: CardRef | null, photos: Blob[]): Promise<Post> {
   const form = new FormData()

@@ -72,14 +72,35 @@ function MemberPage({ username }: { username: string }) {
     )
   }
 
-  const toggleFollow = () => run(async () => {
-    if (profile.follow_state === 'none') {
-      setProfile(await followMember(member.id))
+  // The button changes at once; the server's answer (or the old state, on an error) follows.
+  function toggleFollow() {
+    if (!profile) return
+    const before = profile
+    setError(null)
+    setBusy(true)
+    if (before.follow_state === 'none') {
+      setProfile({
+        ...before,
+        follow_state: member.is_private ? 'pending' : 'following',
+        followers: before.followers + (member.is_private ? 0 : 1),
+      })
+      followMember(member.id)
+        .then(setProfile)
+        .catch((failure) => { setProfile(before); fail(failure) })
+        .finally(() => setBusy(false))
     } else {
-      await unfollowMember(member.id)
-      setProfile(await fetchMember(username))
+      // What the server would answer: no follow, and a private account's posts hidden again.
+      setProfile({
+        ...before,
+        follow_state: 'none',
+        followers: Math.max(0, before.followers - (before.follow_state === 'following' ? 1 : 0)),
+        posts_visible: !member.is_private,
+      })
+      unfollowMember(member.id)
+        .catch((failure) => { setProfile(before); fail(failure) })
+        .finally(() => setBusy(false))
     }
-  })
+  }
 
   const followLabel = {
     none: t('community.follow'),
@@ -98,7 +119,7 @@ function MemberPage({ username }: { username: string }) {
         <p>{t('community.friendsSummary', { followers: profile.followers, following: profile.following })}</p>
         {!profile.is_me && (
           <div className="cm-profile-actions">
-            <button type="button" className="hifi-pill" disabled={busy} onClick={() => void toggleFollow()}>
+            <button type="button" className="hifi-pill" disabled={busy} onClick={toggleFollow}>
               {followLabel}
             </button>
             <button
@@ -122,8 +143,8 @@ function MemberPage({ username }: { username: string }) {
       </section>
 
       {profile.posts_visible ? (
-        // Following or unfollowing a private account changes what may be read.
-        <PostList key={profile.follow_state} load={load} empty={t('community.emptyProfile')} />
+        // Following or unfollowing a private account changes what may be read; a public one's posts stay.
+        <PostList key={member.is_private ? profile.follow_state : 'public'} load={load} empty={t('community.emptyProfile')} />
       ) : (
         <section className="hifi-card">
           <strong>{t('community.privateTitle')}</strong>

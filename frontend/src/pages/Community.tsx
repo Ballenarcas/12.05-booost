@@ -4,7 +4,7 @@ import Composer from '../components/community/Composer'
 import JoinCommunity from '../components/community/JoinCommunity'
 import MemberRow from '../components/community/MemberRow'
 import PostList from '../components/community/PostList'
-import { fetchFeed, lastFeedPage, searchMembers } from '../services/api'
+import { fetchFeed, lastFeedPage, rememberNewPost, searchMembers } from '../services/api'
 import type { FeedMode, Member } from '../types/social'
 import { describeError } from '../utils/errors.js'
 import { useSocialMe } from '../utils/useSocialMe'
@@ -91,7 +91,10 @@ export default function Community() {
                   </button>
                 ))}
               </div>
-              <Composer onPosted={() => setVersion((current) => current + 1)} />
+              <Composer onPosted={(post) => {
+                rememberNewPost(post)
+                setVersion((current) => current + 1)
+              }} />
               <Feed key={`${mode}-${version}`} mode={mode} />
             </>
           )}

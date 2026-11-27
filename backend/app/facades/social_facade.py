@@ -6,6 +6,7 @@ context once, then ask ``can_view``. Anything the viewer may not see is "not fou
 
 import logging
 from datetime import date, datetime, timedelta, timezone
+from collections import OrderedDict
 from threading import Lock
 from typing import Any
 from uuid import uuid4
@@ -118,10 +119,51 @@ def _upload(bucket: str, path: str, data: bytes) -> None:
     _storage().from_(bucket).upload(path, data, {"content-type": "image/webp", "upsert": "false"})
 
 
+# Stored files never change (uploads never overwrite), so their bytes can be kept in memory.
+# shortcut: per-process cache; with several workers a deleted photo can be served by another worker
+# until its link expires. Share or drop the cache before raising WEB_CONCURRENCY above 1.
+MEDIA_CACHE_BYTES = 64 * 1024 * 1024
+_media_cache: OrderedDict[tuple[str, str], bytes] = OrderedDict()
+_media_cache_size = 0
+_media_lock = Lock()
+
+
+def _cached_media(key: tuple[str, str]) -> bytes | None:
+    with _media_lock:
+        data = _media_cache.get(key)
+        if data is not None:
+            _media_cache.move_to_end(key)
+        return data
+
+
+def _cache_media(key: tuple[str, str], data: bytes) -> None:
+    global _media_cache_size
+    if len(data) > MEDIA_CACHE_BYTES // 8:
+        return
+    with _media_lock:
+        if key in _media_cache:
+            return
+        _media_cache[key] = data
+        _media_cache_size += len(data)
+        while _media_cache_size > MEDIA_CACHE_BYTES:
+            _, dropped = _media_cache.popitem(last=False)
+            _media_cache_size -= len(dropped)
+
+
+def _forget_media(bucket: str, paths: list[str]) -> None:
+    global _media_cache_size
+    with _media_lock:
+        for path in paths:
+            dropped = _media_cache.pop((bucket, path), None)
+            if dropped is not None:
+                _media_cache_size -= len(dropped)
+
+
 def _remove_files(bucket: str, paths: list[str]) -> None:
     """Best effort: a leftover file is private and unreachable."""
     if not paths:
         return
+    _forget_media(bucket, paths)
     try:
         _storage().from_(bucket).remove(paths)
     except Exception:
@@ -194,10 +236,6 @@ def _checked_member(ctx: rules.ViewerContext, row: dict[str, Any] | None) -> dic
     if not row or not row.get("username") or str(row["id"]) in ctx.blocked_ids:
         raise NotFound()
     return row
-
-
-def _member(session: Any, ctx: rules.ViewerContext, column: str, value: str) -> dict[str, Any]:
-    return _checked_member(ctx, _member_row(session, column, value))
 
 
 def _count(query: Any) -> int:
@@ -324,9 +362,10 @@ def _forget_interactions(session: Any, owner: str, other: str) -> None:
     """Removes ``other``'s likes and comments from ``owner``'s posts."""
     post_ids = [str(row["id"]) for row in rules.paged(
         lambda: session.table(POSTS).select("id").eq("user_id", owner).order("id"))]
-    for batch in rules.chunks(post_ids):
-        for table in (LIKES, COMMENTS):
-            session.table(table).delete().eq("user_id", other).in_("post_id", batch).execute()
+    rules.together(*[
+        lambda table=table, batch=batch: session.table(table).delete().eq("user_id", other).in_("post_id", batch).execute()
+        for batch in rules.chunks(post_ids) for table in (LIKES, COMMENTS)
+    ])
 
 
 class SocialFacade:
@@ -460,8 +499,8 @@ class SocialFacade:
     def create_post(self, user_id: str, day: LocalDay, body: str, card: CardRef | None,
                     images: list[bytes]) -> PostOut:
         # Order matters: check everything, insert, recount, and only then upload.
-        session, me, ctx = _viewer(user_id)
-        if self._used(session, POSTS, "user_id", user_id) >= POSTS_PER_DAY:
+        session, me, ctx, used = _viewer(user_id, lambda s: self._used(s, POSTS, "user_id", user_id))
+        if used >= POSTS_PER_DAY:
             raise LimitReached("Daily limit reached. Try again tomorrow.")
         text = rules.normalize_text(body)
         if len(images) > MAX_PHOTOS:
@@ -483,13 +522,13 @@ class SocialFacade:
         try:
             if self._used(session, POSTS, "user_id", user_id) > POSTS_PER_DAY:
                 raise LimitReached("Daily limit reached. Try again tomorrow.")
-            for path, image in zip(paths, encoded):
-                _upload(PHOTOS, path, image)
+            rules.together(*[lambda path=path, image=image: _upload(PHOTOS, path, image)
+                             for path, image in zip(paths, encoded)])
         except Exception:
             session.table(POSTS).delete().eq("id", post_id).execute()
             _remove_files(PHOTOS, paths)
             raise
-        return _posts(session, ctx, [row])[0]
+        return _posts(session, ctx, [row], {user_id: me}, set())[0]
 
     def feed(self, user_id: str, mode: str, before: datetime | None) -> FeedPage:
         if mode != "following":
@@ -514,9 +553,9 @@ class SocialFacade:
         return _posts(session, ctx, [row], {str(author["id"]): author}, liked)[0]
 
     def delete_post(self, user_id: str, post_id: str) -> None:
-        session, _, _ = _viewer(user_id)
-        rows = (session.table(POSTS).select("image_paths").eq("id", post_id).eq("user_id", user_id)
-                .limit(1).execute().data or [])
+        session, _, _, rows = _viewer(
+            user_id, lambda s: (s.table(POSTS).select("image_paths").eq("id", post_id).eq("user_id", user_id)
+                                .limit(1).execute().data or []))
         if not rows:
             raise NotFound()
         session.table(POSTS).delete().eq("id", post_id).eq("user_id", user_id).execute()
@@ -571,8 +610,9 @@ class SocialFacade:
                           created_at=row["created_at"])
 
     def delete_comment(self, user_id: str, comment_id: str) -> None:
-        session, _, _ = _viewer(user_id)
-        rows = session.table(COMMENTS).select("post_id,user_id").eq("id", comment_id).limit(1).execute().data or []
+        session, _, _, rows = _viewer(
+            user_id,
+            lambda s: s.table(COMMENTS).select("post_id,user_id").eq("id", comment_id).limit(1).execute().data or [])
         if not rows:
             raise NotFound()
         if str(rows[0]["user_id"]) != user_id:
@@ -639,16 +679,21 @@ class SocialFacade:
     # --- follows ---
 
     def follow(self, user_id: str, target_id: str) -> ProfileOut:
-        session, _, ctx = _viewer(user_id)
         if target_id == user_id:
             raise ValueError("You cannot follow yourself.")
-        target = _member(session, ctx, "id", target_id)
-        if not _follow_row(session, user_id, target_id):
-            total = _count(session.table(FOLLOWS).select("follower_id", count="exact").eq("follower_id", user_id))
+        session, _, ctx, target, existing, total, used = _viewer(
+            user_id,
+            lambda s: _member_row(s, "id", target_id),
+            lambda s: _follow_row(s, user_id, target_id),
+            lambda s: _count(s.table(FOLLOWS).select("follower_id", count="exact").eq("follower_id", user_id)),
+            # shortcut: counts follows that still exist, so unfollowing frees the quota.
+            lambda s: self._used(s, FOLLOWS, "follower_id", user_id),
+        )
+        target = _checked_member(ctx, target)
+        if not existing:
             if total >= rules.MAX_FOLLOWING:
                 raise ValueError("You follow too many people. Unfollow someone first.")
-            # shortcut: counts follows that still exist, so unfollowing frees the quota.
-            if self._used(session, FOLLOWS, "follower_id", user_id) >= FOLLOWS_PER_DAY:
+            if used >= FOLLOWS_PER_DAY:
                 raise LimitReached("Daily limit reached. Try again tomorrow.")
             status = "pending" if target.get("is_private") else "accepted"
             session.table(FOLLOWS).upsert(
@@ -676,8 +721,8 @@ class SocialFacade:
         return _listed(session, ctx, [str(row["follower_id"]) for row in rows])
 
     def accept_request(self, user_id: str, requester_id: str) -> None:
-        session, _, ctx = _viewer(user_id)
-        _member(session, ctx, "id", requester_id)
+        session, _, ctx, requester = _viewer(user_id, lambda s: _member_row(s, "id", requester_id))
+        _checked_member(ctx, requester)
         updated = (session.table(FOLLOWS).update({"status": "accepted"}).eq("follower_id", requester_id)
                    .eq("followee_id", user_id).eq("status", "pending").execute().data)
         if not updated:
@@ -690,23 +735,28 @@ class SocialFacade:
     # --- blocks ---
 
     def block(self, user_id: str, target_id: str) -> None:
-        session, _, _ = _viewer(user_id)
         if target_id == user_id:
             raise ValueError("You cannot block yourself.")
-        # Not ``_member``: you may block someone who already blocked you.
-        target = _user(session, target_id)
+        # Not ``_checked_member``: you may block someone who already blocked you.
+        session, _, _, target, total = _viewer(
+            user_id,
+            lambda s: _user(s, target_id),
+            lambda s: _count(s.table(BLOCKS).select("blocker_id", count="exact").eq("blocker_id", user_id)),
+        )
         if not target or not target.get("username"):
             raise NotFound()
-        total = _count(session.table(BLOCKS).select("blocker_id", count="exact").eq("blocker_id", user_id))
         if total >= rules.MAX_BLOCKS:
             raise ValueError("You have blocked too many people.")
         # The block goes in first, so access is cut before the clean-up runs.
         session.table(BLOCKS).upsert({"blocker_id": user_id, "blocked_id": target_id},
                                      on_conflict="blocker_id,blocked_id", ignore_duplicates=True).execute()
-        _delete_follow(session, user_id, target_id)
-        _delete_follow(session, target_id, user_id)
-        _forget_interactions(session, user_id, target_id)
-        _forget_interactions(session, target_id, user_id)
+        # After the block is stored, the clean-ups don't depend on each other.
+        rules.together(
+            lambda: _delete_follow(session, user_id, target_id),
+            lambda: _delete_follow(session, target_id, user_id),
+            lambda: _forget_interactions(session, user_id, target_id),
+            lambda: _forget_interactions(session, target_id, user_id),
+        )
 
     def unblock(self, user_id: str, target_id: str) -> None:
         session, _, _ = _viewer(user_id)
@@ -726,11 +776,16 @@ class SocialFacade:
         found = media_token.verify(token)
         if not found:
             raise NotFound()
+        cached = _cached_media(found)
+        if cached is not None:
+            return cached
         storage = _storage()
         try:
-            return storage.from_(found[0]).download(found[1])
+            data = storage.from_(found[0]).download(found[1])
         except Exception as error:
             raise NotFound() from error
+        _cache_media(found, data)
+        return data
 
 
 social_facade = SocialFacade()

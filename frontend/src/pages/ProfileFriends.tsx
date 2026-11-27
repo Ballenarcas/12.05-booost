@@ -57,17 +57,19 @@ function MemberList({ tab, username, actions }: { tab: Tab; username: string; ac
     return () => { current = false }
   }, [tab, username, t])
 
-  async function act(action: Action, id: string) {
+  function act(action: Action, id: string) {
+    const index = members?.findIndex((member) => member.id === id) ?? -1
+    const removed = index >= 0 ? members?.[index] : undefined
     setBusy(id)
     setError(null)
-    try {
-      await action.run(id)
-      setMembers((current) => current?.filter((member) => member.id !== id) ?? null)
-    } catch (failure) {
-      setError(describeError(failure, t('community.error')))
-    } finally {
-      setBusy(null)
-    }
+    setMembers((current) => current?.filter((member) => member.id !== id) ?? null)
+    action.run(id)
+      .catch((failure) => {
+        // Only this row comes back: other rows may have been changed meanwhile.
+        if (removed) setMembers((current) => current && [...current.slice(0, index), removed, ...current.slice(index)])
+        setError(describeError(failure, t('community.error')))
+      })
+      .finally(() => setBusy(null))
   }
 
   return (

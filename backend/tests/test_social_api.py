@@ -565,5 +565,7 @@ def test_media_is_served_only_with_a_valid_token(world):
     assert good.content[:4] == b"RIFF"
     assert world.client.get(url[:-2] + ("aa" if url[-2:] != "aa" else "bb")).status_code == 404
     assert world.client.get(f"{API}/media/nonsense").status_code == 404
+    # A file gone from Storage (and from the served-photo cache) is "not found".
+    social_facade._forget_media("post-images", [path for _, path in world.db.storage.objects])
     world.db.storage.objects.clear()
     assert world.client.get(url).status_code == 404
