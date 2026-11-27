@@ -12,6 +12,8 @@ from fastapi import HTTPException
 
 from app.core.config import get_settings
 from app.core.i18n import get_language, normalize_language
+from app.core.local_day import LocalDay, utc_day
+from app.db.supabase_client import get_supabase
 from app.schemas.exercise import Exercise
 from app.schemas.weekly_routine import (
     EquipmentKey,
@@ -798,11 +800,24 @@ def modify_weekly_routine(
 def accept_weekly_routine(
     user_id: UUID,
     payload: WeeklyRoutineAcceptRequest,
+    day: LocalDay | None = None,
 ) -> WeeklyRoutineAcceptResponse:
+    active_day = day or utc_day()
+    supabase = get_supabase(admin=True)
+    if supabase is not None:
+        try:
+            # Replace any prior weekly schedule so older plan days stay in My Routines without colliding.
+            supabase.table("routines").update({"scheduled_day": None}).eq("user_id", str(user_id)).not_.is_(
+                "scheduled_day", "null"
+            ).execute()
+        except Exception as err:
+            logger.warning("Could not clear prior weekly schedule before saving new plan: %s", err)
+
     saved = []
-    for day in payload.days:
+    for day_plan in payload.days:
         routine = RoutineCreate(
-            name=day.routine_name,
+            name=day_plan.routine_name,
+            scheduled_day=day_plan.day,
             exercises=[
                 RoutineExerciseCreate(
                     exercise_id=ex.exercise_id,
@@ -810,8 +825,18 @@ def accept_weekly_routine(
                     target_reps=ex.target_reps,
                     reps_by_set=[ex.target_reps] * ex.target_sets,
                 )
-                for ex in day.exercises
+                for ex in day_plan.exercises
             ],
         )
         saved.append(workout_service.create_user_routine(user_id, routine))
+
+    if supabase is not None:
+        try:
+            # Refresh today's AI workout plan on Home/Workouts so it picks up the newly accepted schedule.
+            supabase.table("workout_plans").delete().eq("user_id", str(user_id)).eq(
+                "plan_date", active_day.local_date.isoformat()
+            ).execute()
+        except Exception as err:
+            logger.warning("Could not clear today's cached daily plan after saving weekly routine: %s", err)
+
     return WeeklyRoutineAcceptResponse(routines=saved)

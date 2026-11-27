@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from app.core.auth import current_user
+from app.core.local_day import LocalDay, local_day
 from app.schemas.weekly_routine import (
     WeeklyRoutineAcceptRequest,
     WeeklyRoutineAcceptResponse,
@@ -67,5 +68,6 @@ def modify_ai_weekly_routine(
 def accept_ai_weekly_routine(
     payload: WeeklyRoutineAcceptRequest,
     user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
 ) -> WeeklyRoutineAcceptResponse:
-    return workout_facade.accept_weekly_routine(user_id, payload)
+    return workout_facade.accept_weekly_routine(user_id, payload, day)

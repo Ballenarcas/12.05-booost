@@ -420,6 +420,12 @@ export const es: Record<MessageKey, string> = {
   'otBanner.deloadWeekActive': '-{pct}% de volumen y carga, RPE máx. 6 en tus entrenos y planes IA',
   'otBanner.readinessScore': 'Disposición {score}/100',
   'otBanner.aria': '{title}. {pill}. Abrir detalles de sobreentrenamiento y descarga',
+  'otPopup.close': 'Cerrar aviso',
+  'otPopup.timedDismissTitle': 'Silenciar aviso 3 días',
+  'otPopup.timedDismissHint': 'Pausa este aviso 3 días salvo que registres nuevo dolor articular.',
+  'otPopup.viewDetails': 'Ver recuperación y descarga',
+  'otPopup.closeForNow': 'Cerrar por ahora',
+  'otPopup.dismissTimed': 'Ocultar 3 días',
 
   // Active workout
   'fatigue.1': 'Fresco',
@@ -643,7 +649,7 @@ export const es: Record<MessageKey, string> = {
   'ot.updatingPlan': 'Actualizando el plan…',
   'ot.restScheduled': 'Hoy es día de descanso',
   'ot.swapRest': 'Cambiar hoy a día de descanso',
-  'ot.dismissed': 'Aviso ocultado hasta tu próximo entreno terminado.',
+  'ot.dismissed': 'Aviso ocultado durante 3 días.',
   'ot.errorDismiss': 'No hemos podido ocultar el aviso.',
   'ot.dismissing': 'Ocultando…',
   'ot.dismiss': 'Ocultar y entrenar igualmente',

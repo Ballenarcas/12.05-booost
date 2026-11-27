@@ -181,6 +181,7 @@ def test_accept_endpoint_saves_each_day_as_a_routine(monkeypatch):
         entry = {
             "id": rid,
             "name": routine_payload.name,
+            "scheduled_day": routine_payload.scheduled_day,
             "exercises": [
                 {
                     "exercise_id": ex.exercise_id,
@@ -211,6 +212,7 @@ def test_accept_endpoint_saves_each_day_as_a_routine(monkeypatch):
     assert len(res.json()["routines"]) == 3
     assert len(created) == 3
     assert [r["name"] for r in created] == [d.routine_name for d in draft.days]
+    assert [r["scheduled_day"] for r in created] == ["mon", "wed", "fri"]
 
 
 def test_experience_level_and_special_philosophies_shape_volume_and_split(monkeypatch):

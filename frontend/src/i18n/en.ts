@@ -420,6 +420,12 @@ export const en = {
   'otBanner.deloadWeekActive': '-{pct}% volume & load, RPE 6 cap across workouts & AI plans',
   'otBanner.readinessScore': 'Readiness {score}/100',
   'otBanner.aria': '{title}. {pill}. Open overtraining & deload details',
+  'otPopup.close': 'Close alert',
+  'otPopup.timedDismissTitle': 'Silence alert for 3 days',
+  'otPopup.timedDismissHint': 'Pauses this alert for 3 days unless new joint pain is logged.',
+  'otPopup.viewDetails': 'View recovery & deload',
+  'otPopup.closeForNow': 'Close for now',
+  'otPopup.dismissTimed': 'Dismiss for 3 days',
 
   // Active workout
   'fatigue.1': 'Fresh',
@@ -643,7 +649,7 @@ export const en = {
   'ot.updatingPlan': 'Updating plan…',
   'ot.restScheduled': 'Rest day scheduled for today',
   'ot.swapRest': 'Swap today to rest day',
-  'ot.dismissed': 'Alert dismissed until your next finished workout.',
+  'ot.dismissed': 'Alert dismissed for 3 days.',
   'ot.errorDismiss': 'We couldn\'t dismiss the alert.',
   'ot.dismissing': 'Dismissing…',
   'ot.dismiss': 'Dismiss and train anyway',

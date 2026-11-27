@@ -11,6 +11,7 @@ export interface Routine {
   name: string
   exercises: RoutineExercise[]
   estimated_duration_minutes: number | null
+  scheduled_day?: Weekday | null
 }
 
 export interface RoutineCreatePayload {

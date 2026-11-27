@@ -115,12 +115,13 @@ class WorkoutFacade:
         self,
         user_id: UUID,
         payload: WeeklyRoutineAcceptRequest,
+        day: LocalDay | None = None,
     ) -> WeeklyRoutineAcceptResponse:
         self._require_premium(
             user_id,
             "AI weekly routines are a Premium feature. Upgrade to Premium to unlock them.",
         )
-        return weekly_routine_service.accept_weekly_routine(user_id, payload)
+        return weekly_routine_service.accept_weekly_routine(user_id, payload, day)
 
     def save_log(self, user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResponse:
         saved = workout_service.save_workout_log(user_id, payload)

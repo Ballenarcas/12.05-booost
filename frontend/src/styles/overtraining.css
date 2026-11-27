@@ -265,3 +265,160 @@
 @media (prefers-reduced-motion: reduce) {
   .ot-banner, .ot-action-btn, .ot-gauge-value { transition: none; }
 }
+
+/* Home overtraining modal popup */
+dialog.ot-popup {
+  margin: auto;
+  width: min(calc(100vw - 24px), 440px);
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--hifi-card);
+  color: var(--hifi-ink);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+dialog.ot-popup[open] {
+  display: block;
+}
+dialog.ot-popup:modal {
+  overscroll-behavior: contain;
+}
+dialog.ot-popup::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgba(10, 14, 22, 0.52);
+  backdrop-filter: blur(4px);
+}
+dialog.ot-popup.is-high {
+  border-color: rgba(198, 47, 69, 0.45);
+}
+dialog.ot-popup.is-moderate {
+  border-color: rgba(168, 107, 0, 0.38);
+}
+
+.ot-popup-surface {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+.ot-popup-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ot-popup-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+.ot-popup-icon {
+  display: grid;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--hifi-well);
+}
+.ot-popup-icon.is-high {
+  background: var(--negative-tint);
+  color: var(--negative);
+}
+.ot-popup-icon.is-moderate {
+  background: rgba(168, 107, 0, 0.14);
+  color: var(--warning);
+}
+.ot-popup-title-wrap {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.ot-popup-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+.ot-popup-subtitle {
+  margin: 0;
+  color: var(--hifi-muted);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+.ot-popup-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin: -8px -8px 0 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--hifi-muted);
+  cursor: pointer;
+}
+.ot-popup-close:hover {
+  background: var(--hifi-well);
+  color: var(--hifi-ink);
+}
+.ot-popup-close:focus-visible {
+  outline: 2px solid #0052b1;
+  outline-offset: 2px;
+}
+.ot-popup-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ot-popup-signals {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ot-popup-signal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--hifi-well);
+}
+
+.ot-popup-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--hifi-well);
+}
+.ot-popup-toggle-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.ot-popup-toggle-copy strong {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+.ot-popup-toggle-copy span {
+  color: var(--hifi-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ot-popup-actions {
+  display: grid;
+  gap: 8px;
+}

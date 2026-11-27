@@ -1865,11 +1865,23 @@ export interface OvertrainingAlertStatus {
   dismissed: boolean
 }
 
+export const OVERTRAINING_POPUP_SESSION_PREFIX = 'booost_ot_popup_closed:'
+
 export function clearOvertrainingCache(): void {
   for (const key of [...shortCache.keys()]) {
     if (key.startsWith('overtraining:')) shortCache.delete(key)
   }
   forgetSavedCopies('overtraining:')
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i -= 1) {
+      const key = sessionStorage.key(i)
+      if (key?.startsWith(OVERTRAINING_POPUP_SESSION_PREFIX)) {
+        sessionStorage.removeItem(key)
+      }
+    }
+  } catch {
+    // Ignore storage access errors when running outside a browser window.
+  }
 }
 
 export function getSavedOvertrainingAlerts(userId: string | undefined = getCurrentUser()?.id): OvertrainingAlertStatus | null {
@@ -2005,7 +2017,7 @@ export function modifyAiWeeklyRoutine(payload: WeeklyRoutineModifyRequest): Prom
 
 export async function acceptAiWeeklyRoutine(days: WeeklyRoutineDay[]): Promise<WeeklyRoutineAcceptResponse> {
   const result = await postWeeklyRoutineAction<WeeklyRoutineAcceptResponse>(
-    '/ai-weekly/accept',
+    `/ai-weekly/accept?${localDayQuery()}`,
     { days },
     WRITE_TIMEOUT_MS,
   )

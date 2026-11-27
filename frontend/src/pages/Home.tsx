@@ -7,7 +7,7 @@ import { percent } from '../utils/percent'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchDashboardSummary, getActiveDeloadPct, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
-import { OvertrainingBanner } from '../components/workout/OvertrainingBanner'
+import { OvertrainingPopup } from '../components/workout/OvertrainingPopup'
 import WorkoutPhoto from '../components/workout/WorkoutPhoto'
 import { planWorkoutState } from '../utils/workoutPlan'
 import { locale, useT } from '../i18n'
@@ -124,7 +124,7 @@ function Home() {
 
         <AiTipCard onApplied={() => fetchDashboardSummary({ forceRefresh: true }).then(setSummary).catch(() => undefined)} />
 
-        <OvertrainingBanner
+        <OvertrainingPopup
           onStatusChange={(next) => setActiveDeloadPct(next.deload_active ? next.volume_reduction_pct : 0)}
         />
 
