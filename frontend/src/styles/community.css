@@ -1,4 +1,5 @@
 /* Community feed, profiles and lists. Colours come from the shared theme variables. */
+@import './heart.css';
 
 .community-screen { align-content: start; }
 .cm-list, .cm-members, .cm-comments { display: grid; gap: 12px; }
@@ -49,7 +50,26 @@
 
 .cm-actions { display: flex; align-items: center; gap: 8px; }
 .cm-action { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; gap: 6px; padding: 0 4px; border: 0; color: var(--hifi-muted); background: transparent; cursor: pointer; font: inherit; font-size: 14px; text-decoration: none; }
-.cm-action[aria-pressed="true"] { color: var(--primary); }
+.cm-action[aria-pressed="true"] { color: var(--negative); }
+
+/* Like: the same heart as favourite meals: a dip on tap, a pop with a ring when liked, a shrink when unliked. */
+.cm-heart { position: relative; display: grid; place-items: center; }
+.cm-heart svg { transition: transform var(--motion-fast) var(--ease-out); }
+.cm-action:active .cm-heart svg { transform: scale(0.85); }
+.cm-heart.is-pop svg { animation: heart-pop 480ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.cm-heart.is-pop::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border: 2px solid var(--negative);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: heart-ring 480ms var(--ease-out) forwards;
+}
+.cm-heart.is-unpop svg { animation: heart-unpop 260ms var(--ease-out); }
+@media (prefers-reduced-motion: reduce) {
+  .cm-heart.is-pop svg, .cm-heart.is-unpop svg, .cm-heart.is-pop::after { animation: none; }
+}
 .cm-action:disabled { cursor: not-allowed; opacity: 0.4; }
 .cm-action.is-end { margin-left: auto; }
 

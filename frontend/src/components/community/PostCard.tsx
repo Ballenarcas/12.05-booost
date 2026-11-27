@@ -70,6 +70,7 @@ export default function PostCard({ post, onChange, onDeleted, onBlocked }: Props
   const t = useT()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [heartAnim, setHeartAnim] = useState<'pop' | 'unpop' | null>(null)
   // Deleting and blocking take a second tap.
   const [confirming, setConfirming] = useState<'delete' | 'block' | null>(null)
   const name = post.author.name || post.author.username
@@ -95,6 +96,7 @@ export default function PostCard({ post, onChange, onDeleted, onBlocked }: Props
     const liked = !post.liked_by_me
     const request = ++likeRequest.current
     setError(null)
+    setHeartAnim(liked ? 'pop' : 'unpop')
     onChange({ ...post, liked_by_me: liked, like_count: Math.max(0, post.like_count + (liked ? 1 : -1)) })
     const sent = likeQueue.current.catch(() => undefined).then(() => setPostLike(post.id, liked))
     likeQueue.current = sent
@@ -157,7 +159,9 @@ export default function PostCard({ post, onChange, onDeleted, onBlocked }: Props
           aria-label={`${post.liked_by_me ? t('community.unlike') : t('community.like')} (${post.like_count})`}
           onClick={toggleLike}
         >
-          <Heart size={18} aria-hidden="true" fill={post.liked_by_me ? 'currentColor' : 'none'} />
+          <span className={`cm-heart${heartAnim ? ` is-${heartAnim}` : ''}`} onAnimationEnd={() => setHeartAnim(null)}>
+            <Heart size={18} aria-hidden="true" fill={post.liked_by_me ? 'currentColor' : 'none'} />
+          </span>
           <span aria-hidden="true">{post.like_count}</span>
         </button>
         <Link className="cm-action" to={`/community/post/${post.id}`} aria-label={t('community.commentCount', { count: post.comment_count })}>
