@@ -668,7 +668,7 @@ export function prefetchMainPages(): void {
   quietly(fetchWorkoutHistory(userId))
   quietly(fetchTodayNutrition(userId))
   quietly(fetchSocialMe())
-  quietly(fetchFeed('following'))
+  quietly(fetchFeed('discover'))
 }
 
 export async function fetchWorkoutStatistics(

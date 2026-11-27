@@ -1,29 +1,26 @@
 import { useT } from '../../i18n'
 
-/** The shape of a post while it loads, so the screen never sits on a bare "Loading…". */
-export function PostSkeleton({ count = 2 }: { count?: number }) {
+/** The shape of Twitter timeline posts while they load, so the screen never sits on a bare "Loading…". */
+export function PostSkeleton({ count = 3 }: { count?: number }) {
   const t = useT()
   return (
     <div className="cm-skeletons" role="status" aria-busy="true">
       <span className="visually-hidden">{t('common.loading')}</span>
       {Array.from({ length: count }, (_, index) => (
-        <div key={index} className="hifi-card cm-skeleton-post" aria-hidden="true">
-          <div className="cm-skeleton-row">
-            <span className="cm-skeleton cm-skeleton-avatar" />
-            <span className="cm-skeleton-lines">
-              <span className="cm-skeleton" style={{ width: '45%' }} />
-              <span className="cm-skeleton" style={{ width: '30%' }} />
-            </span>
+        <div key={index} className="cm-skeleton-post" aria-hidden="true">
+          <span className="cm-skeleton cm-skeleton-avatar" />
+          <div className="cm-skeleton-post-body">
+            <span className="cm-skeleton" style={{ width: '48%' }} />
+            <span className="cm-skeleton" style={{ width: '92%' }} />
+            <span className="cm-skeleton" style={{ width: '68%' }} />
           </div>
-          <span className="cm-skeleton" style={{ width: '90%' }} />
-          <span className="cm-skeleton" style={{ width: '65%' }} />
         </div>
       ))}
     </div>
   )
 }
 
-/** The shape of a list of people or comments while it loads. */
+/** The shape of a list of people or replies while it loads. */
 export function RowSkeleton({ count = 3 }: { count?: number }) {
   const t = useT()
   return (
@@ -42,17 +39,22 @@ export function RowSkeleton({ count = 3 }: { count?: number }) {
   )
 }
 
-/** A member's profile header while it loads. */
+/** A member's Twitter-style profile header while it loads. */
 export function ProfileSkeleton() {
   const t = useT()
   return (
-    <div className="cm-skeletons" role="status" aria-busy="true">
+    <div className="cm-skeletons cm-profile-hero" role="status" aria-busy="true">
       <span className="visually-hidden">{t('common.loading')}</span>
-      <div className="hifi-card cm-profile" aria-hidden="true">
-        <span className="cm-skeleton cm-skeleton-avatar is-large" />
-        <span className="cm-skeleton" style={{ width: '40%', height: 20 }} />
-        <span className="cm-skeleton" style={{ width: '28%' }} />
-        <span className="cm-skeleton" style={{ width: '55%' }} />
+      <div className="cm-skeleton cm-skeleton-banner" aria-hidden="true" />
+      <div className="cm-profile-top" aria-hidden="true">
+        <span className="cm-profile-avatar-ring">
+          <span className="cm-skeleton" style={{ width: 76, height: 76, borderRadius: '50%' }} />
+        </span>
+      </div>
+      <div className="cm-profile-meta" aria-hidden="true">
+        <span className="cm-skeleton" style={{ width: '42%', height: 18 }} />
+        <span className="cm-skeleton" style={{ width: '28%', marginTop: 4 }} />
+        <span className="cm-skeleton" style={{ width: '54%', marginTop: 10 }} />
       </div>
     </div>
   )

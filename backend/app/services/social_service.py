@@ -261,3 +261,22 @@ def streak_card(session: Any, user_id: str, day: LocalDay) -> dict[str, Any]:
     if days < STREAK_TO_SHARE:
         raise ValueError("Log meals 7 days in a row to share a streak.")
     return {"days": days}
+
+
+# --- "For you" ranking ---
+
+def _when(row: dict[str, Any]) -> datetime:
+    return datetime.fromisoformat(str(row["created_at"]).replace("Z", "+00:00"))
+
+
+def rank_for_you(rows: list[dict[str, Any]], following_ids: set[str], now: datetime) -> list[dict[str, Any]]:
+    """Orders public posts by interest: likes and comments (a comment counts double), lifted 1.5x
+    for people you follow, and fading with age so the feed stays fresh (a post's pull halves in
+    roughly the first few hours, then keeps sliding). Ties go to the newer post."""
+    def score(row: dict[str, Any]) -> float:
+        age_hours = max(0.0, (now - _when(row)).total_seconds() / 3600)
+        interest = 1 + max(0, row.get("like_count") or 0) + 2 * max(0, row.get("comment_count") or 0)
+        lift = 1.5 if str(row["user_id"]) in following_ids else 1.0
+        return interest * lift / (age_hours + 2) ** 1.5
+
+    return sorted(rows, key=lambda row: (-score(row), -_when(row).timestamp(), str(row["id"])))

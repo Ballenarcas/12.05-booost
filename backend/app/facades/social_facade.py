@@ -43,6 +43,8 @@ PHOTOS_PER_DAY = 150
 LIMIT_WINDOW = timedelta(hours=24)
 USERNAME_COOLDOWN = timedelta(days=30)
 PAGE_POSTS = 20
+# "For you" ranks this many of the newest public posts; past them the feed continues by date.
+FYP_CANDIDATES = 200
 MAX_COMMENTS = 50
 MAX_SEARCH = 20
 MAX_LIST = 50
@@ -830,14 +832,40 @@ class SocialFacade:
             raise
         return _posts(session, ctx, [row], {user_id: me}, set())[0]
 
-    def feed(self, user_id: str, mode: str, before: datetime | None, limit: int = PAGE_POSTS) -> FeedPage:
-        return self.feed_timed(user_id, mode, before, limit)[0]
+    def feed(self, user_id: str, mode: str, before: datetime | None, limit: int = PAGE_POSTS,
+             rank_offset: int | None = None) -> FeedPage:
+        return self.feed_timed(user_id, mode, before, limit, rank_offset)[0]
+
+    def _for_you(self, user_id: str, offset: int, page_limit: int,
+                 timings: dict[str, float]) -> FeedPage:
+        """The ranked part of "For you". Its cursor is "rank:<offset>" while ranked posts remain, then
+        the date of the oldest ranked post, so the plain date pages below carry on with no overlap."""
+        session, _, ctx, rows = _viewer(
+            user_id,
+            lambda s: _post_query(s, None, FYP_CANDIDATES).eq("author_private", False).execute().data or [])
+        candidates = rows[:FYP_CANDIDATES]
+        # shortcut: offsets re-rank on every page, so a like arriving mid-scroll can repeat or skip
+        # a post; the app drops repeats. Store a ranked snapshot per viewer if skips are noticed.
+        ranked = rules.rank_for_you(candidates, ctx.following_ids, _now())
+        shown = ranked[offset:offset + page_limit]
+        if offset + page_limit < len(ranked):
+            cursor: str | None = f"rank:{offset + page_limit}"
+        elif len(rows) > FYP_CANDIDATES:
+            cursor = str(candidates[-1]["created_at"])
+        else:
+            cursor = None
+        return FeedPage(items=_posts(session, ctx, shown, timings=timings), next_cursor=cursor)
 
     def feed_timed(self, user_id: str, mode: str, before: datetime | None,
-                   limit: int = PAGE_POSTS) -> tuple[FeedPage, str]:
+                   limit: int = PAGE_POSTS, rank_offset: int | None = None) -> tuple[FeedPage, str]:
         page_limit = max(1, min(PAGE_POSTS, limit))
         t0 = time.perf_counter()
         timings: dict[str, float] = {}
+        if mode != "following" and before is None:
+            page = self._for_you(user_id, rank_offset or 0, page_limit, timings)
+            timing = f"rank;dur={(time.perf_counter() - t0) * 1000:.1f}"
+            logger.info("Social feed mode=for-you limit=%d items=%d %s", page_limit, len(page.items), timing)
+            return page, timing
         if mode != "following":
             # Discover rows don't depend on who asks, so they are read with the viewer's context.
             # Blocked authors are dropped when serializing, which keeps them out of the query string.

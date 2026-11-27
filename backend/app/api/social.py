@@ -98,15 +98,31 @@ def delete_avatar(user_id: UUID = Depends(current_user)) -> MeOut:
 
 # --- feed and posts ---
 
+def _feed_cursor(mode: str, before: str | None) -> tuple[datetime | None, int | None]:
+    """A feed cursor is a date, or "rank:<n>" inside the ranked part of For you. Anything else is a 422."""
+    if not before:
+        return None, None
+    if before.startswith("rank:"):
+        position = before.removeprefix("rank:")
+        if mode != "discover" or not position.isdigit() or not 0 < int(position) <= errors.FYP_CANDIDATES:
+            raise HTTPException(status_code=422, detail="Invalid feed cursor.")
+        return None, int(position)
+    try:
+        return datetime.fromisoformat(before.replace("Z", "+00:00")), None
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail="Invalid feed cursor.") from error
+
+
 @router.get("/feed", response_model=FeedPage)
 def read_feed(
     response: Response,
     mode: Literal["following", "discover"] = "discover",
-    before: datetime | None = Query(None),
+    before: str | None = Query(None, max_length=48),
     limit: int = Query(errors.PAGE_POSTS, ge=1, le=errors.PAGE_POSTS),
     user_id: UUID = Depends(current_user),
 ) -> FeedPage:
-    result, timing = _run(lambda: social_facade.feed_timed(str(user_id), mode, before, limit))
+    when, rank_offset = _feed_cursor(mode, before)
+    result, timing = _run(lambda: social_facade.feed_timed(str(user_id), mode, when, limit, rank_offset))
     if timing:
         response.headers["Server-Timing"] = timing
     return result

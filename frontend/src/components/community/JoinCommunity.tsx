@@ -27,8 +27,8 @@ export default function JoinCommunity({ onJoined }: { onJoined: (me: SocialMe) =
   }
 
   return (
-    <form className="hifi-card cm-join" onSubmit={submit}>
-      <h2 className="hifi-section-title">{t('community.joinTitle')}</h2>
+    <form className="cm-join" onSubmit={submit}>
+      <h2>{t('community.joinTitle')}</h2>
       <p className="hifi-muted">{t('community.joinBody')}</p>
       <label className="cm-field">
         <span>{t('community.username')}</span>
@@ -54,7 +54,7 @@ export default function JoinCommunity({ onJoined }: { onJoined: (me: SocialMe) =
         <LiquidToggle checked={isPrivate} onChange={setIsPrivate} label={t('community.private')} />
       </div>
       {error && <p className="cm-error" role="alert">{error}</p>}
-      <button type="submit" className="primary-button" disabled={busy}>{t('community.join')}</button>
+      <button type="submit" className="cm-btn-primary" disabled={busy}>{t('community.join')}</button>
     </form>
   )
 }

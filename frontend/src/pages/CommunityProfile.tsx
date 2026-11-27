@@ -1,6 +1,6 @@
-import { ArrowLeft } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { ArrowLeft, Ban, Lock, MoreHorizontal } from 'lucide-react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import Avatar from '../components/community/Avatar'
 import PostList from '../components/community/PostList'
 import { ProfileSkeleton } from '../components/community/Skeleton'
@@ -8,11 +8,14 @@ import { blockMember, fetchMember, fetchMemberPosts, followMember, unblockMember
 import type { MemberProfile } from '../types/social'
 import { describeError } from '../utils/errors.js'
 import { usePageNavigate } from '../utils/usePageNavigate'
-import { useT } from '../i18n'
+import { locale, useT } from '../i18n'
 import '../styles/community.css'
 
 function MemberPage({ username }: { username: string }) {
   const t = useT()
+  const navigate = usePageNavigate()
+  const menuId = useId()
+  const popoverRef = useRef<HTMLDivElement>(null)
   const [profile, setProfile] = useState<MemberProfile | null>(null)
   const [blocked, setBlocked] = useState(false)
   const [confirmBlock, setConfirmBlock] = useState(false)
@@ -43,10 +46,29 @@ function MemberPage({ username }: { username: string }) {
     }
   }
 
+  const headerTitle = profile ? (profile.user.name || profile.user.username) : `@${username}`
+
+  const topbar = (
+    <div className="cm-topbar">
+      <header className="cm-topbar-back">
+        <button type="button" className="cm-icon-btn" aria-label={t('common.back')} onClick={() => navigate(-1)}>
+          <ArrowLeft size={20} aria-hidden="true" />
+        </button>
+        <div className="cm-topbar-heading">
+          <h1>{headerTitle}</h1>
+          {profile && <span className="cm-topbar-sub">@{profile.user.username}</span>}
+        </div>
+      </header>
+    </div>
+  )
+
   if (!profile) {
-    return error
-      ? <p className="cm-error" role="alert">{error}</p>
-      : <ProfileSkeleton />
+    return (
+      <>
+        {topbar}
+        {error ? <p className="cm-error cm-banner-error" role="alert">{error}</p> : <ProfileSkeleton />}
+      </>
+    )
   }
 
   const member = profile.user
@@ -54,22 +76,26 @@ function MemberPage({ username }: { username: string }) {
 
   if (blocked) {
     return (
-      <section className="hifi-card">
-        <p>{t('community.blockedTitle', { username: member.username })}</p>
-        {error && <p className="cm-error" role="alert">{error}</p>}
-        <button
-          type="button"
-          className="secondary-action"
-          disabled={busy}
-          onClick={() => void run(async () => {
-            await unblockMember(member.id)
-            setProfile(await fetchMember(username))
-            setBlocked(false)
-          })}
-        >
-          {t('community.unblock')}
-        </button>
-      </section>
+      <>
+        {topbar}
+        <section className="cm-empty">
+          <span className="cm-empty-icon" aria-hidden="true"><Ban size={22} /></span>
+          <strong>{t('community.blockedTitle', { username: member.username })}</strong>
+          {error && <p className="cm-error" role="alert">{error}</p>}
+          <button
+            type="button"
+            className="cm-btn-outline"
+            disabled={busy}
+            onClick={() => void run(async () => {
+              await unblockMember(member.id)
+              setProfile(await fetchMember(username))
+              setBlocked(false)
+            })}
+          >
+            {t('community.unblock')}
+          </button>
+        </section>
+      </>
     )
   }
 
@@ -111,45 +137,122 @@ function MemberPage({ username }: { username: string }) {
 
   return (
     <>
-      <section className="hifi-card cm-profile">
-        <Avatar name={name} url={member.avatar_url} large />
-        <h2 className="hifi-section-title">{name}</h2>
-        <p className="hifi-muted">
-          @{member.username}{profile.follows_you ? ` · ${t('community.followsYou')}` : ''}
-        </p>
-        <p>{t('community.friendsSummary', { followers: profile.followers, following: profile.following })}</p>
-        {!profile.is_me && (
+      {topbar}
+
+      <section className="cm-profile-hero">
+        <div className="cm-profile-banner" aria-hidden="true" />
+        <div className="cm-profile-top">
+          <span className="cm-profile-avatar-ring">
+            <Avatar name={name} url={member.avatar_url} priority />
+          </span>
+
           <div className="cm-profile-actions">
-            <button type="button" className="hifi-pill" disabled={busy} onClick={toggleFollow}>
-              {followLabel}
-            </button>
-            <button
-              type="button"
-              className="hifi-pill"
-              disabled={busy}
-              onClick={() => {
-                if (!confirmBlock) return setConfirmBlock(true)
-                void run(async () => {
-                  await blockMember(member.id)
-                  setBlocked(true)
-                  setConfirmBlock(false)
-                })
-              }}
-            >
-              {confirmBlock ? t('community.confirmBlock') : t('community.block', { username: member.username })}
-            </button>
+            {profile.is_me ? (
+              <Link to="/profile/friends" className="cm-btn-outline">
+                {t('profile.friends')}
+              </Link>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="cm-btn-circle"
+                  popoverTarget={menuId}
+                  aria-label={t('community.options')}
+                  onClick={() => setConfirmBlock(false)}
+                >
+                  <MoreHorizontal size={18} aria-hidden="true" />
+                </button>
+                <div
+                  ref={popoverRef}
+                  id={menuId}
+                  popover="auto"
+                  className="cm-popover"
+                  onToggle={(event) => {
+                    if ((event.nativeEvent as ToggleEvent).newState === 'closed') setConfirmBlock(false)
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="cm-popover-item is-danger"
+                    disabled={busy}
+                    onClick={() => {
+                      if (!confirmBlock) return setConfirmBlock(true)
+                      popoverRef.current?.hidePopover?.()
+                      void run(async () => {
+                        await blockMember(member.id)
+                        setBlocked(true)
+                        setConfirmBlock(false)
+                      })
+                    }}
+                  >
+                    <Ban size={17} aria-hidden="true" />
+                    <span>{confirmBlock ? t('community.confirmBlock') : t('community.block', { username: member.username })}</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  className={profile.follow_state === 'none' ? 'cm-btn-primary' : 'cm-btn-outline'}
+                  disabled={busy}
+                  onClick={toggleFollow}
+                >
+                  {followLabel}
+                </button>
+              </>
+            )}
           </div>
-        )}
-        {error && <p className="cm-error" role="alert">{error}</p>}
+        </div>
+
+        <div className="cm-profile-meta">
+          <h2 className="cm-profile-name">
+            {name}
+            {member.is_private && <Lock size={16} aria-hidden="true" />}
+          </h2>
+          <div className="cm-profile-handle-row">
+            <span>@{member.username}</span>
+            {profile.follows_you && <span className="cm-follows-badge">{t('community.followsYou')}</span>}
+          </div>
+
+          <div className="cm-profile-stats">
+            {profile.is_me ? (
+              <>
+                <Link to="/profile/friends">
+                  <strong>{profile.following.toLocaleString(locale())}</strong> {t('community.following')}
+                </Link>
+                <Link to="/profile/friends">
+                  <strong>{profile.followers.toLocaleString(locale())}</strong> {t('community.followers')}
+                </Link>
+              </>
+            ) : (
+              <>
+                <span>
+                  <strong>{profile.following.toLocaleString(locale())}</strong> {t('community.following')}
+                </span>
+                <span>
+                  <strong>{profile.followers.toLocaleString(locale())}</strong> {t('community.followers')}
+                </span>
+              </>
+            )}
+          </div>
+
+          {error && <p className="cm-error" role="alert">{error}</p>}
+        </div>
+
+        <div className="cm-tabs" role="tablist" aria-label={name}>
+          <button type="button" role="tab" aria-selected="true">
+            {t('community.posts')}
+          </button>
+        </div>
       </section>
 
       {profile.posts_visible ? (
         // Following or unfollowing a private account changes what may be read; a public one's posts stay.
         <PostList key={member.is_private ? profile.follow_state : 'public'} load={load} empty={t('community.emptyProfile')} />
       ) : (
-        <section className="hifi-card">
+        <section className="cm-empty">
+          <span className="cm-empty-icon" aria-hidden="true"><Lock size={22} /></span>
           <strong>{t('community.privateTitle')}</strong>
-          <p className="hifi-muted">{t('community.privateBody')}</p>
+          <p>{t('community.privateBody')}</p>
         </section>
       )}
     </>
@@ -157,18 +260,10 @@ function MemberPage({ username }: { username: string }) {
 }
 
 export default function CommunityProfile() {
-  const t = useT()
-  const navigate = usePageNavigate()
   const { username = '' } = useParams()
 
   return (
     <div className="screen hifi-screen hifi-theme community-screen">
-      <header className="cm-header">
-        <button type="button" className="icon-button" aria-label={t('common.back')} onClick={() => navigate(-1)}>
-          <ArrowLeft size={20} aria-hidden="true" />
-        </button>
-        <h1 className="hifi-page-title">@{username}</h1>
-      </header>
       <MemberPage key={username} username={username} />
     </div>
   )

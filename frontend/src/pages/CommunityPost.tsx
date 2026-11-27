@@ -7,9 +7,10 @@ import { addComment, cachedPost, deleteComment, fetchComments, fetchPost, rememb
 import { PostSkeleton, RowSkeleton } from '../components/community/Skeleton'
 import type { Comment, Post } from '../types/social'
 import { describeError } from '../utils/errors.js'
+import { timeAgo } from '../utils/timeAgo'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import { useSocialMe } from '../utils/useSocialMe'
-import { useT } from '../i18n'
+import { locale, useT } from '../i18n'
 import '../styles/community.css'
 
 function Thread({ postId }: { postId: string }) {
@@ -23,6 +24,7 @@ function Thread({ postId }: { postId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [me] = useSocialMe()
   const pendingId = useRef(0)
+  const replyInputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     let current = true
@@ -51,9 +53,7 @@ function Thread({ postId }: { postId: string }) {
     setPost((current) => current && { ...current, comment_count: Math.max(0, current.comment_count + step) })
   }
 
-  // The comment shows at once and is swapped for the saved one when the server answers.
-  function send(event: React.FormEvent) {
-    event.preventDefault()
+  function submitDraft() {
     const body = draft.trim()
     if (!body) return
     const id = `pending-${++pendingId.current}`
@@ -76,6 +76,12 @@ function Thread({ postId }: { postId: string }) {
       })
   }
 
+  // The comment shows at once and is swapped for the saved one when the server answers.
+  function send(event: React.FormEvent) {
+    event.preventDefault()
+    submitDraft()
+  }
+
   function remove(comment: Comment) {
     setError(null)
     setComments((current) => current.filter((item) => item.id !== comment.id))
@@ -95,49 +101,89 @@ function Thread({ postId }: { postId: string }) {
   return (
     <>
       {!post && !error && <PostSkeleton count={1} />}
-      {error && <p className="cm-error" role="alert">{error}</p>}
+      {error && <p className="cm-error cm-banner-error" role="alert">{error}</p>}
       {post && (
         <>
-          <PostCard post={post} priority onChange={(update) => setPost((current) => current && update(current))} onDeleted={leave} onBlocked={leave} />
+          <PostCard
+            post={post}
+            variant="detail"
+            priority
+            onReplyClick={() => replyInputRef.current?.focus()}
+            onChange={(update) => setPost((current) => current && update(current))}
+            onDeleted={leave}
+            onBlocked={leave}
+          />
 
-          <section className="hifi-card" aria-label={t('community.commentCount', { count: post.comment_count })}>
-            {!commentsLoaded && comments.length === 0 && <RowSkeleton count={2} />}
-            {commentsLoaded && comments.length === 0 && <p className="hifi-muted">{t('community.noComments')}</p>}
-            <ul className="cm-comments">
-              {comments.map((comment) => (
-                <li key={comment.id}>
-                  <Link to={`/community/u/${comment.author.username}`} className="cm-author">
-                    <Avatar name={comment.author.name || comment.author.username} url={comment.author.avatar_url} />
-                    <span className="cm-author-text">
-                      <strong>{comment.author.name || comment.author.username}</strong>
-                      <span>@{comment.author.username}</span>
-                    </span>
-                  </Link>
-                  <MentionText text={comment.body} />
-                  {comment.can_delete && (
-                    <button
-                      type="button"
-                      className="cm-action is-end"
-                      aria-label={t('common.delete')}
-                      onClick={() => remove(comment)}
-                    >
-                      <Trash2 size={16} aria-hidden="true" />
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-            <form className="cm-comment-form" onSubmit={send}>
-              <input
-                className="settings-input"
+          <form className="cm-reply-form" onSubmit={send}>
+            <Avatar name={me?.name || me?.username || ''} url={me?.avatar_url} />
+            <div className="cm-reply-main">
+              <textarea
+                ref={replyInputRef}
+                rows={1}
                 value={draft}
                 maxLength={280}
                 onChange={(event) => setDraft(event.target.value)}
-                placeholder={t('community.addComment')}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                    event.preventDefault()
+                    submitDraft()
+                  }
+                }}
+                placeholder={t('community.replyPlaceholder')}
                 aria-label={t('community.addComment')}
               />
-              <button type="submit" className="hifi-pill" disabled={!draft.trim()}>{t('community.send')}</button>
-            </form>
+              <button type="submit" className="cm-btn-primary cm-btn-sm" disabled={!draft.trim()}>
+                {t('community.reply')}
+              </button>
+            </div>
+          </form>
+
+          <section aria-label={t('community.commentCount', { count: post.comment_count })}>
+            {!commentsLoaded && comments.length === 0 && <RowSkeleton count={2} />}
+            {commentsLoaded && comments.length === 0 && (
+              <div className="cm-empty">
+                <p>{t('community.noComments')}</p>
+              </div>
+            )}
+            {comments.length > 0 && (
+              <ul className="cm-comments">
+                {comments.map((comment) => {
+                  const authorName = comment.author.name || comment.author.username
+                  return (
+                    <li key={comment.id}>
+                      <Link to={`/community/u/${comment.author.username}`} className="cm-post-avatar" tabIndex={-1} aria-hidden="true">
+                        <Avatar name={authorName} url={comment.author.avatar_url} />
+                      </Link>
+                      <div className="cm-comment-main">
+                        <div className="cm-comment-head">
+                          <div className="cm-post-byline-wrap">
+                            <Link to={`/community/u/${comment.author.username}`} className="cm-post-byline">
+                              <strong>{authorName}</strong>
+                              <span className="cm-post-handle">@{comment.author.username}</span>
+                            </Link>
+                            <span aria-hidden="true">·</span>
+                            <time dateTime={comment.created_at} title={new Date(comment.created_at).toLocaleString(locale())}>
+                              {timeAgo(comment.created_at)}
+                            </time>
+                          </div>
+                          {comment.can_delete && (
+                            <button
+                              type="button"
+                              className="cm-comment-delete"
+                              aria-label={t('common.delete')}
+                              onClick={() => remove(comment)}
+                            >
+                              <Trash2 size={16} aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
+                        <MentionText text={comment.body} />
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </section>
         </>
       )}
@@ -152,12 +198,16 @@ export default function CommunityPost() {
 
   return (
     <div className="screen hifi-screen hifi-theme community-screen">
-      <header className="cm-header">
-        <button type="button" className="icon-button" aria-label={t('common.back')} onClick={() => navigate(-1)}>
-          <ArrowLeft size={20} aria-hidden="true" />
-        </button>
-        <h1 className="hifi-page-title">{t('community.postTitle')}</h1>
-      </header>
+      <div className="cm-topbar">
+        <header className="cm-topbar-back">
+          <button type="button" className="cm-icon-btn" aria-label={t('common.back')} onClick={() => navigate(-1)}>
+            <ArrowLeft size={20} aria-hidden="true" />
+          </button>
+          <div className="cm-topbar-heading">
+            <h1>{t('community.postTitle')}</h1>
+          </div>
+        </header>
+      </div>
       <Thread key={id} postId={id} />
     </div>
   )

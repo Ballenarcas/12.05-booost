@@ -1,4 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { ArrowUp } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FeedPage, Post } from '../../types/social'
 import { describeError } from '../../utils/errors.js'
@@ -140,52 +141,60 @@ export default function PostList({ load, empty, initial = null, live = false }: 
   return (
     <div className="cm-list">
       {waiting.length > 0 && (
-        <button type="button" className="hifi-pill cm-new-posts" onClick={showWaiting}>
-          {t('community.newPosts', { count: waiting.length })}
+        <button type="button" className="cm-new-posts" onClick={showWaiting}>
+          <ArrowUp size={16} aria-hidden="true" />
+          <span>{t('community.newPosts', { count: waiting.length })}</span>
         </button>
       )}
       {/* Removed posts fold away instead of vanishing, so the ones below glide up. */}
-      <AnimatePresence initial={false}>
-        {posts?.map((post, index) => (
-          <motion.div
-            key={post.id}
-            className="cm-post-slot"
-            // The negative margin folds the list's gap away with the post.
-            exit={{ opacity: 0, height: 0, marginTop: -12, overflow: 'hidden' }}
-            transition={still ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.38 }}
-          >
-            <PostCard
-              post={post}
-              priority={index < 2}
-              onChange={(update) => setPosts((shown) => shown?.map((item) => {
-                if (item.id !== post.id) return item
-                const next = update(item)
-                touchedLikes.current.set(post.id, { liked_by_me: next.liked_by_me, like_count: next.like_count })
-                return next
-              }) ?? null)}
-              onDeleted={(id) => {
-                removedPosts.current.add(id)
-                setPosts((shown) => shown?.filter((item) => item.id !== id) ?? null)
-              }}
-              onBlocked={(authorId) => {
-                blockedAuthors.current.add(authorId)
-                setPosts((shown) => shown?.filter((item) => item.author.id !== authorId) ?? null)
-                setWaiting((queued) => queued.filter((item) => item.author.id !== authorId))
-              }}
-            />
-          </motion.div>
-        ))}
-      </AnimatePresence>
+      {posts && posts.length > 0 && (
+        <div className="cm-timeline">
+          <AnimatePresence initial={false}>
+            {posts.map((post, index) => (
+              <motion.div
+                key={post.id}
+                className={`cm-post-slot${index >= 3 ? ' is-deferred' : ''}`}
+                exit={{ opacity: 0, height: 0, overflow: 'hidden' }}
+                transition={still ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.38 }}
+              >
+                <PostCard
+                  post={post}
+                  priority={index < 2}
+                  onChange={(update) => setPosts((shown) => shown?.map((item) => {
+                    if (item.id !== post.id) return item
+                    const next = update(item)
+                    touchedLikes.current.set(post.id, { liked_by_me: next.liked_by_me, like_count: next.like_count })
+                    return next
+                  }) ?? null)}
+                  onDeleted={(id) => {
+                    removedPosts.current.add(id)
+                    setPosts((shown) => shown?.filter((item) => item.id !== id) ?? null)
+                  }}
+                  onBlocked={(authorId) => {
+                    blockedAuthors.current.add(authorId)
+                    setPosts((shown) => shown?.filter((item) => item.author.id !== authorId) ?? null)
+                    setWaiting((queued) => queued.filter((item) => item.author.id !== authorId))
+                  }}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
       {posts === null && !error && <PostSkeleton count={3} />}
-      {posts?.length === 0 && !cursor && <p className="hifi-muted">{empty}</p>}
-      {error && <p className="cm-error" role="alert">{error}</p>}
+      {posts?.length === 0 && !cursor && (
+        <div className="cm-empty">
+          <p>{empty}</p>
+        </div>
+      )}
+      {error && <p className="cm-error cm-banner-error" role="alert">{error}</p>}
       {cursor && (
-        <>
+        <div className="cm-load-more">
           <div ref={sentinelRef} className="cm-sentinel" aria-hidden="true" />
-          <button type="button" className="secondary-action" disabled={loadingMore} onClick={() => void loadMore()}>
+          <button type="button" className="cm-btn-outline" disabled={loadingMore} onClick={() => void loadMore()}>
             {loadingMore ? t('common.loading') : t('community.loadMore')}
           </button>
-        </>
+        </div>
       )}
     </div>
   )

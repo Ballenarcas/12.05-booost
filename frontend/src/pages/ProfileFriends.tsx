@@ -1,6 +1,8 @@
+import { ArrowLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import MemberRow from '../components/community/MemberRow'
+import { RowSkeleton } from '../components/community/Skeleton'
 import {
   acceptFollowRequest,
   declineFollowRequest,
@@ -15,14 +17,11 @@ import type { Member } from '../types/social'
 import { describeError } from '../utils/errors.js'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import { useSocialMe } from '../utils/useSocialMe'
-import backIcon from '../assets/scan/back.svg'
 import { useT, type MessageKey } from '../i18n'
-import '../styles/profile.css'
 import '../styles/community.css'
-import { RowSkeleton } from '../components/community/Skeleton'
 
 type Tab = 'followers' | 'following' | 'requests' | 'blocked'
-type Action = { label: MessageKey; run: (id: string) => Promise<void> }
+type Action = { label: MessageKey; primary?: boolean; run: (id: string) => Promise<void> }
 
 const TABS: { id: Tab; label: MessageKey; actions: Action[] }[] = [
   { id: 'followers', label: 'community.followers', actions: [{ label: 'community.remove', run: removeFollower }] },
@@ -31,7 +30,7 @@ const TABS: { id: Tab; label: MessageKey; actions: Action[] }[] = [
     id: 'requests',
     label: 'community.requests',
     actions: [
-      { label: 'community.accept', run: acceptFollowRequest },
+      { label: 'community.accept', primary: true, run: acceptFollowRequest },
       { label: 'community.decline', run: declineFollowRequest },
     ],
   },
@@ -86,21 +85,33 @@ function MemberList({ tab, username, actions }: { tab: Tab; username: string; ac
   }
 
   return (
-    <section className="hifi-card">
+    <section>
       {members === null && !error && <RowSkeleton />}
-      {members?.length === 0 && <p className="hifi-muted">{t('community.listEmpty')}</p>}
-      {error && <p className="cm-error" role="alert">{error}</p>}
-      <ul className="cm-members">
-        {members?.map((member) => (
-          <MemberRow key={member.id} member={member}>
-            {actions.map((action) => (
-              <button key={action.label} type="button" className="hifi-pill" disabled={busyIds.has(member.id)} onClick={() => void act(action, member.id)}>
-                {t(action.label)}
-              </button>
-            ))}
-          </MemberRow>
-        ))}
-      </ul>
+      {members?.length === 0 && (
+        <div className="cm-empty">
+          <p>{t('community.listEmpty')}</p>
+        </div>
+      )}
+      {error && <p className="cm-error cm-banner-error" role="alert">{error}</p>}
+      {members && members.length > 0 && (
+        <ul className="cm-members">
+          {members.map((member) => (
+            <MemberRow key={member.id} member={member}>
+              {actions.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  className={`${action.primary ? 'cm-btn-primary' : 'cm-btn-outline'} cm-btn-sm`}
+                  disabled={busyIds.has(member.id)}
+                  onClick={() => void act(action, member.id)}
+                >
+                  {t(action.label)}
+                </button>
+              ))}
+            </MemberRow>
+          ))}
+        </ul>
+      )}
     </section>
   )
 }
@@ -111,36 +122,54 @@ export default function ProfileFriends() {
   const [me, , meError] = useSocialMe()
   const [tab, setTab] = useState<Tab>('followers')
   const active = TABS.find((item) => item.id === tab) ?? TABS[0]
+  const joined = Boolean(me?.joined && me.username)
 
   return (
     <div className="screen hifi-screen hifi-theme friends-screen">
-      <header className="friends-header">
-        <button type="button" className="scan-back" aria-label={t('body.back')} onClick={() => navigate('/profile', { direction: 'back' })}>
-          <img src={backIcon} alt="" width={36} height={37} />
-        </button>
-        <h1>{t('profile.friends')}</h1>
-      </header>
+      <div className="cm-topbar">
+        <header className={`cm-topbar-back${joined ? ' no-border' : ''}`}>
+          <button
+            type="button"
+            className="cm-icon-btn"
+            aria-label={t('body.back')}
+            onClick={() => navigate('/profile', { direction: 'back' })}
+          >
+            <ArrowLeft size={20} aria-hidden="true" />
+          </button>
+          <div className="cm-topbar-heading">
+            <h1>{t('profile.friends')}</h1>
+            {me?.username && <span className="cm-topbar-sub">@{me.username}</span>}
+          </div>
+        </header>
 
-      {meError && <p className="cm-error" role="alert">{meError}</p>}
-      {!me && !meError && <RowSkeleton />}
-      {me && !me.joined && (
-        <section className="hifi-card">
-          <p>{t('community.joinFirst')}</p>
-          <Link to="/community" className="secondary-action">{t('community.openCommunity')}</Link>
-        </section>
-      )}
-
-      {me?.joined && me.username && (
-        <>
-          <div className="cm-tabs">
+        {joined && (
+          <div className="cm-tabs" role="tablist" aria-label={t('profile.friends')}>
             {TABS.map((item) => (
-              <button key={item.id} type="button" aria-pressed={tab === item.id} onClick={() => setTab(item.id)}>
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === item.id}
+                onClick={() => setTab(item.id)}
+              >
                 {t(item.label)}
               </button>
             ))}
           </div>
-          <MemberList key={tab} tab={tab} username={me.username} actions={active.actions} />
-        </>
+        )}
+      </div>
+
+      {meError && <p className="cm-error cm-banner-error" role="alert">{meError}</p>}
+      {!me && !meError && <RowSkeleton />}
+      {me && !me.joined && (
+        <section className="cm-empty">
+          <p>{t('community.joinFirst')}</p>
+          <Link to="/community" className="cm-btn-primary">{t('community.openCommunity')}</Link>
+        </section>
+      )}
+
+      {me?.joined && me.username && (
+        <MemberList key={tab} tab={tab} username={me.username} actions={active.actions} />
       )}
     </div>
   )

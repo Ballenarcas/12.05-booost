@@ -1,13 +1,15 @@
-import { Heart, MessageCircle, MoreHorizontal, Trash2 } from 'lucide-react'
-import { useCallback, useRef, useState } from 'react'
+import { Ban, Dumbbell, Flame, Heart, Lock, MessageCircle, MoreHorizontal, Trash2, Trophy, X } from 'lucide-react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { blockMember, deletePost, mediaUrl, setPostLike } from '../../services/api'
 import type { Post, PrCardData, StreakCardData, WorkoutCardData } from '../../types/social'
 import { describeError } from '../../utils/errors.js'
 import { splitMentions } from '../../utils/mentions'
+import { usePageNavigate } from '../../utils/usePageNavigate'
 import { locale, useT } from '../../i18n'
 import Avatar from './Avatar'
 import RollingCount from './RollingCount'
+import { timeAgo } from '../../utils/timeAgo'
 
 /** Post and comment text. Only React text nodes and internal links: nothing is read as HTML. */
 export function MentionText({ text }: { text: string }) {
@@ -29,16 +31,21 @@ function ResultCard({ post }: { post: Post }) {
     const card = post.card as WorkoutCardData
     return (
       <div className="cm-card">
-        <span className="cm-card-kind">{t('community.workoutCard')}</span>
-        <strong>{card.name}</strong>
-        <span>
-          {[
-            t('community.minutes', { minutes: Math.round(card.duration_seconds / 60) }),
-            t('community.exercises', { count: card.exercise_count }),
-            t('community.sets', { count: card.completed_sets }),
-            t('community.volume', { kg: card.total_volume_kg.toLocaleString(locale()) }),
-          ].join(' · ')}
-        </span>
+        <div className="cm-card-head">
+          <Dumbbell size={14} aria-hidden="true" />
+          <span>{t('community.workoutCard')}</span>
+        </div>
+        <div className="cm-card-body">
+          <strong>{card.name}</strong>
+          <span className="cm-card-meta">
+            {[
+              t('community.minutes', { minutes: Math.round(card.duration_seconds / 60) }),
+              t('community.exercises', { count: card.exercise_count }),
+              t('community.sets', { count: card.completed_sets }),
+              t('community.volume', { kg: card.total_volume_kg.toLocaleString(locale()) }),
+            ].join(' · ')}
+          </span>
+        </div>
       </div>
     )
   }
@@ -46,21 +53,41 @@ function ResultCard({ post }: { post: Post }) {
     const card = post.card as PrCardData
     return (
       <div className="cm-card">
-        <span className="cm-card-kind">{t('community.prCard')}</span>
-        <strong>{card.exercise_name}: {t('community.prBest', { weight: card.weight_kg, reps: card.reps })}</strong>
-        <span>{t('community.prPrevious', { weight: card.previous_best_kg })}</span>
+        <div className="cm-card-head">
+          <Trophy size={14} aria-hidden="true" />
+          <span>{t('community.prCard')}</span>
+        </div>
+        <div className="cm-card-body">
+          <strong>{card.exercise_name}: {t('community.prBest', { weight: card.weight_kg, reps: card.reps })}</strong>
+          <span className="cm-card-meta">{t('community.prPrevious', { weight: card.previous_best_kg })}</span>
+        </div>
       </div>
     )
   }
   return (
     <div className="cm-card">
-      <span className="cm-card-kind">{t('community.streakCard')}</span>
-      <strong>{t('community.streakDays', { days: (post.card as StreakCardData).days })}</strong>
+      <div className="cm-card-head">
+        <Flame size={14} aria-hidden="true" />
+        <span>{t('community.streakCard')}</span>
+      </div>
+      <div className="cm-card-body">
+        <strong>{t('community.streakDays', { days: (post.card as StreakCardData).days })}</strong>
+      </div>
     </div>
   )
 }
 
-function FeedPhoto({ src, alt, priority }: { src: string; alt: string; priority: boolean }) {
+function FeedPhoto({
+  src,
+  alt,
+  priority,
+  onOpen,
+}: {
+  src: string
+  alt: string
+  priority: boolean
+  onOpen: (photo: { src: string; alt: string }) => void
+}) {
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
   const checkCached = useCallback((el: HTMLImageElement | null) => {
@@ -68,7 +95,15 @@ function FeedPhoto({ src, alt, priority }: { src: string; alt: string; priority:
   }, [])
 
   return (
-    <span className={`cm-photo-frame${loaded ? ' is-loaded' : failed ? ' is-error' : ' is-loading'}`}>
+    <button
+      type="button"
+      className={`cm-photo-frame${loaded ? ' is-loaded' : failed ? ' is-error' : ' is-loading'}`}
+      aria-label={alt}
+      onClick={(event) => {
+        event.stopPropagation()
+        if (loaded) onOpen({ src, alt })
+      }}
+    >
       <img
         ref={checkCached}
         src={src}
@@ -79,23 +114,77 @@ function FeedPhoto({ src, alt, priority }: { src: string; alt: string; priority:
         onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
       />
-    </span>
+    </button>
   )
+}
+
+function PhotoLightbox({ photo, onClose }: { photo: { src: string; alt: string } | null; onClose: () => void }) {
+  const t = useT()
+  const dialogRef = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+    if (photo && !dialog.open) dialog.showModal()
+    else if (!photo && dialog.open) dialog.close()
+  }, [photo])
+
+  if (!photo) return null
+  return (
+    <dialog
+      ref={dialogRef}
+      className="cm-lightbox"
+      onCancel={(event) => {
+        event.preventDefault()
+        onClose()
+      }}
+      onClick={(event) => {
+        if (event.target === dialogRef.current) onClose()
+      }}
+    >
+      <button type="button" className="cm-lightbox-close" aria-label={t('common.close')} onClick={onClose}>
+        <X size={20} aria-hidden="true" />
+      </button>
+      <img className="cm-lightbox-img" src={photo.src} alt={photo.alt} />
+    </dialog>
+  )
+}
+
+function formatDetailTime(iso: string): string {
+  const date = new Date(iso)
+  const loc = locale()
+  const time = date.toLocaleTimeString(loc, { hour: 'numeric', minute: '2-digit' })
+  const day = date.toLocaleDateString(loc, { month: 'short', day: 'numeric', year: 'numeric' })
+  return `${time} · ${day}`
 }
 
 type Props = {
   post: Post
   priority?: boolean
+  variant?: 'timeline' | 'detail'
+  onReplyClick?: () => void
   onChange: (update: (current: Post) => Post) => void
   onDeleted: (postId: string) => void
   onBlocked: (authorId: string) => void
 }
 
-export default function PostCard({ post, priority = false, onChange, onDeleted, onBlocked }: Props) {
+export default function PostCard({
+  post,
+  priority = false,
+  variant = 'timeline',
+  onReplyClick,
+  onChange,
+  onDeleted,
+  onBlocked,
+}: Props) {
   const t = useT()
+  const navigate = usePageNavigate()
+  const menuId = useId()
+  const popoverRef = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [heartAnim, setHeartAnim] = useState<'pop' | 'unpop' | null>(null)
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null)
   // Deleting and blocking take a second tap.
   const [confirming, setConfirming] = useState<'delete' | 'block' | null>(null)
   const name = post.author.name || post.author.username
@@ -114,8 +203,6 @@ export default function PostCard({ post, priority = false, onChange, onDeleted, 
 
   // Taps reach the server in order (each waits for the one before), and only the latest
   // tap's answer is shown, so quick taps never flip the heart back.
-  // We keep the last server-confirmed like state so rapid taps rolling back on error never restore
-  // an unconfirmed optimistic state, and only merge like fields so comment_count is never clobbered.
   const likeRequest = useRef(0)
   const likeQueue = useRef<Promise<unknown>>(Promise.resolve())
   const inFlightLikes = useRef(0)
@@ -151,80 +238,198 @@ export default function PostCard({ post, priority = false, onChange, onDeleted, 
         inFlightLikes.current = Math.max(0, inFlightLikes.current - 1)
       })
   }
+
   const remove = () => {
     if (confirming !== 'delete') return setConfirming('delete')
+    popoverRef.current?.hidePopover?.()
     void run(async () => { await deletePost(post.id); onDeleted(post.id) })
   }
+
   const block = () => {
     if (confirming !== 'block') return setConfirming('block')
+    popoverRef.current?.hidePopover?.()
     void run(async () => { await blockMember(post.author.id); onBlocked(post.author.id) })
   }
 
-  return (
-    <article className="hifi-card cm-post">
-      <header className="cm-post-head">
-        <Link to={`/community/u/${post.author.username}`} className="cm-author">
-          <Avatar name={name} url={post.author.avatar_url} priority={priority} />
-          <span className="cm-author-text">
-            <strong>{name}</strong>
-            <span>
-              @{post.author.username} · {new Date(post.created_at).toLocaleDateString(locale(), { month: 'short', day: 'numeric' })}
-            </span>
-          </span>
-        </Link>
-        {!post.can_delete && (
-          <details className="cm-menu">
-            <summary aria-label={t('community.options')}><MoreHorizontal size={20} aria-hidden="true" /></summary>
-            <button type="button" className="hifi-pill" disabled={busy} onClick={block}>
-              {confirming === 'block' ? t('community.confirmBlock') : t('community.block', { username: post.author.username })}
-            </button>
-          </details>
-        )}
-      </header>
+  function handleCardClick(event: React.MouseEvent<HTMLElement>) {
+    if (variant === 'detail') return
+    if (window.getSelection()?.toString()) return
+    const target = event.target as HTMLElement
+    if (target.closest('a, button, [popover], dialog')) return
+    navigate(`/community/post/${post.id}`)
+  }
 
-      {post.body && <MentionText text={post.body} />}
-
-      {post.image_urls.length > 0 && (
-        <div className="cm-photos" data-count={post.image_urls.length}>
-          {post.image_urls.map((url, index) => (
-            <FeedPhoto
-              key={url}
-              src={mediaUrl(url)}
-              alt={t('community.photoAlt', { n: index + 1, name })}
-              priority={priority && index === 0}
-            />
-          ))}
-        </div>
-      )}
-
-      <ResultCard post={post} />
-
-      <footer className="cm-actions">
-        <button
-          type="button"
-          className="cm-action"
-          aria-pressed={post.liked_by_me}
-          aria-label={`${post.liked_by_me ? t('community.unlike') : t('community.like')} (${post.like_count})`}
-          onClick={toggleLike}
-        >
-          <span className={`cm-heart${heartAnim ? ` is-${heartAnim}` : ''}`} onAnimationEnd={() => setHeartAnim(null)}>
-            <Heart size={18} aria-hidden="true" fill={post.liked_by_me ? 'currentColor' : 'none'} />
-          </span>
-          <RollingCount value={post.like_count} />
-        </button>
-        <Link className="cm-action" to={`/community/post/${post.id}`} aria-label={t('community.commentCount', { count: post.comment_count })}>
-          <MessageCircle size={18} aria-hidden="true" />
-          <RollingCount value={post.comment_count} />
-        </Link>
-        {post.can_delete && (
-          <button type="button" className="cm-action is-end" disabled={busy} onClick={remove} aria-label={t('common.delete')}>
-            <Trash2 size={18} aria-hidden="true" />
-            {confirming === 'delete' && <span>{t('community.confirmDelete')}</span>}
+  const optionsMenu = (
+    <>
+      <button
+        type="button"
+        className="cm-more-btn"
+        popoverTarget={menuId}
+        aria-label={t('community.options')}
+        onClick={() => setConfirming(null)}
+      >
+        <MoreHorizontal size={18} aria-hidden="true" />
+      </button>
+      <div
+        ref={popoverRef}
+        id={menuId}
+        popover="auto"
+        className="cm-popover"
+        onToggle={(event) => {
+          if ((event.nativeEvent as ToggleEvent).newState === 'closed') setConfirming(null)
+        }}
+      >
+        {post.can_delete ? (
+          <button type="button" className="cm-popover-item is-danger" disabled={busy} onClick={remove}>
+            <Trash2 size={17} aria-hidden="true" />
+            <span>{confirming === 'delete' ? t('community.confirmDelete') : t('common.delete')}</span>
+          </button>
+        ) : (
+          <button type="button" className="cm-popover-item is-danger" disabled={busy} onClick={block}>
+            <Ban size={17} aria-hidden="true" />
+            <span>{confirming === 'block' ? t('community.confirmBlock') : t('community.block', { username: post.author.username })}</span>
           </button>
         )}
-      </footer>
+      </div>
+    </>
+  )
 
-      {error && <p className="cm-error" role="alert">{error}</p>}
+  const photosBlock = post.image_urls.length > 0 && (
+    <div className="cm-photos" data-count={post.image_urls.length}>
+      {post.image_urls.map((url, index) => (
+        <FeedPhoto
+          key={url}
+          src={mediaUrl(url)}
+          alt={t('community.photoAlt', { n: index + 1, name })}
+          priority={priority && index === 0}
+          onOpen={setLightbox}
+        />
+      ))}
+    </div>
+  )
+
+  const likeButton = (
+    <button
+      type="button"
+      className="cm-action is-like"
+      aria-pressed={post.liked_by_me}
+      aria-label={`${post.liked_by_me ? t('community.unlike') : t('community.like')} (${post.like_count})`}
+      onClick={toggleLike}
+    >
+      <span className="cm-action-icon">
+        <span className={`cm-heart${heartAnim ? ` is-${heartAnim}` : ''}`} onAnimationEnd={() => setHeartAnim(null)}>
+          <Heart size={variant === 'detail' ? 20 : 18} aria-hidden="true" fill={post.liked_by_me ? 'currentColor' : 'none'} />
+        </span>
+      </span>
+      {variant === 'timeline' && <RollingCount value={post.like_count} />}
+    </button>
+  )
+
+  if (variant === 'detail') {
+    return (
+      <article className="cm-detail">
+        <header className="cm-detail-head">
+          <Link to={`/community/u/${post.author.username}`} className="cm-detail-author">
+            <Avatar name={name} url={post.author.avatar_url} priority={priority} />
+            <span className="cm-detail-author-text">
+              <span className="cm-detail-author-name">
+                {name}
+                {post.author.is_private && <Lock size={13} className="cm-post-lock" aria-hidden="true" />}
+              </span>
+              <span className="cm-detail-author-handle">@{post.author.username}</span>
+            </span>
+          </Link>
+          {optionsMenu}
+        </header>
+
+        {post.body && <MentionText text={post.body} />}
+        {photosBlock}
+        <ResultCard post={post} />
+
+        <time className="cm-detail-time" dateTime={post.created_at}>
+          {formatDetailTime(post.created_at)}
+        </time>
+
+        {(post.comment_count > 0 || post.like_count > 0) && (
+          <div className="cm-detail-stats">
+            {post.comment_count > 0 && (
+              <span>
+                <strong>{post.comment_count.toLocaleString(locale())}</strong> {t('community.replies')}
+              </span>
+            )}
+            {post.like_count > 0 && (
+              <span>
+                <strong>{post.like_count.toLocaleString(locale())}</strong> {t('community.likes')}
+              </span>
+            )}
+          </div>
+        )}
+
+        <footer className="cm-detail-actions">
+          <button
+            type="button"
+            className="cm-action is-reply"
+            aria-label={t('community.reply')}
+            onClick={onReplyClick}
+          >
+            <span className="cm-action-icon">
+              <MessageCircle size={20} aria-hidden="true" />
+            </span>
+          </button>
+          {likeButton}
+        </footer>
+
+        {error && <p className="cm-error" role="alert">{error}</p>}
+        <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />
+      </article>
+    )
+  }
+
+  return (
+    <article className="cm-post is-clickable" onClick={handleCardClick}>
+      {/* The name link below already leads to the profile; this one is for the eye and the finger. */}
+      <Link to={`/community/u/${post.author.username}`} className="cm-post-avatar" tabIndex={-1} aria-hidden="true">
+        <Avatar name={name} url={post.author.avatar_url} priority={priority} />
+      </Link>
+      <div className="cm-post-main">
+        <header className="cm-post-head">
+          <div className="cm-post-byline-wrap">
+            <Link to={`/community/u/${post.author.username}`} className="cm-post-byline">
+              <strong>{name}</strong>
+              {post.author.is_private && <Lock size={13} className="cm-post-lock" aria-hidden="true" />}
+              <span className="cm-post-handle">@{post.author.username}</span>
+            </Link>
+            <span aria-hidden="true">·</span>
+            <Link to={`/community/post/${post.id}`} className="cm-post-time">
+              <time dateTime={post.created_at} title={new Date(post.created_at).toLocaleString(locale())}>
+                {timeAgo(post.created_at)}
+              </time>
+            </Link>
+          </div>
+          {optionsMenu}
+        </header>
+
+        {post.body && <MentionText text={post.body} />}
+        {photosBlock}
+        <ResultCard post={post} />
+
+        <footer className="cm-actions">
+          <Link
+            className="cm-action is-reply"
+            to={`/community/post/${post.id}`}
+            aria-label={t('community.commentCount', { count: post.comment_count })}
+          >
+            <span className="cm-action-icon">
+              <MessageCircle size={18} aria-hidden="true" />
+            </span>
+            <RollingCount value={post.comment_count} />
+          </Link>
+          {likeButton}
+        </footer>
+
+        {error && <p className="cm-error" role="alert">{error}</p>}
+      </div>
+      <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />
     </article>
   )
 }

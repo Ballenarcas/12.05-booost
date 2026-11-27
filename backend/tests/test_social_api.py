@@ -502,7 +502,10 @@ def test_pagination_has_no_gaps_or_repeats(world, mode):
         if not page["next_cursor"]:
             break
         params = {"before": page["next_cursor"]}
-    assert seen == posts[::-1]
+    # Following is by date; For you is ranked (here the followed friend's posts come first).
+    assert len(seen) == len(set(seen)) == len(posts)
+    if mode == "following":
+        assert seen == posts[::-1]
 
 
 def test_bad_feed_and_search_input(world):
@@ -569,3 +572,53 @@ def test_media_is_served_only_with_a_valid_token(world):
     social_facade._forget_media("post-images", [path for _, path in world.db.storage.objects])
     world.db.storage.objects.clear()
     assert world.client.get(url).status_code == 404
+
+
+# --- "For you": the discover feed ranked by interest ---
+
+def _ago(**delta):
+    return (datetime.now(timezone.utc) - timedelta(**delta)).isoformat()
+
+
+def test_for_you_puts_a_liked_post_above_a_newer_quiet_one(world):
+    me, author = world.db.make_user(), world.db.make_user()
+    quiet = world.db.make_post(author, created_at=_ago(minutes=5))
+    liked = world.db.make_post(author, created_at=_ago(hours=3), like_count=12, comment_count=4)
+    assert world.feed_ids(me, "discover")[:2] == [liked, quiet]
+
+
+def test_for_you_favours_people_you_follow_when_all_else_is_equal(world):
+    me, followed, stranger = world.db.make_user(), world.db.make_user(), world.db.make_user()
+    world.db.follow(me, followed)
+    from_stranger = world.db.make_post(stranger, created_at=_ago(hours=1), like_count=2)
+    from_followed = world.db.make_post(followed, created_at=_ago(hours=1, seconds=1), like_count=2)
+    assert world.feed_ids(me, "discover")[:2] == [from_followed, from_stranger]
+
+
+def test_for_you_pages_through_ranked_and_older_posts_without_repeats(world, monkeypatch):
+    monkeypatch.setattr(social_facade, "FYP_CANDIDATES", 7)
+    me, author = world.db.make_user(), world.db.make_user()
+    posts = [world.db.make_post(author, like_count=n % 4) for n in range(31)]
+    seen, params = [], {"limit": 5}
+    while True:
+        page = world.feed(me, "discover", **params)
+        seen += [item["id"] for item in page["items"]]
+        if not page["next_cursor"]:
+            break
+        params = {"limit": 5, "before": page["next_cursor"]}
+    assert len(seen) == len(set(seen)) == len(posts)
+
+
+def test_for_you_still_hides_private_and_blocked_authors(world):
+    me, private, blocker = world.db.make_user(), world.db.make_user(private=True), world.db.make_user()
+    hidden = world.db.make_post(private, like_count=50)
+    blocked = world.db.make_post(blocker, like_count=50)
+    world.db.tables["social_blocks"].append({"blocker_id": blocker, "blocked_id": me})
+    assert not {hidden, blocked} & set(world.feed_ids(me, "discover"))
+
+
+def test_bad_feed_cursors_are_refused(world):
+    user = world.db.make_user()
+    for mode, cursor in (("discover", "rank:-1"), ("discover", "rank:x"), ("discover", "rank:999999"),
+                         ("following", "rank:3"), ("discover", "yesterday")):
+        assert world.get("/feed", user, params={"mode": mode, "before": cursor}).status_code == 422, cursor
