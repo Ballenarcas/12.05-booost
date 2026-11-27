@@ -4,6 +4,7 @@ import Composer from '../components/community/Composer'
 import JoinCommunity from '../components/community/JoinCommunity'
 import MemberRow from '../components/community/MemberRow'
 import PostList from '../components/community/PostList'
+import { PostSkeleton } from '../components/community/Skeleton'
 import { fetchFeed, lastFeedPage, rememberNewPost, searchMembers } from '../services/api'
 import type { FeedMode, Member } from '../types/social'
 import { describeError } from '../utils/errors.js'
@@ -14,7 +15,7 @@ import '../styles/community.css'
 function Feed({ mode }: { mode: FeedMode }) {
   const t = useT()
   const load = useCallback((before?: string) => fetchFeed(mode, before), [mode])
-  return <PostList load={load} initial={lastFeedPage(mode)} empty={mode === 'following' ? t('community.emptyFollowing') : t('community.emptyDiscover')} />
+  return <PostList live load={load} initial={lastFeedPage(mode)} empty={mode === 'following' ? t('community.emptyFollowing') : t('community.emptyDiscover')} />
 }
 
 export default function Community() {
@@ -30,6 +31,15 @@ export default function Community() {
   // Asked together with /me, not after it; the feed then reuses this request. Someone who has not
   // joined gets a refusal here, which is ignored.
   useEffect(() => { void fetchFeed('following').catch(() => undefined) }, [])
+
+  // Once joined, quietly warm the inactive feed tab on idle so switching Following <-> Discover feels instant.
+  useEffect(() => {
+    if (!me?.joined) return
+    const other: FeedMode = mode === 'following' ? 'discover' : 'following'
+    if (lastFeedPage(other)) return
+    const timer = window.setTimeout(() => { void fetchFeed(other).catch(() => undefined) }, 400)
+    return () => window.clearTimeout(timer)
+  }, [me?.joined, mode])
 
   useEffect(() => {
     if (term.length < 2) return
@@ -57,10 +67,10 @@ export default function Community() {
       </header>
 
       {meError && <p className="cm-error" role="alert">{meError}</p>}
-      {!me && !meError && <p className="hifi-muted" role="status">{t('common.loading')}</p>}
+      {!me && !meError && !lastFeedPage(mode) && <PostSkeleton count={3} />}
       {me && !me.joined && <JoinCommunity onJoined={setMe} />}
 
-      {me?.joined && (
+      {(me?.joined || (!me && !meError && Boolean(lastFeedPage(mode)))) && (
         <>
           <label className="cm-search">
             <Search size={18} aria-hidden="true" />

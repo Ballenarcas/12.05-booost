@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Avatar from '../components/community/Avatar'
 import PostList from '../components/community/PostList'
+import { ProfileSkeleton } from '../components/community/Skeleton'
 import { blockMember, fetchMember, fetchMemberPosts, followMember, unblockMember, unfollowMember } from '../services/api'
 import type { MemberProfile } from '../types/social'
 import { describeError } from '../utils/errors.js'
@@ -45,7 +46,7 @@ function MemberPage({ username }: { username: string }) {
   if (!profile) {
     return error
       ? <p className="cm-error" role="alert">{error}</p>
-      : <p className="hifi-muted" role="status">{t('common.loading')}</p>
+      : <ProfileSkeleton />
   }
 
   const member = profile.user

@@ -1,5 +1,5 @@
 import { Heart, MessageCircle, MoreHorizontal, Trash2 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { blockMember, deletePost, mediaUrl, setPostLike } from '../../services/api'
 import type { Post, PrCardData, StreakCardData, WorkoutCardData } from '../../types/social'
@@ -7,6 +7,7 @@ import { describeError } from '../../utils/errors.js'
 import { splitMentions } from '../../utils/mentions'
 import { locale, useT } from '../../i18n'
 import Avatar from './Avatar'
+import RollingCount from './RollingCount'
 
 /** Post and comment text. Only React text nodes and internal links: nothing is read as HTML. */
 export function MentionText({ text }: { text: string }) {
@@ -59,14 +60,38 @@ function ResultCard({ post }: { post: Post }) {
   )
 }
 
+function FeedPhoto({ src, alt, priority }: { src: string; alt: string; priority: boolean }) {
+  const [loaded, setLoaded] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const checkCached = useCallback((el: HTMLImageElement | null) => {
+    if (el && el.complete && el.naturalWidth > 0) setLoaded(true)
+  }, [])
+
+  return (
+    <span className={`cm-photo-frame${loaded ? ' is-loaded' : failed ? ' is-error' : ' is-loading'}`}>
+      <img
+        ref={checkCached}
+        src={src}
+        alt={alt}
+        loading={priority ? 'eager' : 'lazy'}
+        fetchPriority={priority ? 'high' : 'auto'}
+        decoding="async"
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+      />
+    </span>
+  )
+}
+
 type Props = {
   post: Post
+  priority?: boolean
   onChange: (update: (current: Post) => Post) => void
   onDeleted: (postId: string) => void
   onBlocked: (authorId: string) => void
 }
 
-export default function PostCard({ post, onChange, onDeleted, onBlocked }: Props) {
+export default function PostCard({ post, priority = false, onChange, onDeleted, onBlocked }: Props) {
   const t = useT()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -139,7 +164,7 @@ export default function PostCard({ post, onChange, onDeleted, onBlocked }: Props
     <article className="hifi-card cm-post">
       <header className="cm-post-head">
         <Link to={`/community/u/${post.author.username}`} className="cm-author">
-          <Avatar name={name} url={post.author.avatar_url} />
+          <Avatar name={name} url={post.author.avatar_url} priority={priority} />
           <span className="cm-author-text">
             <strong>{name}</strong>
             <span>
@@ -162,7 +187,12 @@ export default function PostCard({ post, onChange, onDeleted, onBlocked }: Props
       {post.image_urls.length > 0 && (
         <div className="cm-photos" data-count={post.image_urls.length}>
           {post.image_urls.map((url, index) => (
-            <img key={url} src={mediaUrl(url)} alt={t('community.photoAlt', { n: index + 1, name })} loading="lazy" />
+            <FeedPhoto
+              key={url}
+              src={mediaUrl(url)}
+              alt={t('community.photoAlt', { n: index + 1, name })}
+              priority={priority && index === 0}
+            />
           ))}
         </div>
       )}
@@ -180,11 +210,11 @@ export default function PostCard({ post, onChange, onDeleted, onBlocked }: Props
           <span className={`cm-heart${heartAnim ? ` is-${heartAnim}` : ''}`} onAnimationEnd={() => setHeartAnim(null)}>
             <Heart size={18} aria-hidden="true" fill={post.liked_by_me ? 'currentColor' : 'none'} />
           </span>
-          <span aria-hidden="true">{post.like_count}</span>
+          <RollingCount value={post.like_count} />
         </button>
         <Link className="cm-action" to={`/community/post/${post.id}`} aria-label={t('community.commentCount', { count: post.comment_count })}>
           <MessageCircle size={18} aria-hidden="true" />
-          <span aria-hidden="true">{post.comment_count}</span>
+          <RollingCount value={post.comment_count} />
         </Link>
         {post.can_delete && (
           <button type="button" className="cm-action is-end" disabled={busy} onClick={remove} aria-label={t('common.delete')}>

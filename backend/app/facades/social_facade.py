@@ -5,9 +5,10 @@ context once, then ask ``can_view``. Anything the viewer may not see is "not fou
 """
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+import time
 from collections import OrderedDict
-from threading import Lock
+from datetime import date, datetime, timedelta, timezone
+from threading import Event, Lock
 from typing import Any
 from uuid import uuid4
 
@@ -50,8 +51,18 @@ MAX_PHOTOS = 4
 MAX_ATTACHABLE_WORKOUTS = 10
 PREVIEW_MEMBERS = 4
 POST_PHOTO_SIDE = 1080
+POST_PHOTO_QUALITY = 78
+AVATAR_SIDE = 256
+AVATAR_QUALITY = 78
 PREVIEW_ROWS = 12  # a few spare rows for blocked or departed members
 POST_COLUMNS = "id,user_id,body,image_paths,card_type,card,like_count,comment_count,created_at"
+SIGNED_URL_TTL_SECONDS = 7200
+SIGNED_URL_CACHE_SECONDS = 2700  # stable CDN URLs for 45 min so browser HTTP cache hits across views
+SIGNED_URL_CACHE_MAX = 4000
+CONTEXT_CACHE_TTL_SECONDS = 15.0
+CONTEXT_CACHE_MAX = 1000
+AUTHOR_CACHE_TTL_SECONDS = 60.0
+AUTHOR_CACHE_MAX = 2000
 
 
 class NotFound(Exception):
@@ -127,6 +138,20 @@ _media_cache: OrderedDict[tuple[str, str], bytes] = OrderedDict()
 _media_cache_size = 0
 _media_epoch = 0
 _media_lock = Lock()
+_media_inflight: dict[tuple[str, str], Event] = {}
+
+# Direct Supabase Storage signed CDN URLs: one batch API call signs every photo and avatar on a
+# feed page, so the browser fetches images directly from Supabase's CDN over HTTP/2 instead of
+# proxying every file through FastAPI.
+_signed_url_cache: OrderedDict[tuple[int, str, str], tuple[float, str]] = OrderedDict()
+_signed_url_lock = Lock()
+
+# Short TTL caches for viewer context (blocked/following sets) and author rows, keyed with
+# session identity so isolated test sessions never collide and mutations invalidate immediately.
+_context_cache: OrderedDict[tuple[int, str], tuple[float, dict[str, Any], rules.ViewerContext]] = OrderedDict()
+_context_inflight: dict[tuple[int, str], Event] = {}
+_author_cache: OrderedDict[tuple[int, str], tuple[float, dict[str, Any]]] = OrderedDict()
+_social_cache_lock = Lock()
 
 
 def _cached_media(key: tuple[str, str]) -> tuple[bytes | None, int]:
@@ -160,6 +185,11 @@ def _forget_media(bucket: str, paths: list[str]) -> None:
             dropped = _media_cache.pop((bucket, path), None)
             if dropped is not None:
                 _media_cache_size -= len(dropped)
+    path_set = set(paths)
+    with _signed_url_lock:
+        stale = [key for key in _signed_url_cache if key[1] == bucket and key[2] in path_set]
+        for key in stale:
+            _signed_url_cache.pop(key, None)
 
 
 def _remove_files(bucket: str, paths: list[str]) -> None:
@@ -173,32 +203,160 @@ def _remove_files(bucket: str, paths: list[str]) -> None:
         logger.exception("Could not delete stored files")
 
 
-def _media_url(bucket: str, path: str) -> str:
+def _fallback_media_url(bucket: str, path: str) -> str:
     return f"/api/v1/social/media/{media_token.sign(bucket, path)}"
+
+
+def _resolve_media_urls(pairs: list[tuple[str, str]]) -> dict[tuple[str, str], str]:
+    """Resolves (bucket, path) pairs to direct Supabase CDN signed URLs in one batch wave.
+
+    Cached for 45 min (URLs live 2 h) so repeated feed loads reuse the exact same URL and hit
+    browser HTTP cache. Falls back to the backend proxy route if Storage batch signing fails.
+    """
+    unique = list(dict.fromkeys(pair for pair in pairs if pair[1]))
+    if not unique:
+        return {}
+    storage = get_storage()
+    if storage is None:
+        return {pair: _fallback_media_url(pair[0], pair[1]) for pair in unique}
+
+    storage_id = id(storage)
+    now = time.monotonic()
+    resolved: dict[tuple[str, str], str] = {}
+    missing_by_bucket: dict[str, list[str]] = {}
+
+    with _signed_url_lock:
+        for bucket, path in unique:
+            cache_key = (storage_id, bucket, path)
+            hit = _signed_url_cache.get(cache_key)
+            if hit is not None and hit[0] > now:
+                _signed_url_cache.move_to_end(cache_key)
+                resolved[(bucket, path)] = hit[1]
+            else:
+                if hit is not None:
+                    _signed_url_cache.pop(cache_key, None)
+                missing_by_bucket.setdefault(bucket, []).append(path)
+
+    if missing_by_bucket:
+        def sign_bucket(bucket: str, paths: list[str]) -> list[tuple[str, str, str]]:
+            signed: list[tuple[str, str, str]] = []
+            try:
+                bucket_client = storage.from_(bucket)
+                if not hasattr(bucket_client, "create_signed_urls"):
+                    return signed
+                for batch in rules.chunks(paths):
+                    response = bucket_client.create_signed_urls(batch, SIGNED_URL_TTL_SECONDS) or []
+                    for item in response:
+                        if not isinstance(item, dict) or item.get("error"):
+                            continue
+                        item_path = item.get("path")
+                        url = item.get("signedURL") or item.get("signedUrl")
+                        if item_path and isinstance(url, str) and url.startswith(("http://", "https://")):
+                            signed.append((bucket, str(item_path), url))
+            except Exception:
+                logger.warning("Batch signed URLs unavailable for bucket %s; using proxy fallback", bucket, exc_info=True)
+            return signed
+
+        waves = rules.together(*[
+            lambda bucket=bucket, paths=paths: sign_bucket(bucket, paths)
+            for bucket, paths in missing_by_bucket.items()
+        ])
+        expires_at = time.monotonic() + SIGNED_URL_CACHE_SECONDS
+        with _signed_url_lock:
+            for wave in waves:
+                for bucket, path, url in wave:
+                    resolved[(bucket, path)] = url
+                    cache_key = (storage_id, bucket, path)
+                    _signed_url_cache[cache_key] = (expires_at, url)
+                    _signed_url_cache.move_to_end(cache_key)
+            while len(_signed_url_cache) > SIGNED_URL_CACHE_MAX:
+                _signed_url_cache.popitem(last=False)
+
+    for bucket, path in unique:
+        if (bucket, path) not in resolved:
+            resolved[(bucket, path)] = _fallback_media_url(bucket, path)
+    return resolved
+
+
+def _invalidate_social_caches(*user_ids: str, drop_authors: bool = False, clear_all_contexts: bool = False) -> None:
+    targets = {str(uid) for uid in user_ids if uid}
+    with _social_cache_lock:
+        if clear_all_contexts:
+            _context_cache.clear()
+        elif targets:
+            for key in [k for k in _context_cache if k[1] in targets]:
+                _context_cache.pop(key, None)
+        if drop_authors and targets:
+            for key in [k for k in _author_cache if k[1] in targets]:
+                _author_cache.pop(key, None)
+
+
+def _store_author(session_id: int, row: dict[str, Any]) -> None:
+    uid = str(row["id"])
+    expires_at = time.monotonic() + AUTHOR_CACHE_TTL_SECONDS
+    with _social_cache_lock:
+        key = (session_id, uid)
+        _author_cache[key] = (expires_at, dict(row))
+        _author_cache.move_to_end(key)
+        while len(_author_cache) > AUTHOR_CACHE_MAX:
+            _author_cache.popitem(last=False)
 
 
 # --- reading users ---
 
 def _user(session: Any, user_id: str) -> dict[str, Any] | None:
+    session_id = id(session)
+    now = time.monotonic()
+    with _social_cache_lock:
+        hit = _author_cache.get((session_id, user_id))
+        if hit is not None and hit[0] > now:
+            _author_cache.move_to_end((session_id, user_id))
+            return dict(hit[1])
     rows = session.table("users").select(rules.AUTHOR_COLUMNS).eq("id", user_id).limit(1).execute().data or []
-    return rows[0] if rows else None
+    if rows:
+        _store_author(session_id, rows[0])
+        return rows[0]
+    return None
 
 
 def _authors(session: Any, user_ids: list[str]) -> dict[str, dict[str, Any]]:
+    unique_ids = list(dict.fromkeys(str(value) for value in user_ids))
+    if not unique_ids:
+        return {}
+    session_id = id(session)
+    now = time.monotonic()
     found: dict[str, dict[str, Any]] = {}
-    for batch in rules.chunks(list(dict.fromkeys(str(value) for value in user_ids))):
+    missing: list[str] = []
+    with _social_cache_lock:
+        for uid in unique_ids:
+            key = (session_id, uid)
+            hit = _author_cache.get(key)
+            if hit is not None and hit[0] > now:
+                _author_cache.move_to_end(key)
+                found[uid] = dict(hit[1])
+            else:
+                if hit is not None:
+                    _author_cache.pop(key, None)
+                missing.append(uid)
+    for batch in rules.chunks(missing):
         for row in session.table("users").select(rules.AUTHOR_COLUMNS).in_("id", batch).execute().data or []:
-            found[str(row["id"])] = row
+            uid = str(row["id"])
+            found[uid] = row
+            _store_author(session_id, row)
     return found
 
 
-def _author_out(row: dict[str, Any]) -> AuthorOut:
+def _author_out(row: dict[str, Any], urls: dict[tuple[str, str], str] | None = None) -> AuthorOut:
     avatar = row.get("avatar_path")
+    if avatar:
+        avatar_url = urls.get((AVATARS, avatar)) if urls is not None else _resolve_media_urls([(AVATARS, avatar)]).get((AVATARS, avatar))
+    else:
+        avatar_url = None
     return AuthorOut(
         id=str(row["id"]),
         username=row.get("username") or "",
         name=rules.clean_label(f"{row.get('Name') or ''} {row.get('Surname') or ''}", 80),
-        avatar_url=_media_url(AVATARS, avatar) if avatar else None,
+        avatar_url=avatar_url,
         is_private=bool(row.get("is_private")),
     )
 
@@ -207,10 +365,52 @@ def _listed(session: Any, ctx: rules.ViewerContext, user_ids: list[str],
             authors: dict[str, dict[str, Any]] | None = None) -> list[AuthorOut]:
     """Members in the given order, without anyone blocked or not joined."""
     authors = _authors(session, user_ids) if authors is None else authors
-    return [
-        _author_out(authors[key]) for key in user_ids
+    visible_rows = [
+        authors[key] for key in user_ids
         if key in authors and authors[key].get("username") and key not in ctx.blocked_ids
     ]
+    urls = _resolve_media_urls([(AVATARS, row["avatar_path"]) for row in visible_rows if row.get("avatar_path")])
+    return [_author_out(row, urls) for row in visible_rows]
+
+
+def _store_viewer(session_id: int, user_id: str, me: dict[str, Any], ctx: rules.ViewerContext) -> None:
+    if not me or not me.get("username"):
+        return
+    expires_at = time.monotonic() + CONTEXT_CACHE_TTL_SECONDS
+    with _social_cache_lock:
+        key = (session_id, user_id)
+        _context_cache[key] = (
+            expires_at,
+            dict(me),
+            rules.ViewerContext(
+                viewer_id=ctx.viewer_id,
+                blocked_ids=set(ctx.blocked_ids),
+                following_ids=set(ctx.following_ids),
+            ),
+        )
+        _context_cache.move_to_end(key)
+        while len(_context_cache) > CONTEXT_CACHE_MAX:
+            _context_cache.popitem(last=False)
+
+
+def _cached_viewer(session_id: int, user_id: str) -> tuple[dict[str, Any], rules.ViewerContext] | None:
+    now = time.monotonic()
+    with _social_cache_lock:
+        hit = _context_cache.get((session_id, user_id))
+        if hit is not None and hit[0] > now:
+            _context_cache.move_to_end((session_id, user_id))
+            cached_me, cached_ctx = hit[1], hit[2]
+            return (
+                dict(cached_me),
+                rules.ViewerContext(
+                    viewer_id=cached_ctx.viewer_id,
+                    blocked_ids=set(cached_ctx.blocked_ids),
+                    following_ids=set(cached_ctx.following_ids),
+                ),
+            )
+        if hit is not None:
+            _context_cache.pop((session_id, user_id), None)
+    return None
 
 
 def _viewer(user_id: str, *extra: Any) -> tuple[Any, ...]:
@@ -219,11 +419,56 @@ def _viewer(user_id: str, *extra: Any) -> tuple[Any, ...]:
     Returns ``(session, me, ctx, *extra_results)``.
     """
     session = _session()
-    me, ctx, *rest = rules.together(
-        lambda: _user(session, user_id),
-        lambda: rules.load_context(session, user_id),
-        *[lambda read=read: read(session) for read in extra],
-    )
+    session_id = id(session)
+    cache_key = (session_id, user_id)
+    cached = _cached_viewer(session_id, user_id)
+    if cached is not None:
+        me, ctx = cached
+        rest = rules.together(*[lambda read=read: read(session) for read in extra]) if extra else ()
+        return (session, me, ctx, *rest)
+
+    # Single-flight: concurrent /me and /feed requests share one context read instead of doubling queries.
+    with _social_cache_lock:
+        waiter = _context_inflight.get(cache_key)
+        owner = waiter is None
+        if owner:
+            waiter = Event()
+            _context_inflight[cache_key] = waiter
+
+    if not owner:
+        def wait_cached() -> tuple[dict[str, Any], rules.ViewerContext] | None:
+            waiter.wait(timeout=10.0)
+            return _cached_viewer(session_id, user_id)
+
+        cached, *rest = rules.together(
+            wait_cached,
+            *[lambda read=read: read(session) for read in extra],
+        )
+        if cached is not None:
+            me, ctx = cached
+            return (session, me, ctx, *rest)
+        me, ctx = rules.together(
+            lambda: _user(session, user_id),
+            lambda: rules.load_context(session, user_id),
+        )
+        _store_viewer(session_id, user_id, me, ctx)
+        if not me or not me.get("username"):
+            raise NotJoined()
+        return (session, me, ctx, *rest)
+
+    try:
+        me, ctx, *rest = rules.together(
+            lambda: _user(session, user_id),
+            lambda: rules.load_context(session, user_id),
+            *[lambda read=read: read(session) for read in extra],
+        )
+        _store_viewer(session_id, user_id, me, ctx)
+    finally:
+        with _social_cache_lock:
+            done = _context_inflight.pop(cache_key, None)
+            if done is not None:
+                done.set()
+
     if not me or not me.get("username"):
         raise NotJoined()
     return (session, me, ctx, *rest)
@@ -278,24 +523,45 @@ def _liked(session: Any, viewer_id: str, post_ids: list[str]) -> set[str]:
 
 
 def _posts(session: Any, ctx: rules.ViewerContext, rows: list[dict[str, Any]],
-           authors: dict[str, dict[str, Any]] | None = None, liked: set[str] | None = None) -> list[PostOut]:
+           authors: dict[str, dict[str, Any]] | None = None, liked: set[str] | None = None,
+           timings: dict[str, float] | None = None) -> list[PostOut]:
     """Serializes posts, checking each one again: no image link is signed for a hidden post.
 
     Pass ``authors`` or ``liked`` when the caller already has them; the rest is read in one wave.
     """
     if not rows:
         return []
+    t0 = time.perf_counter()
     ids = [str(row["id"]) for row in rows]
     authors, liked = rules.together(
         lambda: _authors(session, [row["user_id"] for row in rows]) if authors is None else authors,
         lambda: _liked(session, ctx.viewer_id, ids) if liked is None else liked,
     )
+    t1 = time.perf_counter()
+    visible = [row for row in rows if rules.can_view(ctx, authors.get(str(row["user_id"])))]
+    if not visible:
+        if timings is not None:
+            timings["hydrate"] = (t1 - t0) * 1000
+        return []
+    media_pairs: list[tuple[str, str]] = []
+    for row in visible:
+        avatar = authors[str(row["user_id"])].get("avatar_path")
+        if avatar:
+            media_pairs.append((AVATARS, avatar))
+        for path in row.get("image_paths") or []:
+            media_pairs.append((PHOTOS, path))
+    urls = _resolve_media_urls(media_pairs)
+    t2 = time.perf_counter()
+    if timings is not None:
+        timings["hydrate"] = (t1 - t0) * 1000
+        timings["sign"] = (t2 - t1) * 1000
+        timings["cdn"] = 1.0 if any(u.startswith(("http://", "https://")) for u in urls.values()) else 0.0
     return [
         PostOut(
             id=str(row["id"]),
-            author=_author_out(authors[str(row["user_id"])]),
+            author=_author_out(authors[str(row["user_id"])], urls),
             body=row.get("body") or "",
-            image_urls=[_media_url(PHOTOS, path) for path in row.get("image_paths") or []],
+            image_urls=[urls[(PHOTOS, path)] for path in row.get("image_paths") or []],
             card_type=row.get("card_type"),
             card=_shown_card(row.get("card")),
             like_count=max(0, row.get("like_count") or 0),
@@ -304,25 +570,26 @@ def _posts(session: Any, ctx: rules.ViewerContext, rows: list[dict[str, Any]],
             can_delete=str(row["user_id"]) == ctx.viewer_id,
             created_at=row["created_at"],
         )
-        for row in rows if rules.can_view(ctx, authors.get(str(row["user_id"])))
+        for row in visible
     ]
 
 
-def _post_query(session: Any, before: datetime | None) -> Any:
+def _post_query(session: Any, before: datetime | None, limit: int = PAGE_POSTS) -> Any:
     query = session.table(POSTS).select(POST_COLUMNS)
     if before:
         before = before if before.tzinfo else before.replace(tzinfo=timezone.utc)
         query = query.lt("created_at", before.isoformat())
-    return query.order("created_at", desc=True).limit(PAGE_POSTS + 1)
+    return query.order("created_at", desc=True).limit(limit + 1)
 
 
 def _page(session: Any, ctx: rules.ViewerContext, rows: list[dict[str, Any]],
-          authors: dict[str, dict[str, Any]] | None = None) -> FeedPage:
+          authors: dict[str, dict[str, Any]] | None = None, limit: int = PAGE_POSTS,
+          timings: dict[str, float] | None = None) -> FeedPage:
     # The cursor comes from the rows read, not the rows shown, so hidden posts never end the feed early.
     # shortcut: a created_at-only cursor can skip posts sharing a timestamp; add an id tiebreak if seen.
-    shown = rows[:PAGE_POSTS]
-    cursor = str(shown[-1]["created_at"]) if len(rows) > PAGE_POSTS else None
-    return FeedPage(items=_posts(session, ctx, shown, authors), next_cursor=cursor)
+    shown = rows[:limit]
+    cursor = str(shown[-1]["created_at"]) if len(rows) > limit else None
+    return FeedPage(items=_posts(session, ctx, shown, authors, timings=timings), next_cursor=cursor)
 
 
 def _post_row(session: Any, post_id: str) -> dict[str, Any] | None:
@@ -380,12 +647,15 @@ class SocialFacade:
     # --- me ---
 
     def me(self, user_id: str) -> MeOut:
+        return self.me_timed(user_id)[0]
+
+    def me_timed(self, user_id: str) -> tuple[MeOut, str]:
+        t0 = time.perf_counter()
         session = _session()
-        row, ctx, followers, following, pending, followed = rules.together(
+        row, ctx, followers, pending, followed = rules.together(
             lambda: _user(session, user_id),
             lambda: rules.load_context(session, user_id),
             lambda: _follow_count(session, "followee_id", user_id),
-            lambda: _follow_count(session, "follower_id", user_id),
             lambda: _follow_count(session, "followee_id", user_id, "pending"),
             lambda: (session.table(FOLLOWS).select("followee_id").eq("follower_id", user_id)
                      .eq("status", "accepted").order("created_at", desc=True).limit(PREVIEW_ROWS)
@@ -393,20 +663,39 @@ class SocialFacade:
         )
         if not row:
             raise NotFound()
-        author = _author_out(row)
+        _store_viewer(id(session), user_id, row, ctx)
         joined = bool(row.get("username"))
-        preview = _listed(session, ctx, [str(item["followee_id"]) for item in followed])[:PREVIEW_MEMBERS]
-        return MeOut(
-            id=author.id,
-            joined=joined,
-            username=row.get("username"),
-            name=author.name,
-            is_private=author.is_private,
-            avatar_url=author.avatar_url,
-            followers=followers if joined else 0,
-            following=following if joined else 0,
-            pending_requests=pending if joined else 0,
-            following_preview=preview if joined else [],
+        following = len(ctx.following_ids) if joined else 0
+        followed_ids = [str(item["followee_id"]) for item in followed] if joined else []
+        preview_people = _authors(session, followed_ids) if followed_ids else {}
+        visible_preview = [
+            preview_people[key] for key in followed_ids
+            if key in preview_people and preview_people[key].get("username") and key not in ctx.blocked_ids
+        ][:PREVIEW_MEMBERS]
+        avatar_pairs: list[tuple[str, str]] = []
+        if row.get("avatar_path"):
+            avatar_pairs.append((AVATARS, row["avatar_path"]))
+        for person in visible_preview:
+            if person.get("avatar_path"):
+                avatar_pairs.append((AVATARS, person["avatar_path"]))
+        urls = _resolve_media_urls(avatar_pairs)
+        author = _author_out(row, urls)
+        preview = [_author_out(person, urls) for person in visible_preview]
+        total_ms = (time.perf_counter() - t0) * 1000
+        return (
+            MeOut(
+                id=author.id,
+                joined=joined,
+                username=row.get("username"),
+                name=author.name,
+                is_private=author.is_private,
+                avatar_url=author.avatar_url,
+                followers=followers if joined else 0,
+                following=following,
+                pending_requests=pending if joined else 0,
+                following_preview=preview,
+            ),
+            f"total;dur={total_ms:.1f}",
         )
 
     def _claim_username(self, session: Any, user_id: str, username: str, values: dict[str, Any]) -> None:
@@ -429,6 +718,7 @@ class SocialFacade:
             raise ValueError("You already joined the Community.")
         self._claim_username(session, user_id, rules.validate_username(username),
                              {"is_private": is_private, "community_joined_at": _now().isoformat()})
+        _invalidate_social_caches(user_id, drop_authors=True)
         return self.me(user_id)
 
     def update_me(self, user_id: str, username: str | None, is_private: bool | None) -> MeOut:
@@ -446,6 +736,7 @@ class SocialFacade:
         if is_private is False:
             session.table(FOLLOWS).update({"status": "accepted"}).eq("followee_id", user_id).eq(
                 "status", "pending").execute()
+        _invalidate_social_caches(user_id, drop_authors=True, clear_all_contexts=(is_private is False))
         return self.me(user_id)
 
     def set_avatar(self, user_id: str, data: bytes) -> MeOut:
@@ -454,7 +745,7 @@ class SocialFacade:
         if not row:
             raise NotFound()
         _use_photo_quota(user_id, 1)
-        image = reencode(data, 512, square=True)
+        image = reencode(data, AVATAR_SIDE, square=True, quality=AVATAR_QUALITY)
         path = f"{user_id}/{uuid4()}.webp"  # a new name each time, so no cache shows the old photo
         _upload(AVATARS, path, image)
         try:
@@ -464,6 +755,7 @@ class SocialFacade:
             raise
         if row.get("avatar_path"):
             _remove_files(AVATARS, [row["avatar_path"]])
+        _invalidate_social_caches(user_id, drop_authors=True)
         return self.me(user_id)
 
     def remove_avatar(self, user_id: str) -> MeOut:
@@ -472,6 +764,7 @@ class SocialFacade:
         if row and row.get("avatar_path"):
             session.table("users").update({"avatar_path": None}).eq("id", user_id).execute()
             _remove_files(AVATARS, [row["avatar_path"]])
+            _invalidate_social_caches(user_id, drop_authors=True)
         return self.me(user_id)
 
     # --- posts ---
@@ -512,8 +805,8 @@ class SocialFacade:
         if not (text or images or card_data):
             raise ValueError("Write something, add a photo or attach a card.")
         _use_photo_quota(user_id, len(images))
-        # 1080 px stays sharp on a phone at 2x and is about half the bytes of 1600 px.
-        encoded = [reencode(image, POST_PHOTO_SIDE) for image in images]
+        # 1080 px at quality 78 stays sharp on a phone at 2x while cutting ~30% off download size.
+        encoded = [reencode(image, POST_PHOTO_SIDE, quality=POST_PHOTO_QUALITY) for image in images]
 
         post_id = str(uuid4())
         paths = [f"{user_id}/{post_id}/{number}.webp" for number in range(len(encoded))]
@@ -537,22 +830,53 @@ class SocialFacade:
             raise
         return _posts(session, ctx, [row], {user_id: me}, set())[0]
 
-    def feed(self, user_id: str, mode: str, before: datetime | None) -> FeedPage:
+    def feed(self, user_id: str, mode: str, before: datetime | None, limit: int = PAGE_POSTS) -> FeedPage:
+        return self.feed_timed(user_id, mode, before, limit)[0]
+
+    def feed_timed(self, user_id: str, mode: str, before: datetime | None,
+                   limit: int = PAGE_POSTS) -> tuple[FeedPage, str]:
+        page_limit = max(1, min(PAGE_POSTS, limit))
+        t0 = time.perf_counter()
+        timings: dict[str, float] = {}
         if mode != "following":
             # Discover rows don't depend on who asks, so they are read with the viewer's context.
             # Blocked authors are dropped when serializing, which keeps them out of the query string.
             session, _, ctx, rows = _viewer(
-                user_id, lambda s: _post_query(s, before).eq("author_private", False).execute().data or [])
-            return _page(session, ctx, rows)
+                user_id, lambda s: _post_query(s, before, page_limit).eq("author_private", False).execute().data or [])
+            t1 = time.perf_counter()
+            page = _page(session, ctx, rows, limit=page_limit, timings=timings)
+            t2 = time.perf_counter()
+            timing = (
+                f"query;dur={(t1 - t0) * 1000:.1f}, "
+                f"hydrate;dur={timings.get('hydrate', 0.0):.1f}, "
+                f"sign;dur={timings.get('sign', 0.0):.1f}, "
+                f"total;dur={(t2 - t0) * 1000:.1f}"
+            )
+            logger.info("Social feed mode=%s limit=%d items=%d cdn=%d %s",
+                        mode, page_limit, len(page.items), int(timings.get("cdn", 0)), timing)
+            return page, timing
         session, _, ctx = _viewer(user_id)
+        t1 = time.perf_counter()
         # In batches so the query string stays short; the newest of all batches win.
         batches = rules.together(*[
-            lambda batch=batch: _post_query(session, before).in_("user_id", batch).execute().data or []
+            lambda batch=batch: _post_query(session, before, page_limit).in_("user_id", batch).execute().data or []
             for batch in rules.chunks([user_id, *sorted(ctx.following_ids)])
         ])
         rows = [row for batch in batches for row in batch]
         rows.sort(key=lambda row: datetime.fromisoformat(str(row["created_at"]).replace("Z", "+00:00")), reverse=True)
-        return _page(session, ctx, rows[:PAGE_POSTS + 1])
+        t2 = time.perf_counter()
+        page = _page(session, ctx, rows[:page_limit + 1], limit=page_limit, timings=timings)
+        t3 = time.perf_counter()
+        timing = (
+            f"viewer;dur={(t1 - t0) * 1000:.1f}, "
+            f"query;dur={(t2 - t1) * 1000:.1f}, "
+            f"hydrate;dur={timings.get('hydrate', 0.0):.1f}, "
+            f"sign;dur={timings.get('sign', 0.0):.1f}, "
+            f"total;dur={(t3 - t0) * 1000:.1f}"
+        )
+        logger.info("Social feed mode=%s limit=%d items=%d cdn=%d %s",
+                    mode, page_limit, len(page.items), int(timings.get("cdn", 0)), timing)
+        return page, timing
 
     def post(self, user_id: str, post_id: str) -> PostOut:
         session, _, ctx, row = _viewer(user_id, lambda s: _post_row(s, post_id))
@@ -649,7 +973,9 @@ class SocialFacade:
                        .ilike("search_text", f"%{term}%").neq("id", user_id).order("username")
                        .limit(MAX_SEARCH).execute().data or []),
         )
-        return [_author_out(row) for row in rows if str(row["id"]) not in ctx.blocked_ids]
+        visible = [row for row in rows if str(row["id"]) not in ctx.blocked_ids]
+        urls = _resolve_media_urls([(AVATARS, row["avatar_path"]) for row in visible if row.get("avatar_path")])
+        return [_author_out(row, urls) for row in visible]
 
     def _profile(self, session: Any, ctx: rules.ViewerContext, row: dict[str, Any]) -> ProfileOut:
         target = str(row["id"])
@@ -732,15 +1058,18 @@ class SocialFacade:
                 raise LimitReached("Daily limit reached. Try again tomorrow.")
             if status == "accepted":
                 ctx.following_ids.add(target_id)
+            _invalidate_social_caches(user_id, target_id)
         return self._profile(session, ctx, target)
 
     def unfollow(self, user_id: str, target_id: str) -> None:
         session, _, _ = _viewer(user_id)
         _delete_follow(session, user_id, target_id)
+        _invalidate_social_caches(user_id, target_id)
 
     def remove_follower(self, user_id: str, follower_id: str) -> None:
         session, _, _ = _viewer(user_id)
         _delete_follow(session, follower_id, user_id)
+        _invalidate_social_caches(user_id, follower_id)
 
     def follow_requests(self, user_id: str) -> list[AuthorOut]:
         session, _, ctx = _viewer(user_id)
@@ -755,10 +1084,12 @@ class SocialFacade:
                    .eq("followee_id", user_id).eq("status", "pending").execute().data)
         if not updated:
             raise NotFound()
+        _invalidate_social_caches(user_id, requester_id)
 
     def decline_request(self, user_id: str, requester_id: str) -> None:
         session, _, _ = _viewer(user_id)
         _delete_follow(session, requester_id, user_id, "pending")
+        _invalidate_social_caches(user_id, requester_id)
 
     # --- blocks ---
 
@@ -778,6 +1109,7 @@ class SocialFacade:
         # The block goes in first, so access is cut before the clean-up runs.
         session.table(BLOCKS).upsert({"blocker_id": user_id, "blocked_id": target_id},
                                      on_conflict="blocker_id,blocked_id", ignore_duplicates=True).execute()
+        _invalidate_social_caches(user_id, target_id)
         # After the block is stored, the clean-ups don't depend on each other.
         rules.together(
             lambda: _delete_follow(session, user_id, target_id),
@@ -789,14 +1121,19 @@ class SocialFacade:
     def unblock(self, user_id: str, target_id: str) -> None:
         session, _, _ = _viewer(user_id)
         session.table(BLOCKS).delete().eq("blocker_id", user_id).eq("blocked_id", target_id).execute()
+        _invalidate_social_caches(user_id, target_id)
 
     def blocks(self, user_id: str) -> list[AuthorOut]:
         session, _, _ = _viewer(user_id)
         rows = (session.table(BLOCKS).select("blocked_id").eq("blocker_id", user_id)
                 .order("created_at", desc=True).limit(MAX_BLOCKS_SHOWN).execute().data or [])
         authors = _authors(session, [str(row["blocked_id"]) for row in rows])
-        return [_author_out(authors[str(row["blocked_id"])]) for row in rows
-                if str(row["blocked_id"]) in authors and authors[str(row["blocked_id"])].get("username")]
+        visible = [
+            authors[str(row["blocked_id"])] for row in rows
+            if str(row["blocked_id"]) in authors and authors[str(row["blocked_id"])].get("username")
+        ]
+        urls = _resolve_media_urls([(AVATARS, row["avatar_path"]) for row in visible if row.get("avatar_path")])
+        return [_author_out(row, urls) for row in visible]
 
     # --- media ---
 
@@ -807,13 +1144,35 @@ class SocialFacade:
         cached, epoch = _cached_media(found)
         if cached is not None:
             return cached
+        # Single-flight: concurrent requests for the same uncached image share one Storage download.
+        with _media_lock:
+            cached = _media_cache.get(found)
+            if cached is not None:
+                _media_cache.move_to_end(found)
+                return cached
+            waiter = _media_inflight.get(found)
+            owner = waiter is None
+            if owner:
+                waiter = Event()
+                _media_inflight[found] = waiter
+        if not owner:
+            waiter.wait(timeout=30.0)
+            cached, _ = _cached_media(found)
+            if cached is not None:
+                return cached
         storage = _storage()
         try:
             data = storage.from_(found[0]).download(found[1])
+            _cache_media(found, data, epoch)
+            return data
         except Exception as error:
             raise NotFound() from error
-        _cache_media(found, data, epoch)
-        return data
+        finally:
+            if owner:
+                with _media_lock:
+                    done = _media_inflight.pop(found, None)
+                    if done is not None:
+                        done.set()
 
 
 social_facade = SocialFacade()

@@ -21,7 +21,7 @@
   position: fixed;
   z-index: 3;
   right: max(1rem, calc((100vw - 28rem) / 2 + 1rem));
-  bottom: calc(68px + env(safe-area-inset-bottom) + 0.75rem);
+  bottom: calc(76px + env(safe-area-inset-bottom) + 0.75rem);
   display: grid;
   width: 56px;
   height: 56px;
@@ -40,7 +40,7 @@
 ::view-transition-group(coach-fab) { animation: none; }
 /* Room to scroll the last content clear of the button; the workout bar pushes both up. */
 .app-shell:has(.coach-fab) .app-main { padding-bottom: calc(10rem + env(safe-area-inset-bottom)); }
-.app-shell:has(.workout-progress-bar) .coach-fab { bottom: calc(68px + env(safe-area-inset-bottom) + 5rem); }
+.app-shell:has(.workout-progress-bar) .coach-fab { bottom: calc(76px + env(safe-area-inset-bottom) + 5rem); }
 .app-shell:has(.workout-progress-bar):has(.coach-fab) .app-main { padding-bottom: calc(13.5rem + env(safe-area-inset-bottom)); }
 
 .session-main {

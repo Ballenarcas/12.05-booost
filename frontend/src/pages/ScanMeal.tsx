@@ -26,6 +26,7 @@ import frameImage from '../assets/scan/frame.svg'
 import shutterImage from '../assets/scan/shutter.svg'
 import { locale, t as tr, useT } from '../i18n'
 import '../styles/scan-meal.css'
+import Collapse from '../components/ui/Collapse'
 
 type ScanPhase = 'idle' | 'analyzing' | 'results' | 'saving' | 'error'
 
@@ -460,13 +461,13 @@ export default function ScanMeal() {
                       {expanded ? <ChevronUp size={15} aria-hidden="true" /> : <ChevronDown size={15} aria-hidden="true" />}
                       {t('scan.macros')}
                     </button>
-                    {expanded && (
+                    <Collapse open={expanded}>
                       <div className="scan-macros">
                         <label>{t('scan.proteinG')}<input type="number" min="0" value={item.protein} onChange={(event) => updateItem(item.key, 'protein', event.target.value)} /></label>
                         <label>{t('scan.carbsG')}<input type="number" min="0" value={item.carbs} onChange={(event) => updateItem(item.key, 'carbs', event.target.value)} /></label>
                         <label>{t('scan.fatG')}<input type="number" min="0" value={item.fat} onChange={(event) => updateItem(item.key, 'fat', event.target.value)} /></label>
                       </div>
-                    )}
+                    </Collapse>
                   </article>
                 )
               })}

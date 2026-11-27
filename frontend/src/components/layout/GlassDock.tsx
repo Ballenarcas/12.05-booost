@@ -1,12 +1,23 @@
+import { animate, motion, useMotionValue, useSpring, useTransform, type AnimationPlaybackControls } from 'framer-motion'
 import { Dumbbell, House, TrendingUp, UserRound, UsersRound, type LucideProps } from 'lucide-react'
-import type { ComponentType } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentType } from 'react'
 import { useLocation } from 'react-router-dom'
-import { usePageNavigate } from '../../utils/usePageNavigate'
 import { useT, type MessageKey } from '../../i18n'
+import { usePageNavigate } from '../../utils/usePageNavigate'
+import { prefersStillness } from '../../utils/useSpring'
 import '../../styles/glass-dock.css'
 
 type DockIcon = ComponentType<LucideProps>
 type DockItem = { path: string; label: MessageKey; Icon: DockIcon }
+
+// Asymmetric spring pair: leading edge darts ahead while the trailing edge catches up,
+// creating the iOS 26 Liquid Glass elastic stretch without warping pill corners.
+const LEAD_SPRING = { type: 'spring' as const, stiffness: 460, damping: 29, mass: 0.72 }
+const TRAIL_SPRING = { type: 'spring' as const, stiffness: 215, damping: 24, mass: 0.96 }
+const SETTLE_SPRING = { type: 'spring' as const, stiffness: 360, damping: 28, mass: 0.8 }
+const DRAG_THRESHOLD = 8
+
+const clamp = (value: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, value))
 
 // Fluent "food-apple-20-regular", the icon the Figma NavBar uses; lucide has no match for it.
 function FoodApple({ size = 24, 'aria-hidden': ariaHidden }: LucideProps) {
@@ -43,30 +54,250 @@ export default function GlassDock() {
     return matches && path.length > items[best].path.length ? index : best
   }, 0)
 
+  const navRef = useRef<HTMLElement | null>(null)
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const restWidthRef = useRef(56)
+  const activeRef = useRef(active)
+  const prevActiveRef = useRef(active)
+  const hasMeasuredRef = useRef(false)
+  const animsRef = useRef<AnimationPlaybackControls[]>([])
+  const suppressClickRef = useRef(false)
+  const dragRef = useRef<{ id: number; startX: number; lastX: number; dragged: boolean; target: number } | null>(null)
+
+  const [measured, setMeasured] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null)
+
+  const leftMV = useMotionValue(0)
+  const rightMV = useMotionValue(56)
+  const widthMV = useTransform([leftMV, rightMV], ([l, r]: number[]) => Math.max(36, r - l))
+  const swellMV = useSpring(dragging ? 1.07 : 1, { stiffness: 420, damping: 28, mass: 0.7 })
+  // Subtle volume-preserving vertical squash while stretching across tabs, plus gentle lift when scrubbed.
+  const scaleYMV = useTransform([widthMV, swellMV], ([w, s]: number[]) => {
+    const rest = restWidthRef.current || 56
+    const ratio = Math.min(1, rest / Math.max(rest, w))
+    const squash = 1 - (1 - ratio) * 0.22
+    return squash * s
+  })
+
+  const stopAnimations = useCallback(() => {
+    for (const ctrl of animsRef.current) ctrl.stop()
+    animsRef.current = []
+  }, [])
+
+  const measureSlot = useCallback((index: number) => {
+    const btn = buttonRefs.current[index]
+    if (!btn) return null
+    return { left: btn.offsetLeft, right: btn.offsetLeft + btn.offsetWidth, width: btn.offsetWidth }
+  }, [])
+
+  const snapTo = useCallback((index: number, instant: boolean) => {
+    const slot = measureSlot(index)
+    if (!slot) return
+    restWidthRef.current = slot.width
+    stopAnimations()
+    if (instant || prefersStillness()) {
+      leftMV.jump(slot.left)
+      rightMV.jump(slot.right)
+      return
+    }
+    animsRef.current = [
+      animate(leftMV, slot.left, SETTLE_SPRING),
+      animate(rightMV, slot.right, SETTLE_SPRING),
+    ]
+  }, [leftMV, measureSlot, rightMV, stopAnimations])
+
+  // Initial placement & resize synchronization without animating from 0.
+  useLayoutEffect(() => {
+    const sync = () => {
+      const slot = measureSlot(activeRef.current)
+      if (!slot) return
+      restWidthRef.current = slot.width
+      if (!hasMeasuredRef.current || dragRef.current?.dragged !== true) {
+        stopAnimations()
+        leftMV.jump(slot.left)
+        rightMV.jump(slot.right)
+      }
+      if (!hasMeasuredRef.current) {
+        hasMeasuredRef.current = true
+        setMeasured(true)
+      }
+    }
+    sync()
+    const nav = navRef.current
+    if (!nav || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(sync)
+    ro.observe(nav)
+    return () => ro.disconnect()
+  }, [leftMV, measureSlot, rightMV, stopAnimations])
+
+  // Elastic stretch transition whenever the active tab changes.
+  useEffect(() => {
+    activeRef.current = active
+    if (!hasMeasuredRef.current) return
+    const prev = prevActiveRef.current
+    prevActiveRef.current = active
+    if (prev === active) return
+    const slot = measureSlot(active)
+    if (!slot) return
+    restWidthRef.current = slot.width
+
+    stopAnimations()
+    if (prefersStillness()) {
+      leftMV.jump(slot.left)
+      rightMV.jump(slot.right)
+      return
+    }
+
+    const goingRight = active > prev
+    animsRef.current = [
+      animate(leftMV, slot.left, goingRight ? TRAIL_SPRING : LEAD_SPRING),
+      animate(rightMV, slot.right, goingRight ? LEAD_SPRING : TRAIL_SPRING),
+    ]
+  }, [active, leftMV, measureSlot, rightMV, stopAnimations])
+
+  useEffect(() => () => stopAnimations(), [stopAnimations])
+
+  // Tapping the tab you are on goes back to its first screen, or to its top when already there.
+  function reselect(path: string) {
+    if (currentPath !== path) {
+      navigate(path, { direction: 'back' })
+      return
+    }
+    window.scrollTo({ top: 0, behavior: prefersStillness() ? 'auto' : 'smooth' })
+  }
+
+  function indexAtLocalX(localX: number) {
+    let closest = active
+    let minDist = Infinity
+    for (let i = 0; i < items.length; i += 1) {
+      const slot = measureSlot(i)
+      if (!slot) continue
+      const center = (slot.left + slot.right) / 2
+      const dist = Math.abs(localX - center)
+      if (dist < minDist) {
+        minDist = dist
+        closest = i
+      }
+    }
+    return closest
+  }
+
+  function handlePointerDown(e: React.PointerEvent<HTMLElement>) {
+    if (e.button !== 0 || prefersStillness()) return
+    dragRef.current = { id: e.pointerId, startX: e.clientX, lastX: e.clientX, dragged: false, target: active }
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLElement>) {
+    const g = dragRef.current
+    const nav = navRef.current
+    if (!g || g.id !== e.pointerId || !nav) return
+    const moved = Math.abs(e.clientX - g.startX)
+    if (!g.dragged) {
+      if (moved < DRAG_THRESHOLD) return
+      g.dragged = true
+      setDragging(true)
+      stopAnimations()
+      try { nav.setPointerCapture(e.pointerId) } catch { /* synthetic pointer */ }
+    }
+    const navBox = nav.getBoundingClientRect()
+    const localX = e.clientX - navBox.left
+    const first = measureSlot(0)
+    const last = measureSlot(items.length - 1)
+    if (!first || !last) return
+
+    const dx = e.clientX - g.lastX
+    g.lastX = e.clientX
+    const restW = restWidthRef.current || first.width
+    const stretch = clamp(Math.abs(dx) * 0.6, 0, restW * 0.42)
+    const width = restW + stretch
+    const half = width / 2
+    const minCenter = first.left + half
+    const maxCenter = last.right - half
+    const center = clamp(localX, minCenter, maxCenter)
+    leftMV.jump(center - half)
+    rightMV.jump(center + half)
+
+    const target = indexAtLocalX(localX)
+    if (target !== g.target) {
+      g.target = target
+      setScrubIndex(target)
+    }
+  }
+
+  function finishDrag(e: React.PointerEvent<HTMLElement>) {
+    const g = dragRef.current
+    if (!g || g.id !== e.pointerId) return
+    dragRef.current = null
+    if (!g.dragged) return
+
+    suppressClickRef.current = true
+    requestAnimationFrame(() => { suppressClickRef.current = false })
+    try { navRef.current?.releasePointerCapture?.(e.pointerId) } catch { /* not captured */ }
+    setDragging(false)
+    setScrubIndex(null)
+
+    const target = g.target
+    if (target !== active) {
+      prevActiveRef.current = target
+      navigate(items[target].path, { direction: 'tab' })
+      snapTo(target, false)
+    } else {
+      snapTo(active, false)
+    }
+  }
+
+  const highlighted = scrubIndex ?? active
+
   return (
-    <nav
-      className="gdock"
-      aria-label={t('nav.primary')}
-    >
-      {items.map(({ path, label, Icon }, index) => {
-        const isActive = active === index
-        return (
-          <button
-            key={path}
-            type="button"
-            className="gdock-item"
-            aria-label={t(label)}
-            aria-current={isActive ? 'page' : undefined}
-            data-active={isActive}
-            // Tabs slide in the dock's order: a tab to the right comes in from the right.
-            onClick={() => { if (!isActive) navigate(path, { direction: index > active ? 'forward' : 'back' }) }}
-          >
-            <span className="gdock-glyph">
-              <Icon size={24} strokeWidth={1.6} aria-hidden="true" />
-            </span>
-          </button>
-        )
-      })}
-    </nav>
+    <>
+      <div className="gdock-edge" aria-hidden="true" />
+      <nav
+        ref={navRef}
+        className={`gdock${dragging ? ' is-dragging' : ''}`}
+        aria-label={t('nav.primary')}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+      >
+        <motion.span
+          className={`gdock-pill${dragging ? ' is-dragging' : ''}`}
+          aria-hidden="true"
+          style={{
+            x: leftMV,
+            width: widthMV,
+            scaleY: scaleYMV,
+            opacity: measured ? 1 : 0,
+          }}
+        />
+        {items.map(({ path, label, Icon }, index) => {
+          const isActive = active === index
+          const isHighlighted = highlighted === index
+          return (
+            <button
+              key={path}
+              ref={(el) => { buttonRefs.current[index] = el }}
+              type="button"
+              className="gdock-item"
+              aria-label={t(label)}
+              aria-current={isActive ? 'page' : undefined}
+              data-active={isActive}
+              data-highlighted={isHighlighted}
+              // Tabs slide in the dock's order: a tab to the right comes in from the right.
+              onClick={() => {
+                if (suppressClickRef.current) return
+                if (isActive) reselect(path)
+                else navigate(path, { direction: 'tab' })
+              }}
+            >
+              <span className="gdock-glyph">
+                <Icon size={23} strokeWidth={isHighlighted ? 2.1 : 1.7} aria-hidden="true" />
+              </span>
+            </button>
+          )
+        })}
+      </nav>
+    </>
   )
 }

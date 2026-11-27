@@ -1,0 +1,149 @@
+/* Apple iOS 26 Liquid Glass materials & Scroll Edge Effects ported from Figma
+   (3RDkw00bf8AiRfX6CebKyf: Liquid Glass Regular Small/Medium/Large, Tab Bar - iPhone,
+   Scroll Edge Effect Soft/Hard) into BOOOST's light and dark themes. */
+
+:root {
+  /* Liquid Glass - Regular - Small (2:34) & Tab Bar - iPhone (1:181) */
+  --lg-small-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(246, 248, 252, 0.66) 100%);
+  --lg-small-border: rgba(255, 255, 255, 0.8);
+  --lg-small-blur: blur(22px) saturate(185%);
+  --lg-small-shadow:
+    0 8px 40px 0 rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -0.5px 0 rgba(16, 40, 80, 0.06),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.52);
+
+  /* Active Tab Bar selection capsule (I1:172;5535:23137) */
+  --lg-pill-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(232, 237, 245, 0.86) 100%);
+  --lg-pill-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.96),
+    inset 0 -1px 2px rgba(15, 62, 133, 0.09),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.72),
+    0 2px 8px rgba(16, 40, 80, 0.06);
+  --lg-pill-drag-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(226, 237, 250, 0.82) 100%);
+  --lg-pill-drag-shadow:
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.98),
+    inset 0 -1px 3px rgba(21, 99, 166, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.88),
+    0 6px 20px rgba(16, 40, 80, 0.14);
+
+  /* Liquid Glass - Regular - Medium (2:30) — cards & settings sections */
+  --lg-medium-bg: linear-gradient(180deg, rgba(250, 252, 255, 0.68) 0%, rgba(244, 247, 253, 0.58) 100%);
+  --lg-medium-border: rgba(255, 255, 255, 0.78);
+  --lg-medium-blur: blur(18px) saturate(170%);
+  --lg-medium-shadow:
+    0 8px 36px 0 rgba(16, 40, 80, 0.08),
+    inset 0 6px 18px rgba(79, 123, 194, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+
+  /* Liquid Glass - Regular - Large (2:47) — sheets & modals */
+  --lg-large-bg: linear-gradient(180deg, rgba(252, 253, 255, 0.84) 0%, rgba(245, 247, 252, 0.78) 100%);
+  --lg-large-border: rgba(255, 255, 255, 0.86);
+  --lg-large-blur: blur(28px) saturate(185%);
+  --lg-large-shadow:
+    0 12px 44px 0 rgba(0, 0, 0, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.56);
+
+  /* Scroll Edge Effect tokens (2:73 Soft, 2:55 Hard) */
+  --lg-edge-soft-tint: rgba(246, 248, 253, 0.78);
+  --lg-edge-hard-bg: rgba(246, 248, 253, 0.74);
+  --lg-edge-hard-line: rgba(0, 0, 0, 0.12);
+}
+
+:root[data-theme="dark"] {
+  --lg-small-bg: linear-gradient(180deg, rgba(42, 46, 54, 0.76) 0%, rgba(24, 27, 33, 0.74) 100%);
+  --lg-small-border: rgba(255, 255, 255, 0.14);
+  --lg-small-blur: blur(24px) saturate(180%);
+  --lg-small-shadow:
+    0 10px 40px 0 rgba(0, 0, 0, 0.54),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+
+  --lg-pill-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.11) 100%);
+  --lg-pill-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.28),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 2px 10px rgba(0, 0, 0, 0.32);
+  --lg-pill-drag-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(111, 178, 236, 0.18) 100%);
+  --lg-pill-drag-shadow:
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.38),
+    inset 0 -1px 3px rgba(0, 0, 0, 0.32),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 6px 22px rgba(0, 0, 0, 0.48);
+
+  --lg-medium-bg: linear-gradient(180deg, rgba(36, 40, 48, 0.72) 0%, rgba(25, 28, 34, 0.68) 100%);
+  --lg-medium-border: rgba(255, 255, 255, 0.11);
+  --lg-medium-blur: blur(20px) saturate(165%);
+  --lg-medium-shadow:
+    0 8px 36px 0 rgba(0, 0, 0, 0.34),
+    inset 0 6px 18px rgba(47, 111, 143, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+
+  --lg-large-bg: linear-gradient(180deg, rgba(38, 42, 50, 0.86) 0%, rgba(24, 27, 33, 0.84) 100%);
+  --lg-large-border: rgba(255, 255, 255, 0.14);
+  --lg-large-blur: blur(28px) saturate(175%);
+  --lg-large-shadow:
+    0 16px 48px 0 rgba(0, 0, 0, 0.58),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+
+  --lg-edge-soft-tint: rgba(15, 17, 21, 0.82);
+  --lg-edge-hard-bg: rgba(15, 17, 21, 0.78);
+  --lg-edge-hard-line: rgba(255, 255, 255, 0.12);
+}
+
+/* Reusable Liquid Glass surface utilities */
+.lg-surface-small {
+  border: 1px solid var(--lg-small-border);
+  background: var(--lg-small-bg);
+  -webkit-backdrop-filter: var(--lg-small-blur);
+  backdrop-filter: var(--lg-small-blur);
+  box-shadow: var(--lg-small-shadow);
+}
+
+.lg-surface-medium {
+  border: 1px solid var(--lg-medium-border);
+  background: var(--lg-medium-bg);
+  -webkit-backdrop-filter: var(--lg-medium-blur);
+  backdrop-filter: var(--lg-medium-blur);
+  box-shadow: var(--lg-medium-shadow);
+}
+
+.lg-surface-large {
+  border: 1px solid var(--lg-large-border);
+  background: var(--lg-large-bg);
+  -webkit-backdrop-filter: var(--lg-large-blur);
+  backdrop-filter: var(--lg-large-blur);
+  box-shadow: var(--lg-large-shadow);
+}
+
+/* Scroll Edge Effect - Hard (Figma 2:55): crisp frosted header/footer edge. */
+.lg-scroll-edge-hard {
+  background: var(--lg-edge-hard-bg);
+  -webkit-backdrop-filter: blur(30px) saturate(170%);
+  backdrop-filter: blur(30px) saturate(170%);
+  border-bottom: 1px solid var(--lg-edge-hard-line);
+}
+
+/* Apply Liquid Glass Regular Large (2:47) to floating modals & sheets. */
+:root :is(.modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal) {
+  border: 1px solid var(--lg-large-border);
+  border-radius: 28px;
+  background: var(--lg-large-bg);
+  -webkit-backdrop-filter: var(--lg-large-blur);
+  backdrop-filter: var(--lg-large-blur);
+  box-shadow: var(--lg-large-shadow);
+}
+:root .date-sheet {
+  border-top: 1px solid var(--lg-large-border);
+  border-radius: 34px 34px 0 0;
+  background: var(--lg-large-bg);
+  -webkit-backdrop-filter: var(--lg-large-blur);
+  backdrop-filter: var(--lg-large-blur);
+  box-shadow: var(--lg-large-shadow);
+}

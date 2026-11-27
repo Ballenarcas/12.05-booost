@@ -33,7 +33,7 @@ def read_upload(upload: Any, max_bytes: int = MAX_IMAGE_BYTES) -> bytes:
     return data
 
 
-def reencode(data: bytes, max_side: int, square: bool = False) -> bytes:
+def reencode(data: bytes, max_side: int, square: bool = False, quality: int = 80) -> bytes:
     """A fresh WebP built from the pixels alone, so no EXIF, GPS or hidden payload survives."""
     if len(data) > MAX_IMAGE_BYTES:
         raise ImageTooLarge()
@@ -53,7 +53,7 @@ def reencode(data: bytes, max_side: int, square: bool = False) -> bytes:
         clean = Image.new("RGB", image.size)
         clean.paste(image)
         output = BytesIO()
-        clean.save(output, format="WEBP", quality=85)
+        clean.save(output, format="WEBP", quality=quality, method=4)
     except Image.DecompressionBombError as error:
         raise ImageTooLarge() from error
     except (OSError, SyntaxError, ValueError) as error:

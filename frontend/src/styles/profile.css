@@ -107,20 +107,17 @@
   outline-offset: 2px;
 }
 
-/* Frosted Weight & Main Goal card (Figma 530:1976) */
+/* Frosted Weight & Main Goal card (Figma 530:1976 + Liquid Glass Regular Medium 2:30) */
 .profile-hero-card {
   display: grid;
   gap: 20px;
   padding: 18px 18px 20px;
+  border: 1px solid var(--lg-medium-border);
   border-radius: 20px;
-  background: rgba(245, 245, 245, 0.56);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  box-shadow: inset 0 6px 18.8px rgba(79, 123, 194, 0.25);
-}
-:root[data-theme="dark"] .profile-hero-card {
-  background: rgba(28, 31, 36, 0.78);
-  box-shadow: inset 0 6px 18.8px rgba(47, 111, 143, 0.35);
+  background: var(--lg-medium-bg);
+  -webkit-backdrop-filter: var(--lg-medium-blur);
+  backdrop-filter: var(--lg-medium-blur);
+  box-shadow: var(--lg-medium-shadow);
 }
 .profile-hero-card-top {
   display: flex;
@@ -449,18 +446,25 @@
   gap: 12px;
 }
 
-/* Preserved Settings stack inside redesigned Profile */
+/* Settings view ("Ajustes") — Liquid Glass cards matching .profile-hero-card and .gdock. */
 .profile-settings-stack {
   display: grid;
-  gap: 20px;
-  padding-top: 8px;
+  gap: 16px;
+  padding-top: 4px;
 }
-/* Design system card: white, 12px corners, 16px padding, with its uppercase light label inside. */
+.profile-settings-stack form {
+  display: grid;
+  gap: 16px;
+}
 .profile-settings-stack .section {
   margin-top: 0;
-  padding: 16px;
-  border-radius: 12px;
-  background: var(--hifi-card);
+  padding: 18px 16px;
+  border: 1px solid var(--lg-medium-border);
+  border-radius: 20px;
+  background: var(--lg-medium-bg);
+  -webkit-backdrop-filter: var(--lg-medium-blur);
+  backdrop-filter: var(--lg-medium-blur);
+  box-shadow: var(--lg-medium-shadow);
 }
 .profile-settings-stack .settings-card,
 .profile-settings-stack .settings-card.health-card {
@@ -469,26 +473,279 @@
   background: transparent;
   box-shadow: none;
 }
-/* Sections inside the form get the same spacing as the ones after it. */
-.profile-settings-stack form { display: grid; gap: 20px; }
-.profile-settings-stack .section-title { margin: 0 0 8px; padding: 0; color: var(--hifi-ink); font-family: var(--hifi-sans); font-size: 16px; font-weight: 300; line-height: 1; text-transform: uppercase; }
-.profile-settings-stack .settings-row { min-height: 56px; border-bottom-color: var(--hifi-track); }
-.profile-settings-stack .settings-label { font-weight: 400; }
-.profile-settings-stack .settings-label small { color: var(--hifi-faint); }
-/* Fields: soft grey wells with mono values, as on Add food; focus is the redesign blue. */
-.profile-settings-stack :is(.profile-field, select.settings-input) {
+.profile-settings-stack .section-title {
+  margin: 0 0 10px;
+  padding: 0;
+  color: var(--hifi-muted);
+  font-family: var(--hifi-sans);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.profile-settings-stack .settings-row {
+  min-height: 52px;
+  padding-block: 8px;
+  border-bottom: 1px solid rgba(16, 40, 80, 0.09);
+}
+:root[data-theme="dark"] .profile-settings-stack .settings-row {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+.profile-settings-stack .settings-row:last-child,
+.profile-settings-stack .settings-row:has(+ .profile-row-button) {
+  border-bottom: 0;
+}
+.profile-settings-stack .settings-row:last-child {
+  padding-bottom: 0;
+}
+.profile-settings-stack .settings-label {
+  min-width: 0;
+  color: var(--hifi-ink);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+.profile-settings-stack .settings-label small {
+  margin-top: 2px;
+  color: var(--hifi-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* Soft glass wells with Space Mono values. Always use background-color so select keeps its chevron. */
+.profile-settings-stack :is(.profile-field, select.settings-input, input.settings-input) {
   border-radius: 10px;
-  background: var(--hifi-well);
-  box-shadow: none;
+  color: var(--hifi-ink);
+  background-color: rgba(255, 255, 255, 0.68);
+  box-shadow: inset 0 0 0 1px rgba(16, 40, 80, 0.1);
   font-family: var(--hifi-mono);
   font-size: 14px;
+  transition: box-shadow var(--motion-fast) var(--ease-out);
 }
-.profile-settings-stack .profile-field .settings-input { font-family: var(--hifi-mono); font-size: 15px; }
-.profile-settings-stack :is(.settings-input:focus, .profile-field:focus-within) { box-shadow: inset 0 0 0 1.5px #0052b1; }
-.profile-settings-stack .subscription-value { font-family: var(--hifi-mono); font-size: 14px; font-weight: 400; }
-.profile-settings-stack .primary-button.profile-save {
+:root[data-theme="dark"] .profile-settings-stack :is(.profile-field, select.settings-input, input.settings-input) {
+  background-color: rgba(15, 17, 21, 0.48);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.profile-settings-stack select.settings-input {
+  appearance: none;
+  padding-right: 2.1rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235a6475' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 0.7rem center;
+  background-repeat: no-repeat;
+  background-size: 1rem 1rem;
+}
+:root[data-theme="dark"] .profile-settings-stack select.settings-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b0b0b0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+.profile-settings-stack .profile-field {
+  color: var(--hifi-faint);
+}
+.profile-settings-stack .profile-field .settings-input,
+:root[data-theme="dark"] .profile-settings-stack .profile-field .settings-input {
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+  font-family: var(--hifi-mono);
+  font-size: 15px;
+}
+.profile-settings-stack :is(.settings-input:focus, .profile-field:focus-within) {
+  box-shadow: inset 0 0 0 1.5px var(--primary);
+}
+.profile-settings-stack .profile-field .settings-input:focus {
+  box-shadow: none;
+}
+
+/* Community username inline form inside Settings: keeps input + Save pill from overflowing on narrow phones. */
+.profile-settings-stack .settings-row:has(form.cm-inline) {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.profile-settings-stack form.cm-inline {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 8px;
+}
+.profile-settings-stack form.cm-inline .settings-input {
+  width: clamp(7.25rem, 36vw, 9.5rem);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Row buttons (Go Premium, Cancel Premium, FAQ, Log out) */
+.profile-settings-stack .profile-row-button {
+  min-height: 50px;
+  padding: 10px 0;
+  color: var(--hifi-ink);
+  font-family: var(--hifi-sans);
+  font-size: 15px;
+  font-weight: 400;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+.profile-settings-stack .profile-row-button:last-child {
+  padding-bottom: 0;
+}
+.profile-settings-stack .profile-row-button > svg:last-child {
+  flex: none;
+  color: var(--hifi-faint);
+}
+.profile-settings-stack .settings-row + .profile-row-button,
+.profile-settings-stack .profile-row-button + .profile-row-button {
+  border-top: 1px solid rgba(16, 40, 80, 0.09);
+}
+:root[data-theme="dark"] .profile-settings-stack .settings-row + .profile-row-button,
+:root[data-theme="dark"] .profile-settings-stack .profile-row-button + .profile-row-button {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+.profile-settings-stack .profile-row-button.is-danger {
+  color: var(--negative);
+}
+.profile-settings-stack .profile-row-button:active {
+  opacity: 0.7;
+}
+.profile-settings-stack .profile-row-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.profile-settings-stack .subscription-value {
+  color: var(--hifi-ink);
+  font-family: var(--hifi-mono);
+  font-size: 14px;
+  font-weight: 400;
+  text-align: right;
+}
+.profile-settings-stack .subscription-value.is-active {
+  color: var(--green);
+}
+.profile-settings-stack .subscription-value.is-cancelled {
+  color: var(--negative);
+}
+.profile-settings-stack .subscription-note {
+  padding: 10px 0 2px;
+  color: var(--hifi-muted);
+  font-size: 13px;
+}
+.profile-settings-stack .profile-email {
+  color: var(--hifi-muted);
+  font-family: var(--hifi-mono);
+  font-size: 13px;
+}
+
+/* Health Connect inside Settings — glass metric wells, mono status pill, pressed pill buttons. */
+.profile-settings-stack .health-header {
+  align-items: flex-start;
+  gap: 10px;
+}
+.profile-settings-stack .health-header > svg {
+  margin-top: 2px;
+  color: var(--primary);
+}
+.profile-settings-stack .health-header p {
+  color: var(--hifi-muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.profile-settings-stack .health-status {
+  padding: 4px 10px;
+  border-radius: 31px;
+  color: var(--hifi-muted);
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: inset 0 0 0 1px rgba(16, 40, 80, 0.1);
+  font-family: var(--hifi-mono);
+  font-size: 11px;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+:root[data-theme="dark"] .profile-settings-stack .health-status {
+  background: rgba(15, 17, 21, 0.48);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.profile-settings-stack .health-status.is-connected,
+:root[data-theme="dark"] .profile-settings-stack .health-status.is-connected {
   color: var(--hifi-on-selected);
   background: var(--hifi-selected);
+  box-shadow: none;
+}
+.profile-settings-stack .health-stats {
+  gap: 10px;
+  margin-top: 14px;
+}
+.profile-settings-stack .health-stat {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(16, 40, 80, 0.08);
+}
+:root[data-theme="dark"] .profile-settings-stack .health-stat {
+  background: rgba(15, 17, 21, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.profile-settings-stack .health-stat svg {
+  color: var(--primary);
+}
+.profile-settings-stack .health-stat strong {
+  color: var(--hifi-ink);
+  font-family: var(--hifi-mono);
+  font-size: 20px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.profile-settings-stack .health-stat span {
+  color: var(--hifi-muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.profile-settings-stack .health-meta {
+  margin-top: 12px;
+  color: var(--hifi-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.profile-settings-stack .health-actions {
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.profile-settings-stack .health-actions .secondary-action {
+  min-width: 120px;
+  font-size: 13px;
+}
+.profile-settings-stack .secondary-action.health-connect-btn {
+  margin-top: 14px;
+  color: var(--hifi-on-selected);
+  background: var(--hifi-selected);
+  box-shadow: inset 0 0 4px rgba(11, 58, 92, 0.25);
+  font-size: 13px;
+}
+.profile-settings-stack .secondary-action.health-disconnect {
+  color: var(--negative);
+}
+
+/* Notices & primary Save button inside Settings */
+.profile-settings-stack .settings-notice {
+  margin-top: 0;
+  border-radius: 14px;
+  font-size: 14px;
+}
+.profile-settings-stack .health-card .settings-notice {
+  margin-top: 12px;
+}
+.profile-settings-stack .section > :is(.form-error, .cm-error, .hifi-muted) {
+  margin-top: 10px;
+}
+.profile-settings-stack .primary-button.profile-save {
+  min-height: 44px;
+  padding: 0 24px;
+  color: var(--hifi-on-selected);
+  background: var(--hifi-selected);
+  box-shadow: inset 0 0 4px rgba(11, 58, 92, 0.25);
 }
 
 /* ---- Friends subpage ("9/PERFIL") ---- */
@@ -652,6 +909,18 @@
 
 /* Settings open from the gear in the corner of the profile. */
 .profile-screen .profile-hero { position: relative; }
-.profile-screen .profile-gear { position: absolute; top: 0; right: 0; width: 44px; height: 44px; }
-.profile-settings-header { display: flex; align-items: center; gap: 12px; }
+.profile-screen .profile-gear,
+.profile-settings-header .icon-button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--lg-small-border);
+  border-radius: 50%;
+  color: var(--hifi-ink);
+  background: var(--lg-small-bg);
+  -webkit-backdrop-filter: var(--lg-small-blur);
+  backdrop-filter: var(--lg-small-blur);
+  box-shadow: var(--lg-small-shadow);
+}
+.profile-screen .profile-gear { position: absolute; top: 0; right: 0; }
+.profile-settings-header { display: flex; align-items: center; gap: 12px; padding-bottom: 4px; }
 .profile-settings-header h1 { margin: 0; }

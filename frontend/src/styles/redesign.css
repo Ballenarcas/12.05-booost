@@ -4,6 +4,7 @@
    have a mockup still to build keep the wireframe style until they are redone. */
 @import '@fontsource/space-mono/400.css';
 @import '@fontsource-variable/roboto';
+@import './liquid-glass.css';
 
 .hifi-screen, .hifi-theme,
 .modal-dialog, .confirmation-modal, .ai-tip-dialog, .quantity-warning-dialog, .routine-save-modal, .date-sheet {

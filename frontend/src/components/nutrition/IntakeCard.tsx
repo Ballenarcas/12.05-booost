@@ -2,6 +2,7 @@ import { useId, type ReactNode } from 'react'
 import '../../styles/intake-card.css'
 import { percent } from '../../utils/percent'
 import { locale, useT } from '../../i18n'
+import CountUp from '../ui/CountUp'
 
 type Macro = { label: string; current: number; target: number }
 
@@ -59,7 +60,7 @@ export default function IntakeCard({ label, consumed, goal, macros, pending, foo
             </g>
           </svg>
           <p className="home-orb-value" aria-hidden="true">
-            <strong>{pending ? '–' : Math.round(consumed).toLocaleString(locale())}</strong>
+            <strong>{pending ? '–' : <CountUp value={consumed} />}</strong>
             <span>/{pending ? '–' : goal.toLocaleString(locale())} kcal</span>
           </p>
         </div>
@@ -68,7 +69,7 @@ export default function IntakeCard({ label, consumed, goal, macros, pending, foo
             <li key={macro.label}>
               <span className="home-macro-name">{macro.label}</span>
               <span className="home-macro-value">
-                <strong>{pending ? '–' : Math.round(macro.current)}</strong>/{pending ? '–' : Math.round(macro.target)} g
+                <strong>{pending ? '–' : <CountUp value={macro.current} />}</strong>/{pending ? '–' : Math.round(macro.target)} g
               </span>
               <span className="hifi-bar" aria-hidden="true">
                 <span style={{ width: `${percent(macro.current, macro.target) * 100}%` }} />

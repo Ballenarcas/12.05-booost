@@ -1,39 +1,84 @@
-/* NavBar from the Figma mockup: a frosted bar along the bottom edge with rounded top corners. */
-.gdock {
-  --dock-active: #1563a6;
-  --dock-idle: #8dcfe8;
+/* Apple iOS 26 Floating Liquid Glass Tab Bar & Soft Scroll Edge Effect
+   ported from Figma (3RDkw00bf8AiRfX6CebKyf: 1:181 Tab Bar - iPhone,
+   2:34 Liquid Glass Regular Small, 2:73 Scroll Edge Effect - Soft). */
+
+.gdock-edge {
   position: fixed;
-  z-index: 10;
+  z-index: 9;
   right: 0;
   bottom: 0;
   left: 0;
-  display: flex;
-  width: min(100%, 28rem);
-  min-height: calc(68px + env(safe-area-inset-bottom));
-  align-items: center;
-  justify-content: center;
-  gap: clamp(2px, 2vw, 12px);
-  margin: 0 auto;
-  padding: 0 0.5rem env(safe-area-inset-bottom);
-  border-radius: 50px 50px 0 0;
-  background: color-mix(in srgb, var(--background) 40%, transparent);
-  box-shadow: 0 -2px 8px rgba(131, 131, 131, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-  backdrop-filter: blur(18px) saturate(150%);
-  isolation: isolate;
+  height: calc(88px + env(safe-area-inset-bottom));
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    var(--lg-edge-soft-tint) 0%,
+    color-mix(in srgb, var(--lg-edge-soft-tint) 58%, transparent) 46%,
+    transparent 100%
+  );
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  -webkit-mask-image: linear-gradient(to top, #000 0%, rgba(0, 0, 0, 0.85) 38%, rgba(0, 0, 0, 0.28) 72%, transparent 100%);
+  mask-image: linear-gradient(to top, #000 0%, rgba(0, 0, 0, 0.85) 38%, rgba(0, 0, 0, 0.28) 72%, transparent 100%);
+  transition: opacity 420ms var(--ease-ios);
 }
+
+.gdock {
+  --dock-active: #1563a6;
+  --dock-idle: #525c6b;
+  position: fixed;
+  z-index: 10;
+  right: 0;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  left: 0;
+  display: flex;
+  width: min(calc(100% - 24px), 26.5rem);
+  height: 58px;
+  align-items: center;
+  margin: 0 auto;
+  padding: 5px;
+  border: 1px solid var(--lg-small-border);
+  border-radius: 296px;
+  background: var(--lg-small-bg);
+  box-shadow: var(--lg-small-shadow);
+  -webkit-backdrop-filter: var(--lg-small-blur);
+  backdrop-filter: var(--lg-small-blur);
+  isolation: isolate;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 :root[data-theme="dark"] .gdock {
   --dock-active: #6fb2ec;
-  --dock-idle: #4a7d93;
-  background: color-mix(in srgb, var(--background) 70%, transparent);
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --dock-idle: rgba(232, 236, 244, 0.68);
+}
+
+.gdock-pill {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  z-index: 0;
+  border-radius: 100px;
+  background: var(--lg-pill-bg);
+  box-shadow: var(--lg-pill-shadow);
+  pointer-events: none;
+  will-change: transform, width;
+  transform-origin: center center;
+  transition: background-color 180ms ease, box-shadow 220ms ease, opacity 120ms ease;
+}
+
+.gdock-pill.is-dragging {
+  background: var(--lg-pill-drag-bg);
+  box-shadow: var(--lg-pill-drag-shadow);
 }
 
 .workout-progress-bar {
   position: fixed;
   z-index: 11;
   right: 0.75rem;
-  bottom: calc(68px + env(safe-area-inset-bottom) + 0.5rem);
+  bottom: calc(76px + env(safe-area-inset-bottom) + 0.5rem);
   left: 0.75rem;
   display: flex;
   width: min(26.5rem, calc(100vw - 1.5rem));
@@ -42,10 +87,13 @@
   gap: 0.4rem;
   margin-inline: auto;
   padding: 0.35rem 0.35rem 0.35rem 0.4rem;
-  border-radius: var(--radius-card);
+  border: 1px solid var(--lg-small-border);
+  border-radius: 22px;
   color: var(--text);
-  background: var(--surface-raised);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  background: var(--lg-small-bg);
+  -webkit-backdrop-filter: var(--lg-small-blur);
+  backdrop-filter: var(--lg-small-blur);
+  box-shadow: var(--lg-small-shadow);
   animation: workout-progress-enter 200ms ease-out both;
 }
 
@@ -79,15 +127,16 @@
 }
 
 .gdock-item {
+  position: relative;
+  z-index: 1;
   display: grid;
   min-width: 0;
-  flex: 0 1 48px;
-  width: 48px;
+  flex: 1 1 0;
   height: 48px;
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 14px;
+  border-radius: 100px;
   color: var(--dock-idle);
   background: transparent;
   cursor: pointer;
@@ -95,12 +144,32 @@
   transition: color 180ms ease, transform 160ms ease;
 }
 
-.gdock-item[data-active="true"] { color: var(--dock-active); }
-.gdock-item:active { transform: scale(0.96); }
-.gdock-item:focus-visible { outline: 2px solid var(--dock-active); outline-offset: 2px; }
-.gdock-glyph { display: grid; place-items: center; }
+.gdock-item[data-active="true"],
+.gdock-item[data-highlighted="true"] {
+  color: var(--dock-active);
+}
+
+.gdock-item:active {
+  transform: scale(0.94);
+}
+
+.gdock-item:focus-visible {
+  outline: 2px solid var(--dock-active);
+  outline-offset: -2px;
+}
+
+.gdock-glyph {
+  display: grid;
+  place-items: center;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .gdock-item { transition-duration: 0.01ms; }
-  .workout-progress-bar { animation-duration: 0.01ms; }
+  .gdock-edge,
+  .gdock-pill,
+  .gdock-item {
+    transition-duration: 0.01ms;
+  }
+  .workout-progress-bar {
+    animation-duration: 0.01ms;
+  }
 }

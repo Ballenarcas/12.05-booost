@@ -1,5 +1,6 @@
 """Community routes. Every route needs a session except /media, which needs a signed link."""
 
+import hashlib
 import logging
 from collections.abc import Callable
 from datetime import datetime
@@ -7,7 +8,7 @@ from typing import Literal, TypeVar
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from pydantic import ValidationError
 
 from app.core.auth import current_user
@@ -68,8 +69,11 @@ def _run(action: Callable[[], Result]) -> Result:
 # --- me ---
 
 @router.get("/me", response_model=MeOut)
-def read_me(user_id: UUID = Depends(current_user)) -> MeOut:
-    return _run(lambda: social_facade.me(str(user_id)))
+def read_me(response: Response, user_id: UUID = Depends(current_user)) -> MeOut:
+    result, timing = _run(lambda: social_facade.me_timed(str(user_id)))
+    if timing:
+        response.headers["Server-Timing"] = timing
+    return result
 
 
 @router.post("/me/join", response_model=MeOut)
@@ -96,11 +100,16 @@ def delete_avatar(user_id: UUID = Depends(current_user)) -> MeOut:
 
 @router.get("/feed", response_model=FeedPage)
 def read_feed(
+    response: Response,
     mode: Literal["following", "discover"] = "discover",
     before: datetime | None = Query(None),
+    limit: int = Query(errors.PAGE_POSTS, ge=1, le=errors.PAGE_POSTS),
     user_id: UUID = Depends(current_user),
 ) -> FeedPage:
-    return _run(lambda: social_facade.feed(str(user_id), mode, before))
+    result, timing = _run(lambda: social_facade.feed_timed(str(user_id), mode, before, limit))
+    if timing:
+        response.headers["Server-Timing"] = timing
+    return result
 
 
 @router.get("/attachables", response_model=Attachables)
@@ -241,10 +250,15 @@ def read_blocks(user_id: UUID = Depends(current_user)) -> list[AuthorOut]:
 # --- media ---
 
 @router.get("/media/{token}")
-def read_media(token: str) -> Response:
-    data = _run(lambda: social_facade.media(token))
-    return Response(data, media_type="image/webp", headers={
-        "Cache-Control": "private, max-age=3600",
+def read_media(token: str, request: Request) -> Response:
+    etag = f'"{hashlib.sha256(token.encode("utf-8")).hexdigest()[:20]}"'
+    headers = {
+        "Cache-Control": "private, max-age=3600, immutable",
+        "ETag": etag,
         "X-Content-Type-Options": "nosniff",
         "Content-Disposition": "inline",
-    })
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    data = _run(lambda: social_facade.media(token))
+    return Response(data, media_type="image/webp", headers=headers)

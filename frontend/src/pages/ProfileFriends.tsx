@@ -19,6 +19,7 @@ import backIcon from '../assets/scan/back.svg'
 import { useT, type MessageKey } from '../i18n'
 import '../styles/profile.css'
 import '../styles/community.css'
+import { RowSkeleton } from '../components/community/Skeleton'
 
 type Tab = 'followers' | 'following' | 'requests' | 'blocked'
 type Action = { label: MessageKey; run: (id: string) => Promise<void> }
@@ -86,7 +87,7 @@ function MemberList({ tab, username, actions }: { tab: Tab; username: string; ac
 
   return (
     <section className="hifi-card">
-      {members === null && !error && <p className="hifi-muted" role="status">{t('common.loading')}</p>}
+      {members === null && !error && <RowSkeleton />}
       {members?.length === 0 && <p className="hifi-muted">{t('community.listEmpty')}</p>}
       {error && <p className="cm-error" role="alert">{error}</p>}
       <ul className="cm-members">
@@ -121,7 +122,7 @@ export default function ProfileFriends() {
       </header>
 
       {meError && <p className="cm-error" role="alert">{meError}</p>}
-      {!me && !meError && <p className="hifi-muted" role="status">{t('common.loading')}</p>}
+      {!me && !meError && <RowSkeleton />}
       {me && !me.joined && (
         <section className="hifi-card">
           <p>{t('community.joinFirst')}</p>

@@ -2,7 +2,7 @@ import { MessageCircle } from 'lucide-react'
 import { useLayoutEffect } from 'react'
 import { Outlet, useLocation, useNavigationType } from 'react-router-dom'
 import { useT } from '../../i18n'
-import { usePageNavigate } from '../../utils/usePageNavigate'
+import { usePageDirection, usePageNavigate } from '../../utils/usePageNavigate'
 import GlassDock from './GlassDock'
 import WorkoutInProgressBar from './WorkoutInProgressBar'
 import '../../styles/global.css'
@@ -12,6 +12,7 @@ function MainLayout() {
   const navigate = usePageNavigate()
   const { pathname } = useLocation()
   const navigationType = useNavigationType()
+  usePageDirection()
   // A new page starts at its top; Back keeps wherever the browser puts it.
   useLayoutEffect(() => {
     if (navigationType !== 'POP') window.scrollTo(0, 0)

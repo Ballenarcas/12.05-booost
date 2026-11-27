@@ -22,8 +22,11 @@
 .cm-tabs button { min-width: 0; min-height: 38px; flex: 1; padding: 4px 6px; border: 0; border-radius: 31px; color: var(--hifi-muted); background: transparent; cursor: pointer; font: inherit; font-size: 14px; }
 .cm-tabs button[aria-pressed="true"] { color: var(--hifi-ink); background: var(--hifi-button); box-shadow: 0 1px 3px var(--hifi-shadow); font-weight: 600; }
 
-.cm-avatar { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border-radius: 50%; color: #fff; background: linear-gradient(145deg, #2d6eb5 0%, #72b6d9 100%); font-size: 14px; font-weight: 600; object-fit: cover; }
+.cm-avatar { position: relative; display: grid; width: 40px; height: 40px; flex: none; place-items: center; overflow: hidden; border-radius: 50%; color: #fff; background: linear-gradient(145deg, #2d6eb5 0%, #72b6d9 100%); font-size: 14px; font-weight: 600; }
 .cm-avatar.is-large { width: 104px; height: 104px; font-size: 34px; }
+.cm-avatar-initials { user-select: none; }
+.cm-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 180ms ease-out; }
+.cm-avatar-img.is-loaded { opacity: 1; }
 
 .cm-author { display: flex; min-width: 0; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
 .cm-author-text { display: grid; min-width: 0; }
@@ -38,11 +41,32 @@
 .cm-text { margin: 0; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
 .cm-text a { color: var(--primary); }
 
+.cm-post-slot { content-visibility: auto; contain-intrinsic-size: auto 340px; }
+.cm-sentinel { height: 1px; pointer-events: none; }
+
 .cm-photos { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; overflow: hidden; border-radius: 12px; }
-.cm-photos img { width: 100%; height: 100%; aspect-ratio: 1; object-fit: cover; }
+.cm-photo-frame { position: relative; display: block; overflow: hidden; background: var(--hifi-track); aspect-ratio: 1; }
+.cm-photo-frame.is-loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, rgba(255, 255, 255, 0.32) 50%, transparent 75%);
+  background-size: 200% 100%;
+  animation: cm-photo-shimmer 1.25s ease-in-out infinite;
+}
+:root[data-theme="dark"] .cm-photo-frame.is-loading::after {
+  background: linear-gradient(100deg, transparent 25%, rgba(255, 255, 255, 0.08) 50%, transparent 75%);
+  background-size: 200% 100%;
+}
+@keyframes cm-photo-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.cm-photo-frame img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 200ms ease-out; }
+.cm-photo-frame.is-loaded img { opacity: 1; }
 .cm-photos[data-count="1"] { grid-template-columns: 1fr; }
-.cm-photos[data-count="1"] img { height: auto; max-height: 420px; aspect-ratio: auto; }
-.cm-photos[data-count="3"] img:first-child { grid-column: 1 / -1; aspect-ratio: 2; }
+/* Reserves height before load so off-screen posts stay below the fold and truly lazy-load. */
+.cm-photos[data-count="1"] .cm-photo-frame.is-loading { aspect-ratio: 4 / 3; max-height: 420px; }
+.cm-photos[data-count="1"] .cm-photo-frame.is-loaded { aspect-ratio: auto; }
+.cm-photos[data-count="1"] .cm-photo-frame.is-loaded img { height: auto; max-height: 420px; }
+.cm-photos[data-count="3"] .cm-photo-frame:first-child { grid-column: 1 / -1; aspect-ratio: 2; }
 
 .cm-card { display: grid; gap: 4px; padding: 12px; border-radius: 12px; background: var(--hifi-well); font-size: 14px; }
 .cm-card strong { font-size: 16px; overflow-wrap: anywhere; }
@@ -109,3 +133,111 @@
 
 :is(.cm-tabs button, .cm-action, .cm-photo-button, .cm-options button, .cm-menu summary, .cm-author):focus-visible,
 .cm-composer textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* ---- Motion in the style of X ---- */
+
+/* Counts roll to their new number: up when they grow, down when they shrink. */
+.cm-roll { display: inline-grid; overflow: hidden; font-variant-numeric: tabular-nums; }
+.cm-roll > span { grid-area: 1 / 1; }
+.cm-roll-in.is-up { animation: cm-roll-in-up 320ms var(--ease-out); }
+.cm-roll-in.is-down { animation: cm-roll-in-down 320ms var(--ease-out); }
+.cm-roll-out.is-up { animation: cm-roll-out-up 320ms var(--ease-out) forwards; }
+.cm-roll-out.is-down { animation: cm-roll-out-down 320ms var(--ease-out) forwards; }
+@keyframes cm-roll-in-up { from { opacity: 0; transform: translateY(100%); } }
+@keyframes cm-roll-in-down { from { opacity: 0; transform: translateY(-100%); } }
+@keyframes cm-roll-out-up { to { opacity: 0; transform: translateY(-100%); } }
+@keyframes cm-roll-out-down { to { opacity: 0; transform: translateY(100%); } }
+
+/* A like throws a small burst of dots around the heart as it pops. */
+.cm-heart.is-pop::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: cm-like-burst 560ms var(--ease-out) forwards;
+}
+@keyframes cm-like-burst {
+  0% {
+    opacity: 1;
+    box-shadow: 0 0 0 -1px var(--negative), 0 0 0 -1px var(--primary), 0 0 0 -1px var(--negative),
+      0 0 0 -1px var(--primary), 0 0 0 -1px var(--negative), 0 0 0 -1px var(--primary);
+  }
+  100% {
+    opacity: 0;
+    box-shadow: 0 -17px 0 -1px var(--negative), 15px -9px 0 -1px var(--primary), 15px 9px 0 -1px var(--negative),
+      0 17px 0 -1px var(--primary), -15px 9px 0 -1px var(--negative), -15px -9px 0 -1px var(--primary);
+  }
+}
+
+/* The selected tab's pill slides between tabs instead of jumping (up to four tabs). */
+@supports selector(:has(*)) {
+  .cm-tabs { --tab-count: 2; --tab-index: 0; position: relative; isolation: isolate; }
+  .cm-tabs:has(> :nth-child(3)) { --tab-count: 3; }
+  .cm-tabs:has(> :nth-child(4)) { --tab-count: 4; }
+  .cm-tabs:has(> :nth-child(2)[aria-pressed="true"]) { --tab-index: 1; }
+  .cm-tabs:has(> :nth-child(3)[aria-pressed="true"]) { --tab-index: 2; }
+  .cm-tabs:has(> :nth-child(4)[aria-pressed="true"]) { --tab-index: 3; }
+  .cm-tabs::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc((100% - 6px - (var(--tab-count) - 1) * 2px) / var(--tab-count));
+    border-radius: 31px;
+    background: var(--hifi-button);
+    box-shadow: 0 1px 3px var(--hifi-shadow);
+    translate: calc(var(--tab-index) * (100% + 2px)) 0;
+    transition: translate 420ms var(--ease-spring);
+  }
+  .cm-tabs:not(:has(> [aria-pressed="true"]))::before { opacity: 0; }
+  .cm-tabs button { transition: color var(--motion) ease-out; }
+  .cm-tabs button[aria-pressed="true"] { background: transparent; box-shadow: none; }
+}
+
+/* "See new posts": slides down from the top of the feed, like the pill on X. */
+.cm-new-posts {
+  position: sticky;
+  z-index: 5;
+  top: calc(env(safe-area-inset-top) + 10px);
+  justify-self: center;
+  margin-bottom: -4px;
+  animation: cm-new-posts-in 420ms var(--ease-spring);
+}
+@keyframes cm-new-posts-in { from { opacity: 0; transform: translateY(-16px) scale(0.92); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-roll > span, .cm-heart.is-pop::before, .cm-new-posts, .cm-photo-frame.is-loading::after { animation: none; }
+  .cm-tabs::before, .cm-photo-frame img, .cm-avatar-img { transition: none; }
+}
+
+/* ---- Loading shapes ----
+   Grey blocks in the shape of what is coming, with a soft light sweeping across, instead of a
+   bare "Loading…". They wait a moment before showing, so quick loads never flash them. */
+.cm-skeletons { display: grid; gap: 12px; animation: cm-skeleton-in 200ms ease-out 150ms backwards; }
+.cm-skeleton-post { display: grid; gap: 12px; }
+.cm-skeleton-row { display: flex; align-items: center; gap: 10px; }
+.cm-skeleton-lines { display: grid; flex: 1; gap: 8px; }
+.cm-skeleton {
+  display: block;
+  height: 12px;
+  border-radius: 8px;
+  /* Tinted from the muted text colour, so the blocks show on the white cards in both themes. */
+  background: linear-gradient(90deg, color-mix(in srgb, var(--hifi-muted) 14%, transparent) 0%,
+    color-mix(in srgb, var(--hifi-muted) 6%, transparent) 40%, color-mix(in srgb, var(--hifi-muted) 14%, transparent) 80%);
+  background-size: 250% 100%;
+  animation: cm-skeleton-sweep 1.4s ease-in-out infinite;
+}
+.cm-skeleton-avatar { width: 40px; height: 40px; flex: none; border-radius: 50%; }
+.cm-skeleton-avatar.is-large { width: 104px; height: 104px; }
+@keyframes cm-skeleton-sweep { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+@keyframes cm-skeleton-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .cm-skeleton, .cm-skeletons { animation: none; }
+}

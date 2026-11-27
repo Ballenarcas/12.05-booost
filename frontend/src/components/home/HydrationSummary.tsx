@@ -3,7 +3,9 @@ import { useEffect, useId, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import {
   addHydrationEntry,
+  cachedHydrationToday,
   fetchHydrationToday,
+  rememberHydration,
   removeHydrationEntry,
   updateHydrationGoal,
   type HydrationEntry,
@@ -41,8 +43,9 @@ function entryTime(entry: HydrationEntry): string | null {
  */
 export default function HydrationSummary({ detailed = false }: { detailed?: boolean }) {
   const t = useT()
-  const [data, setData] = useState<HydrationToday | null>(null)
-  const [loaded, setLoaded] = useState(false)
+  // Shows the last known water straight away; the fresh copy replaces it when it arrives.
+  const [data, setData] = useState<HydrationToday | null>(() => cachedHydrationToday())
+  const [loaded, setLoaded] = useState(() => cachedHydrationToday() !== null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -72,7 +75,7 @@ export default function HydrationSummary({ detailed = false }: { detailed?: bool
     setBusy(true)
     setNotice(null)
     try {
-      setData(await request())
+      setData(rememberHydration(await request()))
       return true
     } catch (error) {
       setNotice(error instanceof Error ? error.message : failure)

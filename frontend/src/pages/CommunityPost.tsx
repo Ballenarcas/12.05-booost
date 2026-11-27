@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Avatar from '../components/community/Avatar'
 import PostCard, { MentionText } from '../components/community/PostCard'
-import { addComment, deleteComment, fetchComments, fetchPost, rememberCommentCount } from '../services/api'
+import { addComment, cachedPost, deleteComment, fetchComments, fetchPost, rememberCommentCount } from '../services/api'
+import { PostSkeleton, RowSkeleton } from '../components/community/Skeleton'
 import type { Comment, Post } from '../types/social'
 import { describeError } from '../utils/errors.js'
 import { usePageNavigate } from '../utils/usePageNavigate'
@@ -14,8 +15,10 @@ import '../styles/community.css'
 function Thread({ postId }: { postId: string }) {
   const t = useT()
   const navigate = usePageNavigate()
-  const [post, setPost] = useState<Post | null>(null)
+  // The post from the feed shows at once; the comments load beside it.
+  const [post, setPost] = useState<Post | null>(() => cachedPost(postId))
   const [comments, setComments] = useState<Comment[]>([])
+  const [commentsLoaded, setCommentsLoaded] = useState(false)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [me] = useSocialMe()
@@ -23,13 +26,20 @@ function Thread({ postId }: { postId: string }) {
 
   useEffect(() => {
     let current = true
-    Promise.all([fetchPost(postId), fetchComments(postId)])
-      .then(([loaded, list]) => {
+    const failed = (failure: unknown) => {
+      if (!current) return
+      // A post that is gone or hidden now must not stay on screen from the feed's copy.
+      setPost(null)
+      setError(describeError(failure, t('community.error')))
+    }
+    fetchPost(postId).then((loaded) => { if (current) setPost(loaded) }).catch(failed)
+    fetchComments(postId)
+      .then((list) => {
         if (!current) return
-        setPost(loaded)
         setComments(list)
+        setCommentsLoaded(true)
       })
-      .catch((failure) => { if (current) setError(describeError(failure, t('community.error'))) })
+      .catch(failed)
     return () => { current = false }
   }, [postId, t])
 
@@ -84,14 +94,15 @@ function Thread({ postId }: { postId: string }) {
 
   return (
     <>
-      {!post && !error && <p className="hifi-muted" role="status">{t('common.loading')}</p>}
+      {!post && !error && <PostSkeleton count={1} />}
       {error && <p className="cm-error" role="alert">{error}</p>}
       {post && (
         <>
-          <PostCard post={post} onChange={(update) => setPost((current) => current && update(current))} onDeleted={leave} onBlocked={leave} />
+          <PostCard post={post} priority onChange={(update) => setPost((current) => current && update(current))} onDeleted={leave} onBlocked={leave} />
 
           <section className="hifi-card" aria-label={t('community.commentCount', { count: post.comment_count })}>
-            {comments.length === 0 && <p className="hifi-muted">{t('community.noComments')}</p>}
+            {!commentsLoaded && comments.length === 0 && <RowSkeleton count={2} />}
+            {commentsLoaded && comments.length === 0 && <p className="hifi-muted">{t('community.noComments')}</p>}
             <ul className="cm-comments">
               {comments.map((comment) => (
                 <li key={comment.id}>

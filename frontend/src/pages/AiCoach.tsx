@@ -2,6 +2,7 @@ import { ArrowLeft, Ellipsis, Send } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import CoachActions from '../components/coach/CoachActions'
+import CoachProgress from '../components/coach/CoachProgress'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import {
   ChatLimitError,
@@ -221,7 +222,7 @@ export default function AiCoach() {
               {message.role === 'assistant' && <CoachActions message={message} />}
             </div>
           ))}
-          {sending && <p className="coach-note" role="status">{t('coach.thinking')}</p>}
+          {sending && <CoachProgress />}
           <div ref={endRef} />
         </div>
       )}

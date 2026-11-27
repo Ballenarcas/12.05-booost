@@ -50,12 +50,24 @@ def _warm_client(admin: bool) -> None:
         pass
 
 
+def _warm_storage() -> None:
+    try:
+        storage = get_storage()
+        if storage is not None:
+            storage.list_buckets()
+    except Exception:
+        pass
+
+
 def warm_supabase() -> None:
     """Open the first connection before a user request needs it.
 
     The first call to Supabase pays DNS, TLS and wake-up costs. Running it once
     at startup keeps the first save or dashboard load fast.
     """
-    threads = [threading.Thread(target=_warm_client, args=(admin,), daemon=True) for admin in (False, True)]
+    threads = [
+        *[threading.Thread(target=_warm_client, args=(admin,), daemon=True) for admin in (False, True)],
+        threading.Thread(target=_warm_storage, daemon=True),
+    ]
     for thread in threads:
         thread.start()
