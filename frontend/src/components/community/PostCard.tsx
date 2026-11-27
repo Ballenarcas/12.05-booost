@@ -61,7 +61,7 @@ function ResultCard({ post }: { post: Post }) {
 
 type Props = {
   post: Post
-  onChange: (post: Post) => void
+  onChange: (update: (current: Post) => Post) => void
   onDeleted: (postId: string) => void
   onBlocked: (authorId: string) => void
 }
@@ -89,23 +89,41 @@ export default function PostCard({ post, onChange, onDeleted, onBlocked }: Props
 
   // Taps reach the server in order (each waits for the one before), and only the latest
   // tap's answer is shown, so quick taps never flip the heart back.
+  // We keep the last server-confirmed like state so rapid taps rolling back on error never restore
+  // an unconfirmed optimistic state, and only merge like fields so comment_count is never clobbered.
   const likeRequest = useRef(0)
   const likeQueue = useRef<Promise<unknown>>(Promise.resolve())
+  const inFlightLikes = useRef(0)
+  const confirmedLike = useRef<{ liked_by_me: boolean; like_count: number } | null>(null)
   function toggleLike() {
-    const before = post
+    if (inFlightLikes.current === 0) {
+      confirmedLike.current = { liked_by_me: post.liked_by_me, like_count: post.like_count }
+    }
+    inFlightLikes.current += 1
     const liked = !post.liked_by_me
     const request = ++likeRequest.current
     setError(null)
     setHeartAnim(liked ? 'pop' : 'unpop')
-    onChange({ ...post, liked_by_me: liked, like_count: Math.max(0, post.like_count + (liked ? 1 : -1)) })
+    onChange((current) => ({ ...current, liked_by_me: liked, like_count: Math.max(0, current.like_count + (liked ? 1 : -1)) }))
     const sent = likeQueue.current.catch(() => undefined).then(() => setPostLike(post.id, liked))
     likeQueue.current = sent
     sent
-      .then((saved) => { if (request === likeRequest.current) onChange(saved) })
+      .then((saved) => {
+        confirmedLike.current = { liked_by_me: saved.liked_by_me, like_count: saved.like_count }
+        if (request === likeRequest.current) {
+          onChange((current) => ({ ...current, liked_by_me: saved.liked_by_me, like_count: saved.like_count }))
+        }
+      })
       .catch((failure) => {
         if (request !== likeRequest.current) return
-        onChange(before)
+        const rollback = confirmedLike.current
+        if (rollback) {
+          onChange((current) => ({ ...current, liked_by_me: rollback.liked_by_me, like_count: rollback.like_count }))
+        }
         setError(describeError(failure, t('community.error')))
+      })
+      .finally(() => {
+        inFlightLikes.current = Math.max(0, inFlightLikes.current - 1)
       })
   }
   const remove = () => {

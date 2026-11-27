@@ -3,7 +3,7 @@ import { fetchMuscleFocus, saveMuscleFocus } from '../../services/api'
 import { useT, valueLabel } from '../../i18n'
 import { describeError } from '../../utils/errors'
 
-const MUSCLES = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Abs', 'Calves']
+const MUSCLES = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Abs', 'Glutes']
 
 /** Which muscle the coach and the workout plan should favour. Saved as soon as it is chosen. */
 export default function MuscleFocusCard() {

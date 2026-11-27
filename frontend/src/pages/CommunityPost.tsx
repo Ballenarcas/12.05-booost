@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Avatar from '../components/community/Avatar'
 import PostCard, { MentionText } from '../components/community/PostCard'
-import { addComment, deleteComment, fetchComments, fetchPost } from '../services/api'
+import { addComment, deleteComment, fetchComments, fetchPost, rememberCommentCount } from '../services/api'
 import type { Comment, Post } from '../types/social'
 import { describeError } from '../utils/errors.js'
 import { usePageNavigate } from '../utils/usePageNavigate'
@@ -36,8 +36,10 @@ function Thread({ postId }: { postId: string }) {
   const leave = () => navigate('/community', { direction: 'back' })
 
   const fail = (failure: unknown) => setError(describeError(failure, t('community.error')))
-  const countComments = (step: number) =>
+  const countComments = (step: number) => {
+    rememberCommentCount(postId, step)
     setPost((current) => current && { ...current, comment_count: Math.max(0, current.comment_count + step) })
+  }
 
   // The comment shows at once and is swapped for the saved one when the server answers.
   function send(event: React.FormEvent) {
@@ -69,8 +71,12 @@ function Thread({ postId }: { postId: string }) {
     setComments((current) => current.filter((item) => item.id !== comment.id))
     countComments(-1)
     deleteComment(comment.id).catch((failure) => {
-      // Put it back where it was.
-      setComments((current) => [...current, comment].sort((a, b) => a.created_at.localeCompare(b.created_at)))
+      // Put it back where it was using numeric timestamps (handles Z vs +00:00).
+      setComments((current) => (
+        current.some((item) => item.id === comment.id)
+          ? current
+          : [...current, comment].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
+      ))
       countComments(1)
       fail(failure)
     })
@@ -82,7 +88,7 @@ function Thread({ postId }: { postId: string }) {
       {error && <p className="cm-error" role="alert">{error}</p>}
       {post && (
         <>
-          <PostCard post={post} onChange={setPost} onDeleted={leave} onBlocked={leave} />
+          <PostCard post={post} onChange={(update) => setPost((current) => current && update(current))} onDeleted={leave} onBlocked={leave} />
 
           <section className="hifi-card" aria-label={t('community.commentCount', { count: post.comment_count })}>
             {comments.length === 0 && <p className="hifi-muted">{t('community.noComments')}</p>}

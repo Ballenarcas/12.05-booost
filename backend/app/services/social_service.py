@@ -50,14 +50,17 @@ def paged(build: Callable[[], Any], limit: int | None = None) -> list[dict[str, 
             return rows
 
 
+MAX_PARALLEL_CALLS = 8
+
+
 def together(*calls: Callable[[], Any]) -> tuple[Any, ...]:
     """Runs independent reads at the same time, so a request waits for one round trip, not one each.
 
-    Results come back in order; the first error is raised. Each call gets its own pool, so calls may nest.
+    Results come back in order; the first error is raised. Each call gets its own bounded pool, so calls may nest.
     """
     if len(calls) < 2:
         return tuple(call() for call in calls)
-    with ThreadPoolExecutor(max_workers=len(calls)) as pool:
+    with ThreadPoolExecutor(max_workers=min(len(calls), MAX_PARALLEL_CALLS)) as pool:
         futures = [pool.submit(call) for call in calls]
         return tuple(future.result() for future in futures)
 

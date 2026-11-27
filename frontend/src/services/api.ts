@@ -155,6 +155,7 @@ export function getAccessToken(): string | null {
  */
 export function clearSession({ keepWorkouts = false } = {}): void {
   shortCache.clear()
+  feedEpoch += 1
   feedRequests.clear()
   lastFeeds.clear()
   dashboardRequests.clear()
@@ -2111,6 +2112,19 @@ const SOCIAL_ME_KEY = 'social:me'
 // next time while a fresh one loads. Memory only, because photo links expire.
 const feedRequests = new Map<FeedMode, Promise<FeedPage>>()
 const lastFeeds = new Map<FeedMode, FeedPage>()
+let feedEpoch = 0
+
+/** Drops in-flight feed reads started before a mutation so stale data cannot overwrite newer state. */
+function invalidateInFlightFeeds() {
+  feedEpoch += 1
+  feedRequests.clear()
+}
+
+function updateCachedFeeds(transform: (items: Post[]) => Post[]) {
+  for (const [mode, page] of lastFeeds) {
+    lastFeeds.set(mode, { ...page, items: transform(page.items) })
+  }
+}
 
 async function social<T>(path: string, init: RequestInit = {}): Promise<T> {
   // Any change (follow, block, photo, settings…) can change the counts and photo on /me.
@@ -2153,12 +2167,15 @@ export function fetchFeed(mode: FeedMode, before?: string): Promise<FeedPage> {
   if (before) return social<FeedPage>(`/feed?mode=${mode}&${beforeQuery(before)}`)
   const running = feedRequests.get(mode)
   if (running) return running
+  const startedAt = feedEpoch
   const request = social<FeedPage>(`/feed?mode=${mode}`)
     .then((page) => {
-      lastFeeds.set(mode, page)
+      if (feedEpoch === startedAt) lastFeeds.set(mode, page)
       return page
     })
-    .finally(() => feedRequests.delete(mode))
+    .finally(() => {
+      if (feedRequests.get(mode) === request) feedRequests.delete(mode)
+    })
   feedRequests.set(mode, request)
   return request
 }
@@ -2168,23 +2185,41 @@ export const lastFeedPage = (mode: FeedMode): FeedPage | null => lastFeeds.get(m
 
 /** Keeps the remembered feeds in step with a post that just changed, so going back shows it. */
 function rememberPost(post: Post) {
-  for (const [mode, page] of lastFeeds) {
-    lastFeeds.set(mode, { ...page, items: page.items.map((item) => (item.id === post.id ? post : item)) })
-  }
+  updateCachedFeeds((items) => items.map((item) => (
+    item.id === post.id ? { ...item, liked_by_me: post.liked_by_me, like_count: post.like_count } : item
+  )))
 }
 
-/** Your new post goes to the top of the remembered Following feed; the next fetch confirms it. */
+/** Keeps cached feed comment counters aligned when comments are added or removed. */
+export function rememberCommentCount(postId: string, delta: number) {
+  invalidateInFlightFeeds()
+  updateCachedFeeds((items) => items.map((item) => (
+    item.id === postId ? { ...item, comment_count: Math.max(0, item.comment_count + delta) } : item
+  )))
+}
+
+/** Your new post goes to the top of the remembered feeds; the next fetch confirms it. */
 export function rememberNewPost(post: Post) {
-  const page = lastFeeds.get('following')
-  if (page) lastFeeds.set('following', { ...page, items: [post, ...page.items.filter((item) => item.id !== post.id)] })
+  invalidateInFlightFeeds()
+  const targets: FeedMode[] = post.author.is_private ? ['following'] : ['following', 'discover']
+  for (const mode of targets) {
+    const page = lastFeeds.get(mode)
+    if (page) lastFeeds.set(mode, { ...page, items: [post, ...page.items.filter((item) => item.id !== post.id)] })
+  }
 }
 export const fetchPost = (id: string) => social<Post>(`/posts/${encodeURIComponent(id)}`)
-export const deletePost = (id: string) => social<void>(`/posts/${id}`, { method: 'DELETE' })
-export const setPostLike = (id: string, liked: boolean) =>
-  social<Post>(`/posts/${id}/like`, { method: liked ? 'PUT' : 'DELETE' }).then((post) => {
+export const deletePost = (id: string) =>
+  social<void>(`/posts/${id}`, { method: 'DELETE' }).then(() => {
+    invalidateInFlightFeeds()
+    updateCachedFeeds((items) => items.filter((item) => item.id !== id))
+  })
+export const setPostLike = (id: string, liked: boolean) => {
+  invalidateInFlightFeeds()
+  return social<Post>(`/posts/${id}/like`, { method: liked ? 'PUT' : 'DELETE' }).then((post) => {
     rememberPost(post)
     return post
   })
+}
 
 export function createPost(body: string, card: CardRef | null, photos: Blob[]): Promise<Post> {
   const form = new FormData()
@@ -2207,12 +2242,29 @@ export const fetchMemberPosts = (username: string, before?: string) =>
 export const fetchMemberList = (username: string, kind: 'followers' | 'following') =>
   social<Member[]>(`/users/${encodeURIComponent(username)}/${kind}`)
 
-export const followMember = (id: string) => social<MemberProfile>(`/users/${id}/follow`, { method: 'PUT' })
-export const unfollowMember = (id: string) => social<void>(`/users/${id}/follow`, { method: 'DELETE' })
+export const followMember = (id: string) =>
+  social<MemberProfile>(`/users/${id}/follow`, { method: 'PUT' }).then((profile) => {
+    invalidateInFlightFeeds()
+    lastFeeds.delete('following')
+    return profile
+  })
+export const unfollowMember = (id: string) =>
+  social<void>(`/users/${id}/follow`, { method: 'DELETE' }).then(() => {
+    invalidateInFlightFeeds()
+    lastFeeds.delete('following')
+  })
 export const removeFollower = (id: string) => social<void>(`/followers/${id}`, { method: 'DELETE' })
 export const fetchFollowRequests = () => social<Member[]>('/follow-requests')
 export const acceptFollowRequest = (id: string) => social<void>(`/follow-requests/${id}/accept`, { method: 'POST' })
 export const declineFollowRequest = (id: string) => social<void>(`/follow-requests/${id}`, { method: 'DELETE' })
-export const blockMember = (id: string) => social<void>(`/users/${id}/block`, { method: 'PUT' })
-export const unblockMember = (id: string) => social<void>(`/users/${id}/block`, { method: 'DELETE' })
+export const blockMember = (id: string) =>
+  social<void>(`/users/${id}/block`, { method: 'PUT' }).then(() => {
+    invalidateInFlightFeeds()
+    updateCachedFeeds((items) => items.filter((item) => item.author.id !== id))
+  })
+export const unblockMember = (id: string) =>
+  social<void>(`/users/${id}/block`, { method: 'DELETE' }).then(() => {
+    invalidateInFlightFeeds()
+    lastFeeds.clear()
+  })
 export const fetchBlocked = () => social<Member[]>('/blocks')

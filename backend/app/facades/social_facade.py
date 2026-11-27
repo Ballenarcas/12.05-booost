@@ -125,23 +125,25 @@ def _upload(bucket: str, path: str, data: bytes) -> None:
 MEDIA_CACHE_BYTES = 64 * 1024 * 1024
 _media_cache: OrderedDict[tuple[str, str], bytes] = OrderedDict()
 _media_cache_size = 0
+_media_epoch = 0
 _media_lock = Lock()
 
 
-def _cached_media(key: tuple[str, str]) -> bytes | None:
+def _cached_media(key: tuple[str, str]) -> tuple[bytes | None, int]:
     with _media_lock:
         data = _media_cache.get(key)
         if data is not None:
             _media_cache.move_to_end(key)
-        return data
+        return data, _media_epoch
 
 
-def _cache_media(key: tuple[str, str], data: bytes) -> None:
+def _cache_media(key: tuple[str, str], data: bytes, expected_epoch: int) -> None:
     global _media_cache_size
     if len(data) > MEDIA_CACHE_BYTES // 8:
         return
     with _media_lock:
-        if key in _media_cache:
+        # Skip caching if any deletion happened while this download was in flight.
+        if _media_epoch != expected_epoch or key in _media_cache:
             return
         _media_cache[key] = data
         _media_cache_size += len(data)
@@ -151,8 +153,9 @@ def _cache_media(key: tuple[str, str], data: bytes) -> None:
 
 
 def _forget_media(bucket: str, paths: list[str]) -> None:
-    global _media_cache_size
+    global _media_cache_size, _media_epoch
     with _media_lock:
+        _media_epoch += 1
         for path in paths:
             dropped = _media_cache.pop((bucket, path), None)
             if dropped is not None:
@@ -514,18 +517,22 @@ class SocialFacade:
 
         post_id = str(uuid4())
         paths = [f"{user_id}/{post_id}/{number}.webp" for number in range(len(encoded))]
-        row = session.table(POSTS).insert({
-            "id": post_id, "user_id": user_id, "body": text, "image_paths": paths,
-            "card_type": card_type, "card": card_data, "workout_id": workout_id,
-            "author_private": bool(me.get("is_private")),
-        }).execute().data[0]
+        inserted = False
         try:
-            if self._used(session, POSTS, "user_id", user_id) > POSTS_PER_DAY:
-                raise LimitReached("Daily limit reached. Try again tomorrow.")
+            # Upload photos before inserting the post so feeds never observe links to missing files.
             rules.together(*[lambda path=path, image=image: _upload(PHOTOS, path, image)
                              for path, image in zip(paths, encoded)])
+            row = session.table(POSTS).insert({
+                "id": post_id, "user_id": user_id, "body": text, "image_paths": paths,
+                "card_type": card_type, "card": card_data, "workout_id": workout_id,
+                "author_private": bool(me.get("is_private")),
+            }).execute().data[0]
+            inserted = True
+            if self._used(session, POSTS, "user_id", user_id) > POSTS_PER_DAY:
+                raise LimitReached("Daily limit reached. Try again tomorrow.")
         except Exception:
-            session.table(POSTS).delete().eq("id", post_id).execute()
+            if inserted:
+                session.table(POSTS).delete().eq("id", post_id).execute()
             _remove_files(PHOTOS, paths)
             raise
         return _posts(session, ctx, [row], {user_id: me}, set())[0]
@@ -565,8 +572,13 @@ class SocialFacade:
         session, _, ctx, row = _viewer(user_id, lambda s: _post_row(s, post_id))
         author, = _visible(session, ctx, row)
         if liked:
-            session.table(LIKES).upsert({"post_id": post_id, "user_id": user_id},
-                                        on_conflict="post_id,user_id", ignore_duplicates=True).execute()
+            try:
+                session.table(LIKES).upsert({"post_id": post_id, "user_id": user_id},
+                                            on_conflict="post_id,user_id", ignore_duplicates=True).execute()
+            except Exception as error:
+                if "23503" in str(error):  # the post was deleted concurrently
+                    raise NotFound() from error
+                raise
         else:
             session.table(LIKES).delete().eq("post_id", post_id).eq("user_id", user_id).execute()
         # Read again for the new count; whether it is liked is what was just written.
@@ -602,7 +614,12 @@ class SocialFacade:
         text = rules.normalize_text(body)
         if not text:
             raise ValueError("Write a comment first.")
-        row = session.table(COMMENTS).insert({"post_id": post_id, "user_id": user_id, "body": text}).execute().data[0]
+        try:
+            row = session.table(COMMENTS).insert({"post_id": post_id, "user_id": user_id, "body": text}).execute().data[0]
+        except Exception as error:
+            if "23503" in str(error):  # the post was deleted concurrently
+                raise NotFound() from error
+            raise
         if self._used(session, COMMENTS, "user_id", user_id) > COMMENTS_PER_DAY:
             session.table(COMMENTS).delete().eq("id", row["id"]).execute()
             raise LimitReached("Daily limit reached. Try again tomorrow.")
@@ -699,7 +716,18 @@ class SocialFacade:
             session.table(FOLLOWS).upsert(
                 {"follower_id": user_id, "followee_id": target_id, "status": status},
                 on_conflict="follower_id,followee_id", ignore_duplicates=True).execute()
-            if self._used(session, FOLLOWS, "follower_id", user_id) > FOLLOWS_PER_DAY:
+            # Re-check daily quota and blocks together so a concurrent block never leaves a live follow.
+            used_after, blocked_by_me, blocked_by_them = rules.together(
+                lambda: self._used(session, FOLLOWS, "follower_id", user_id),
+                lambda: bool(session.table(BLOCKS).select("blocker_id").eq("blocker_id", user_id)
+                             .eq("blocked_id", target_id).limit(1).execute().data),
+                lambda: bool(session.table(BLOCKS).select("blocker_id").eq("blocker_id", target_id)
+                             .eq("blocked_id", user_id).limit(1).execute().data),
+            )
+            if blocked_by_me or blocked_by_them:
+                _delete_follow(session, user_id, target_id)
+                raise NotFound()
+            if used_after > FOLLOWS_PER_DAY:
                 _delete_follow(session, user_id, target_id)
                 raise LimitReached("Daily limit reached. Try again tomorrow.")
             if status == "accepted":
@@ -776,7 +804,7 @@ class SocialFacade:
         found = media_token.verify(token)
         if not found:
             raise NotFound()
-        cached = _cached_media(found)
+        cached, epoch = _cached_media(found)
         if cached is not None:
             return cached
         storage = _storage()
@@ -784,7 +812,7 @@ class SocialFacade:
             data = storage.from_(found[0]).download(found[1])
         except Exception as error:
             raise NotFound() from error
-        _cache_media(found, data)
+        _cache_media(found, data, epoch)
         return data
 
 

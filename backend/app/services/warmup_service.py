@@ -16,7 +16,7 @@ from app.schemas.workout import (
     WarmupSet,
     WarmupStep,
 )
-from app.services.ai_service import get_ai_client
+from app.services.ai_service import apply_reasoning_params, get_ai_client, is_reasoning_model
 
 logger = logging.getLogger(__name__)
 
@@ -299,6 +299,16 @@ def build_warmup_recommendation(
                 "schema": WARMUP_RESPONSE_SCHEMA,
             },
         }
+    elif is_reasoning_model(settings.ai_model):
+        apply_reasoning_params(request, settings.ai_model, max_tokens=2048, reasoning_max_tokens=3072)
+        request["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "warmup_plan",
+                "strict": True,
+                "schema": WARMUP_RESPONSE_SCHEMA,
+            },
+        }
     else:
         request["max_tokens"] = 2048
         request["response_format"] = {"type": "json_object"}
@@ -306,7 +316,7 @@ def build_warmup_recommendation(
     try:
         response = get_ai_client().with_options(
             timeout=WARMUP_TIMEOUT_SECONDS,
-            max_retries=0,
+            max_retries=1 if is_reasoning_model(settings.ai_model) else 0,
         ).chat.completions.create(**request)
         content = response.choices[0].message.content
         plan = _AIWarmupPlan.model_validate(json.loads(content or ""))

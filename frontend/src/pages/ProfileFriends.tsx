@@ -46,7 +46,7 @@ function load(tab: Tab, username: string): Promise<Member[]> {
 function MemberList({ tab, username, actions }: { tab: Tab; username: string; actions: Action[] }) {
   const t = useT()
   const [members, setMembers] = useState<Member[] | null>(null)
-  const [busy, setBusy] = useState<string | null>(null)
+  const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set())
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -60,16 +60,28 @@ function MemberList({ tab, username, actions }: { tab: Tab; username: string; ac
   function act(action: Action, id: string) {
     const index = members?.findIndex((member) => member.id === id) ?? -1
     const removed = index >= 0 ? members?.[index] : undefined
-    setBusy(id)
+    setBusyIds((current) => new Set(current).add(id))
     setError(null)
     setMembers((current) => current?.filter((member) => member.id !== id) ?? null)
     action.run(id)
       .catch((failure) => {
         // Only this row comes back: other rows may have been changed meanwhile.
-        if (removed) setMembers((current) => current && [...current.slice(0, index), removed, ...current.slice(index)])
+        if (removed) {
+          setMembers((current) => {
+            if (!current || current.some((member) => member.id === removed.id)) return current
+            const at = Math.min(index, current.length)
+            return [...current.slice(0, at), removed, ...current.slice(at)]
+          })
+        }
         setError(describeError(failure, t('community.error')))
       })
-      .finally(() => setBusy(null))
+      .finally(() => {
+        setBusyIds((current) => {
+          const next = new Set(current)
+          next.delete(id)
+          return next
+        })
+      })
   }
 
   return (
@@ -81,7 +93,7 @@ function MemberList({ tab, username, actions }: { tab: Tab; username: string; ac
         {members?.map((member) => (
           <MemberRow key={member.id} member={member}>
             {actions.map((action) => (
-              <button key={action.label} type="button" className="hifi-pill" disabled={busy === member.id} onClick={() => void act(action, member.id)}>
+              <button key={action.label} type="button" className="hifi-pill" disabled={busyIds.has(member.id)} onClick={() => void act(action, member.id)}>
                 {t(action.label)}
               </button>
             ))}

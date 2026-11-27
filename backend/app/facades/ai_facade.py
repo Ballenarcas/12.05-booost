@@ -1,6 +1,6 @@
 from app.core.config import get_settings
 from app.schemas.ai import ParseNaturalLanguageResponse
-from app.services.ai_service import generate_trainer_insight, get_ai_client
+from app.services.ai_service import apply_reasoning_params, generate_trainer_insight, get_ai_client
 from app.services.ai_tips_service import decide_tip, get_current_tip, undo_tip
 from app.services.calorie_adjustment_service import decide_adjustment, get_adjustment
 from app.services.fuzzy_matcher import get_fuzzy_matcher
@@ -40,8 +40,9 @@ class AIFacade:
             messages.extend(conversation_history[-4:])
         messages.append({"role": "user", "content": message})
         try:
-            response = self.ai_client_provider().chat.completions.create(model=settings.ai_model,
-                temperature=0.3, max_tokens=220, messages=messages)
+            request = {"model": settings.ai_model, "temperature": 0.3, "messages": messages}
+            apply_reasoning_params(request, settings.ai_model, max_tokens=220, reasoning_max_tokens=1500)
+            response = self.ai_client_provider().chat.completions.create(**request)
             reply = response.choices[0].message.content or "I have processed your request."
         except Exception:
             reply = f"I recognized the following items in your request:\n{summary}"

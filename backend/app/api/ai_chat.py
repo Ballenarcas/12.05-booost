@@ -40,7 +40,7 @@ def send_message(
         raise HTTPException(status_code=429, detail="You've used today's coach messages.") from error
     except ConversationNotFound as error:
         raise HTTPException(status_code=404, detail="Conversation not found") from error
-    except (HTTPException, httpx.ConnectError):
+    except (HTTPException, httpx.HTTPError):
         raise
     except ValueError as error:
         logger.warning("The coach is unavailable", exc_info=True)

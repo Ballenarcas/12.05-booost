@@ -80,7 +80,8 @@ CARDIO_STAPLES = ["0685", "0798", "2141", "3666", "2612"]
 CATEGORY_WORDS = {
     "Chest": ("chest", "pecho", "bench", "banca"),
     "Back": ("back", "lats", "espalda", "dorsal"),
-    "Legs": ("leg", "legs", "squat", "squats", "sentadillas", "glute", "glutes", "pierna", "piernas", "glúteo", "glúteos", "sentadilla"),
+    "Legs": ("leg", "legs", "squat", "squats", "sentadillas", "pierna", "piernas", "sentadilla"),
+    "Glutes": ("glute", "glutes", "glúteo", "glúteos", "gluteo", "gluteos"),
     "Arms": ("arm", "arms", "biceps", "triceps", "brazo", "brazos", "bíceps", "tríceps"),
     "Shoulders": ("shoulder", "shoulders", "hombro", "hombros"),
     "Abs": ("abs", "core", "abdomen", "abdominales"),
@@ -326,7 +327,7 @@ def candidate_exercises(question: str, routines: list[Any], focus: str | None = 
         if words & set(keywords) or (category == focus and not any(words & set(known) for known in CATEGORY_WORDS.values())):
             for exercise_id in popular:
                 exercise = get_cached_exercise(exercise_id)
-                if exercise and exercise.category == category:
+                if exercise and (exercise.category == category or category in exercise.muscles):
                     add(exercise_id)
     # A general question can still be answered with real exercises.
     # Strength first picks lead; a little cardio follows, before the list is full.
