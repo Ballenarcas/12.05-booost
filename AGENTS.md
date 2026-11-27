@@ -22,5 +22,11 @@
 - Tips must stay within the safety limits: never diagnose or treat conditions, never recommend a deficit above 500 kcal/day, and never raise workout load more than 10% per week.
 - A model may personalize tips only for Premium users when `AI_TIPS_MODEL_ENABLED` is on, once per change in the user's data and at most 8 times per user per day; it never chooses actions or invents numbers, and `is_safe_wording` must stay the gate for its output. Every tip must tell the user what to do: an Accept action, or a rule-written `next_step` that the model cannot change. Accepted tips feed later tips and the workout planner, which reads only rule-written notes and must keep its recovery filter.
 
+## AI Coach (chat)
+- Backend: `api/ai_chat.py` → `facades/ai_chat_facade.py` → `services/ai_chat_service.py`; UI: `frontend/src/pages/AiCoach.tsx`.
+- The model sees only facts about the user and a short list of catalog exercises. `is_safe_chat_reply` must stay the gate for its output: catalog exercises only, no number that is not in the facts (numbers the user typed do not count), no medical or eat-less advice, no deficit above 500 kcal/day, no load increase above 10% per week. Medical questions are refused without calling the model.
+- Dishes are Premium only and come from `meal_options` and the user's favorites; the model gets names, never figures. A new ready-made dish or ingredient also needs its Spanish name and contents in `backend/app/data/meal_catalog.json`, which the diet filters read. Answer buttons (`components/coach/CoachActions.tsx`) change data only when the user taps them.
+- Limit: 10 messages (Free) or 50 (Premium) per rolling 24 hours, counted from stored messages. Never count it from the browser's day. Conversations are read only by their owner, and history sent to the model comes from the database, not the client.
+
 ## Coordination
 - Delegate only when parallel work materially helps. Assign clear file ownership, coordinate shared contracts, and integrate the results before reporting completion.

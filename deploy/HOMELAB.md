@@ -43,7 +43,7 @@ Supabase stays external. There is no database container and no persistent volume
    SUPABASE_KEY=your-anon-key
    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
    AUTH_SECRET_KEY=<python -c "import secrets; print(secrets.token_urlsafe(48))">
-   AUTH_TOKEN_TTL_HOURS=168
+   AUTH_TOKEN_TTL_HOURS=720
    ENVIRONMENT=production
    ALLOWED_HOSTS=127.0.0.1,localhost,zimaos.tailxxxx.ts.net
    CORS_ORIGINS=https://zimaos.tailxxxx.ts.net

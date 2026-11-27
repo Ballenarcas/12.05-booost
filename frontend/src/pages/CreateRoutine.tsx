@@ -25,12 +25,13 @@ function CreateRoutine() {
   const t = useT()
   const navigate = usePageNavigate()
   const location = useLocation()
-  const routineToEdit = (location.state as { routine?: Routine } | null)?.routine
+  const routeState = location.state as { routine?: Routine; addExercises?: Array<{ id: string; name: string }> } | null
+  const routineToEdit = routeState?.routine
   const nameInputRef = useRef<HTMLInputElement>(null)
   const successDialogRef = useRef<HTMLDivElement>(null)
   const [name, setName] = useState(routineToEdit?.name ?? '')
-  const [selectedExercises, setSelectedExercises] = useState<RoutineExerciseDraft[]>(() =>
-    routineToEdit?.exercises.map((exercise) => ({
+  const [selectedExercises, setSelectedExercises] = useState<RoutineExerciseDraft[]>(() => {
+    const current = routineToEdit?.exercises.map((exercise) => ({
       exercise_id: exercise.exercise_id,
       name: exercise.name,
       target_sets: exercise.target_sets ?? 3,
@@ -38,7 +39,14 @@ function CreateRoutine() {
       reps_by_set: exercise.reps_by_set?.length === (exercise.target_sets ?? 3)
         ? [...exercise.reps_by_set]
         : Array.from({ length: exercise.target_sets ?? 3 }, () => exercise.target_reps ?? 10),
-    })) ?? [])
+    })) ?? []
+    // Exercises sent by the AI Coach. A saved routine uses other ids, so names are compared too.
+    const added = (routeState?.addExercises ?? [])
+      .filter((exercise) => !current.some((item) =>
+        item.exercise_id === exercise.id || normalizeExerciseName(item.name) === normalizeExerciseName(exercise.name)))
+      .map((exercise) => ({ exercise_id: exercise.id, name: exercise.name, target_sets: 3, target_reps: 10, reps_by_set: [10, 10, 10] }))
+    return [...current, ...added]
+  })
   const [isExercisePickerOpen, setIsExercisePickerOpen] = useState(false)
   const [replacementIndex, setReplacementIndex] = useState<number | null>(null)
   const [draggedExerciseId, setDraggedExerciseId] = useState<string | null>(null)

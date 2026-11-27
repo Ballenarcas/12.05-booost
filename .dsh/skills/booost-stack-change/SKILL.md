@@ -76,7 +76,7 @@ One pipeline for every cross-layer BOOOST feature. The order is enforced: SQL fi
 - **Skipping router registration.** `main.py` needs both the import and the `include_router` line; the tests above catch it only if you run step 8.
 - **Claiming gates passed.** Report the real output of `compileall`, `npx tsc -b`, and `npm run build`, and say which checks did not run.
 - **Printing secrets.** List `.env` names only; never echo values or tokens.
-- **Re-enabling the AI Trainer.** Model calls are disabled on purpose; extend the static tip instead of adding a model call.
+- **Trusting model output.** AI Tips and the AI Coach call a model; every answer must pass its gate (`is_safe_wording`, `is_safe_chat_reply`). Follow the AI sections in `AGENTS.md`.
 
 ## Verification
 

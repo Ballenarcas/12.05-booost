@@ -1,4 +1,4 @@
-import { ArrowLeft, Crown, Loader2, Sparkles } from 'lucide-react'
+import { ArrowLeft, Crown, Loader2 } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   acceptAiWeeklyRoutine,
@@ -384,10 +384,7 @@ export default function AiWeeklyRoutine() {
                 <span>{t('aiWeekly.generating')}</span>
               </>
             ) : (
-              <>
-                <Sparkles size={16} aria-hidden="true" />
-                <span>{t('aiWeekly.generate')}</span>
-              </>
+              <span>{t('aiWeekly.generate')}</span>
             )}
           </button>
         </form>

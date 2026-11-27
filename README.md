@@ -75,7 +75,7 @@ On Android the host injects `window.BOOOSTHealthConnect` with `requestPermission
 | `SUPABASE_URL`, `SUPABASE_KEY` | Yes | Your Supabase project |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Backend-only database key. Never put it in a `VITE_` variable |
 | `AUTH_SECRET_KEY` | In production | Signs login sessions. Changing it logs everyone out |
-| `AUTH_TOKEN_TTL_HOURS` | No | Session length, default `12` |
+| `AUTH_TOKEN_TTL_HOURS` | No | Hours a session lasts without use (renewed while in use), default and maximum `720` |
 | `AI_API_KEY` | No | Turns on the AI features |
 | `AI_BASE_URL` | No | Which AI provider to call, default Groq. See [AI provider](#ai-provider) |
 | `AI_MODEL`, `AI_TIPS_MODEL` | No | Models for planning and for tips, default `openai/gpt-oss-20b` and `openai/gpt-oss-120b` |

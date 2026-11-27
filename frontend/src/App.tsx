@@ -7,6 +7,8 @@ import { useT } from './i18n'
 const pages = {
   Home: () => import('./pages/Home'),
   ActiveWorkout: () => import('./pages/ActiveWorkout'),
+  AiCoach: () => import('./pages/AiCoach'),
+  AiWeeklyRoutine: () => import('./pages/AiWeeklyRoutine'),
   CreateRoutine: () => import('./pages/CreateRoutine'),
   CustomExercise: () => import('./pages/CustomExercise'),
   ExercisePicker: () => import('./pages/ExercisePicker'),
@@ -47,7 +49,8 @@ if (typeof window !== 'undefined') {
 
 const Home = lazy(pages.Home)
 const ActiveWorkout = lazy(pages.ActiveWorkout)
-const AiWeeklyRoutine = lazy(() => import('./pages/AiWeeklyRoutine'))
+const AiCoach = lazy(pages.AiCoach)
+const AiWeeklyRoutine = lazy(pages.AiWeeklyRoutine)
 const CreateRoutine = lazy(pages.CreateRoutine)
 const CustomExercise = lazy(pages.CustomExercise)
 const ExercisePicker = lazy(pages.ExercisePicker)
@@ -78,6 +81,8 @@ function App() {
   const t = useT()
   return (
     <BrowserRouter>
+      {/* Shown by CSS only on a phone held sideways; the page stays mounted underneath. */}
+      <p className="rotate-notice" role="alert">{t('common.rotate')}</p>
       <Suspense fallback={<p className="visually-hidden" role="status" data-page-loading>{t('common.loading')}</p>}>
         <Routes>
           <Route path="/welcome" element={<Welcome />} />
@@ -106,8 +111,9 @@ function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/profile/friends" element={<ProfileFriends />} />
             <Route path="/profile/body-measurements" element={<BodyMeasurements />} />
-            <Route path="/settings" element={<Navigate to="/profile" replace />} />
+            <Route path="/settings" element={<Navigate to="/profile?settings=1" replace />} />
             <Route path="/faq" element={<Faq />} />
+            <Route path="/coach/:conversationId?" element={<AiCoach />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

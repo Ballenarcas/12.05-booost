@@ -11,7 +11,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api import ai, dashboard, health_connect, hydration, nutrition, premium, routines, users, workouts
+from app.api import ai, ai_chat, dashboard, health_connect, hydration, nutrition, premium, routines, users, workouts
 from app.core.config import get_settings
 from app.core.i18n import parse_accept_language, pick, reset_language, set_language, translate_error_detail
 from app.api.settings import router as settings_router
@@ -47,7 +47,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept-Language"],
-    expose_headers=["WWW-Authenticate"],
+    expose_headers=["WWW-Authenticate", "X-Session-Token"],
     max_age=600,
 )
 
@@ -129,6 +129,7 @@ api_router.include_router(workouts.router)
 api_router.include_router(routines.router)
 api_router.include_router(nutrition.router)
 api_router.include_router(ai.router)
+api_router.include_router(ai_chat.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(hydration.router)
 api_router.include_router(health_connect.router)

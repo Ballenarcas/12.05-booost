@@ -90,3 +90,51 @@ export interface CustomExercisePayload {
   equipment?: string[]
   description?: string
 };
+
+export interface ChatExercise {
+  id: string
+  name: string
+  is_cardio?: boolean
+}
+
+export interface ChatMeal {
+  key: string
+  name: string
+  meal_type: string
+  calories: number
+  proteins_g: number
+  carbs_g: number
+  fats_g: number
+  ingredients: import('../services/api').MealIngredient[]
+}
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  exercises: ChatExercise[]
+  meals?: ChatMeal[]
+  created_at: string
+}
+
+export interface ChatQuota {
+  used: number
+  limit: number
+  is_premium: boolean
+}
+
+export interface ChatReply {
+  conversation_id: string
+  message: ChatMessage
+  quota: ChatQuota
+}
+
+export interface ConversationSummary {
+  id: string
+  title: string
+  updated_at: string
+}
+
+export interface ConversationDetail extends ConversationSummary {
+  messages: ChatMessage[]
+}

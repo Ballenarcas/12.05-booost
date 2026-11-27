@@ -1,6 +1,14 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.schemas.user import MAX_BODY_WEIGHT_KG, MIN_BODY_WEIGHT_KG
+
+class MuscleFocus(BaseModel):
+    """None lets the app decide from the user's training."""
+
+    muscle: Literal["Chest", "Back", "Shoulders", "Arms", "Legs", "Abs", "Calves"] | None = None
+
 
 class UserSettingsUpdate(BaseModel):
     # Personal Info 

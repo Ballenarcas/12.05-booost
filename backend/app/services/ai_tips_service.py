@@ -36,6 +36,8 @@ from app.services.ai_tip_history import (
     summarize_meals,
     summarize_workouts,
 )
+from app.services.exercise_catalog import exercise_label
+from app.services.muscle_focus import get_muscle_focus
 from app.services.nutrition_math import estimate_burned_kcal
 from app.services.premium_service import has_active_premium
 from app.services.user_profile_service import calculate_calorie_goal
@@ -79,9 +81,13 @@ AMOUNT = re.compile(r"(\d+(?:[.,]\d+)*)[\s\-‐‑]*(kcal|kg|g)\b", re.IGNORECAS
 PAIRED_AMOUNT = re.compile(r"(\d+(?:[.,]\d+)*) of (\d+(?:[.,]\d+)*)\s*(kcal|kg|g)\b", re.IGNORECASE)
 # Medical advice, eating less, spelled-out amounts the number check cannot see, claiming
 # a change was already made, and the model talking about its own rewriting.
+MEDICAL_TERMS = (  # shared with the AI Coach chat
+    r"diagnos\w*|treat\w*|cure\w*|disease\w*|disorder\w*|illness\w*|medic\w*|deficien\w*|diabet\w*"
+    r"|symptom\w*|therap\w*|injur\w*|supplement\w*|doctor\w*"
+)
 BLOCKED_WORDING = re.compile(
-    r"\b(diagnos\w*|treat\w*|cure\w*|disease\w*|disorder\w*|illness\w*|medic\w*|deficien\w*|diabet\w*"
-    r"|symptom\w*|therap\w*|injur\w*|supplement\w*|doctor\w*|eat less|skip\w*|fast|fasting|starv\w*|detox\w*"
+    rf"\b({MEDICAL_TERMS}"
+    r"|eat less|skip\w*|fast|fasting|starv\w*|detox\w*"
     r"|restrict\w*|cut back|cut down|cut calories|burn it off|burn off"
     r"|percent|hundred|thousand|double|twice|triple|i added|i['’]ve added|we added|been added|was added|already added"
     r"|rephras\w*|rewr[io]\w*|reword\w*|the tip|this tip|meaning|tone|instructions?)\b",
@@ -259,6 +265,15 @@ def build_candidates(state: dict[str, Any], lang: str | None = None) -> list[dic
     """Return possible tips, best first. Pure: no database access."""
     active_lang = normalize_language(lang) if lang is not None else get_language()
     is_es = active_lang == "es"
+    if is_es:  # exercise names are stored in English
+        lift, plan = state.get("lift_progress"), state.get("plan")
+        state = {
+            **state,
+            "lift_progress": lift and {**lift, "exercise": exercise_label(lift["exercise"], "es")},
+            "plan": plan and {**plan, "exercises": [
+                {**item, "name": exercise_label(item.get("name"), "es")} for item in plan.get("exercises") or []
+            ]},
+        }
     goal = int(state["goal"])
     eaten = round(state["eaten_kcal"])
     meals = int(state["meals_count"])
@@ -924,12 +939,17 @@ def accepted_training_notes(user_id: UUID, day_start: datetime, session: Any) ->
     except Exception:
         logger.warning("Could not read accepted tips for the workout plan", exc_info=True)
         return []
+    focus = get_muscle_focus(session, user_id)
     notes: list[str] = []
     for row in rows:
         muscle = (row.get("action") or {}).get("muscle")
+        if muscle and focus:  # the setting outranks an accepted tip
+            continue
         note = f"Agreed to train {muscle} next: prefer it if it is available." if muscle else PLAN_NOTES.get(row.get("kind"))
         if note and note not in notes:
             notes.append(note)
+    if focus:
+        notes.append(f"Chose {focus} as their muscle focus: prefer it if it is available.")
     return notes
 
 

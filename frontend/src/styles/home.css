@@ -47,7 +47,7 @@
 .ai-insight-close:disabled { cursor: not-allowed; opacity: 0.5; }
 .ai-insight-message { margin: 0; font-size: 20px; font-weight: 500; line-height: 1.25; }
 .ai-insight .ai-tip-notice p { margin: 0; color: var(--hifi-muted); font-size: 14px; line-height: 1.4; }
-.ai-insight-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding-top: 8px; }
+.ai-insight-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; padding-top: 8px; }
 .ai-insight-why { display: grid; place-items: center; width: 44px; height: 44px; margin-right: auto; padding: 0; border: 0; color: var(--hifi-muted); background: transparent; cursor: pointer; }
 :root[data-theme="dark"] .ai-insight-close img { filter: invert(1); }
 
