@@ -22,6 +22,17 @@ const NUTRITION_CACHE_PREFIX = 'booost_nutrition:'
 const NUTRITION_CACHE_TTL_MS = 60_000
 import type { NutritionStatistics, NutritionStatisticsRange } from '../types/nutrition'
 import type {
+  Attachables,
+  CardRef,
+  Comment,
+  FeedMode,
+  FeedPage,
+  Member,
+  MemberProfile,
+  Post,
+  SocialMe,
+} from '../types/social'
+import type {
   LiveWorkoutAdjustmentRequest,
   LiveWorkoutAdjustmentResponse,
   Routine,
@@ -149,6 +160,12 @@ export function getAccessToken(): string | null {
  */
 export function clearSession({ keepWorkouts = false } = {}): void {
   shortCache.clear()
+  feedEpoch += 1
+  feedRequests.clear()
+  lastFeeds.clear()
+  lastSocialMeValue = null
+  preloadedMedia.clear()
+  lastHydration = null
   dashboardRequests.clear()
   insightRequests.clear()
   nutritionRequests.clear()
@@ -658,6 +675,8 @@ export function prefetchMainPages(): void {
   quietly(fetchRoutines())
   quietly(fetchWorkoutHistory(userId))
   quietly(fetchTodayNutrition(userId))
+  quietly(fetchSocialMe())
+  quietly(fetchFeed('discover'))
 }
 
 export async function fetchWorkoutStatistics(
@@ -1713,6 +1732,21 @@ export interface HydrationToday {
   entries: HydrationEntry[]
 }
 
+// Today's water, kept in memory for the local day, so Home and Nutrition show it at once on the
+// next visit while a fresh copy loads. clearSession drops it.
+let lastHydration: { day: string; value: HydrationToday } | null = null
+
+/** The last known water for today, or null when there is none for this local day. */
+export function cachedHydrationToday(): HydrationToday | null {
+  return lastHydration?.day === localDayQuery() ? lastHydration.value : null
+}
+
+/** Records the latest water for today, including the answer to an add or a goal change. */
+export function rememberHydration(value: HydrationToday): HydrationToday {
+  lastHydration = { day: localDayQuery(), value }
+  return value
+}
+
 export async function fetchHydrationToday(): Promise<HydrationToday> {
   const response = await apiFetch(`${API_URL}/api/v1/hydration/today?${localDayQuery()}`, {
     signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
@@ -1720,7 +1754,7 @@ export async function fetchHydrationToday(): Promise<HydrationToday> {
   if (!response.ok) {
     throw new Error(t('api.loadHydration'))
   }
-  return response.json()
+  return rememberHydration(await response.json())
 }
 
 export interface HydrationHistoryDay {
@@ -2107,3 +2141,274 @@ onLanguageChange(() => {
   clearDashboardCache()
   forgetSavedCopies()
 })
+
+// --- Community ---
+
+/** Photo links are either direct CDN signed URLs or relative API proxy paths. */
+export function mediaUrl(path: string): string {
+  return /^https?:\/\//i.test(path) ? path : `${API_URL}${path}`
+}
+
+const SOCIAL_ME_KEY = 'social:me'
+// Signed CDN URLs live 2 h; keeping local snapshots for 25 min makes reloads & tab switches instant
+// while ensuring photo URLs are always well within their valid window.
+const SOCIAL_SNAPSHOT_TTL_MS = 25 * 60 * 1000
+const FEED_INITIAL_LIMIT = 8
+const FEED_MORE_LIMIT = 16
+let lastSocialMeValue: SocialMe | null = null
+const preloadedMedia = new Set<string>()
+const MAX_PRELOADED_MEDIA = 200
+
+function socialSnapshotKey(name: string): string | null {
+  const userId = getCurrentUser()?.id
+  return userId ? `social:${userId}:${name}` : null
+}
+
+function readSocialSnapshot<T>(name: string): T | null {
+  const key = socialSnapshotKey(name)
+  if (!key) return null
+  const saved = readSavedCopy<{ data: T; at: number }>(key)
+  if (!saved || typeof saved.at !== 'number' || Date.now() - saved.at > SOCIAL_SNAPSHOT_TTL_MS) return null
+  return saved.data
+}
+
+function writeSocialSnapshot<T>(name: string, data: T): void {
+  const key = socialSnapshotKey(name)
+  if (!key) return
+  saveCopy(key, { data, at: Date.now() })
+}
+
+function dropSocialSnapshot(name: string): void {
+  const key = socialSnapshotKey(name)
+  if (!key) return
+  forgetSavedCopies(key)
+}
+
+/** Warms the browser image cache for the top 2 visible posts' lead photo and avatars without choking bandwidth. */
+function preloadFeedMedia(posts: Post[], count = 2) {
+  if (typeof Image === 'undefined') return
+  const urls: string[] = []
+  for (const post of posts.slice(0, count)) {
+    if (post.author.avatar_url) urls.push(mediaUrl(post.author.avatar_url))
+    if (post.image_urls[0]) urls.push(mediaUrl(post.image_urls[0]))
+  }
+  for (const url of urls) {
+    if (preloadedMedia.has(url)) continue
+    if (preloadedMedia.size >= MAX_PRELOADED_MEDIA) preloadedMedia.clear()
+    preloadedMedia.add(url)
+    const img = new Image()
+    img.decoding = 'async'
+    img.src = url
+  }
+}
+
+/** Remembered signed-in social profile (RAM or fresh localStorage snapshot) so Community renders at once. */
+export function lastSocialMe(): SocialMe | null {
+  if (lastSocialMeValue) return lastSocialMeValue
+  const saved = readSocialSnapshot<SocialMe>('me')
+  if (saved) lastSocialMeValue = saved
+  return lastSocialMeValue
+}
+
+function rememberSocialMe(value: SocialMe): SocialMe {
+  lastSocialMeValue = value
+  writeSocialSnapshot('me', value)
+  return value
+}
+// The first page of each feed: the request in flight is shared, and the last answer is shown at once
+// next time while a fresh one loads. Memory only, because photo links expire.
+const feedRequests = new Map<FeedMode, Promise<FeedPage>>()
+const lastFeeds = new Map<FeedMode, FeedPage>()
+
+/** A post already shown in a feed, so its page can draw it at once while the fresh copy loads. */
+export function cachedPost(id: string): Post | null {
+  for (const page of lastFeeds.values()) {
+    const found = page.items.find((item) => item.id === id)
+    if (found) return found
+  }
+  return null
+}
+let feedEpoch = 0
+
+/** Drops in-flight feed reads started before a mutation so stale data cannot overwrite newer state. */
+function invalidateInFlightFeeds() {
+  feedEpoch += 1
+  feedRequests.clear()
+}
+
+function updateCachedFeeds(transform: (items: Post[]) => Post[]) {
+  for (const [mode, page] of lastFeeds) {
+    const next = { ...page, items: transform(page.items) }
+    lastFeeds.set(mode, next)
+    writeSocialSnapshot(`feed:${mode}`, next)
+  }
+}
+
+async function social<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // Any change (follow, block, photo, settings…) can change the counts and photo on /me.
+  if (init.method && init.method !== 'GET') shortCache.delete(SOCIAL_ME_KEY)
+  const response = await apiFetch(`${API_URL}/api/v1/social${path}`, {
+    ...init,
+    signal: AbortSignal.timeout(init.body instanceof FormData ? SCAN_TIMEOUT_MS : WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : t('community.error'))
+  }
+  return (response.status === 204 ? undefined : await response.json()) as T
+}
+
+function jsonBody(method: string, body: unknown): RequestInit {
+  return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+}
+
+// URLSearchParams matters: a cursor holds a "+", which would otherwise arrive as a space.
+function beforeQuery(before?: string): string {
+  return before ? new URLSearchParams({ before }).toString() : ''
+}
+
+// Community, Profile and Friends all need it; shared for 30 seconds instead of asked three times.
+export const fetchSocialMe = () => cachedRequest(SOCIAL_ME_KEY, () => social<SocialMe>('/me').then(rememberSocialMe))
+export const joinCommunity = (username: string, isPrivate: boolean) =>
+  social<SocialMe>('/me/join', jsonBody('POST', { username, is_private: isPrivate })).then(rememberSocialMe)
+export const updateSocialMe = (changes: { username?: string; is_private?: boolean }) =>
+  social<SocialMe>('/me', jsonBody('PATCH', changes)).then(rememberSocialMe)
+export const removeAvatar = () => social<SocialMe>('/me/avatar', { method: 'DELETE' }).then(rememberSocialMe)
+
+export function uploadAvatar(photo: Blob): Promise<SocialMe> {
+  const form = new FormData()
+  form.append('file', photo, 'avatar.jpg')
+  return social<SocialMe>('/me/avatar', { method: 'PUT', body: form }).then(rememberSocialMe)
+}
+
+export function fetchFeed(mode: FeedMode, before?: string): Promise<FeedPage> {
+  if (before) {
+    return social<FeedPage>(`/feed?mode=${mode}&limit=${FEED_MORE_LIMIT}&${beforeQuery(before)}`).then((page) => {
+      preloadFeedMedia(page.items, 1)
+      return page
+    })
+  }
+  const running = feedRequests.get(mode)
+  if (running) return running
+  const startedAt = feedEpoch
+  const request = social<FeedPage>(`/feed?mode=${mode}&limit=${FEED_INITIAL_LIMIT}`)
+    .then((page) => {
+      if (feedEpoch === startedAt) {
+        lastFeeds.set(mode, page)
+        writeSocialSnapshot(`feed:${mode}`, page)
+        preloadFeedMedia(page.items, 2)
+      }
+      return page
+    })
+    .finally(() => {
+      if (feedRequests.get(mode) === request) feedRequests.delete(mode)
+    })
+  feedRequests.set(mode, request)
+  return request
+}
+
+/** The feed page shown last time (RAM or fresh localStorage snapshot), to display at once while fresh loads. */
+export function lastFeedPage(mode: FeedMode): FeedPage | null {
+  const mem = lastFeeds.get(mode)
+  if (mem) return mem
+  const saved = readSocialSnapshot<FeedPage>(`feed:${mode}`)
+  if (saved) {
+    lastFeeds.set(mode, saved)
+    return saved
+  }
+  return null
+}
+
+/** Keeps the remembered feeds in step with a post that just changed, so going back shows it. */
+function rememberPost(post: Post) {
+  updateCachedFeeds((items) => items.map((item) => (
+    item.id === post.id ? { ...item, liked_by_me: post.liked_by_me, like_count: post.like_count } : item
+  )))
+}
+
+/** Keeps cached feed comment counters aligned when comments are added or removed. */
+export function rememberCommentCount(postId: string, delta: number) {
+  invalidateInFlightFeeds()
+  updateCachedFeeds((items) => items.map((item) => (
+    item.id === postId ? { ...item, comment_count: Math.max(0, item.comment_count + delta) } : item
+  )))
+}
+
+/** Your new post goes to the top of the remembered feeds; the next fetch confirms it. */
+export function rememberNewPost(post: Post) {
+  invalidateInFlightFeeds()
+  const targets: FeedMode[] = post.author.is_private ? ['following'] : ['following', 'discover']
+  for (const mode of targets) {
+    const page = lastFeeds.get(mode)
+    if (page) {
+      const next = { ...page, items: [post, ...page.items.filter((item) => item.id !== post.id)] }
+      lastFeeds.set(mode, next)
+      writeSocialSnapshot(`feed:${mode}`, next)
+    }
+  }
+}
+export const fetchPost = (id: string) => social<Post>(`/posts/${encodeURIComponent(id)}`)
+export const deletePost = (id: string) =>
+  social<void>(`/posts/${id}`, { method: 'DELETE' }).then(() => {
+    invalidateInFlightFeeds()
+    updateCachedFeeds((items) => items.filter((item) => item.id !== id))
+  })
+export const setPostLike = (id: string, liked: boolean) => {
+  invalidateInFlightFeeds()
+  return social<Post>(`/posts/${id}/like`, { method: liked ? 'PUT' : 'DELETE' }).then((post) => {
+    rememberPost(post)
+    return post
+  })
+}
+
+export function createPost(body: string, card: CardRef | null, photos: Blob[]): Promise<Post> {
+  const form = new FormData()
+  form.append('body', body)
+  if (card) form.append('card', JSON.stringify(card))
+  photos.forEach((photo, index) => form.append('images', photo, `photo-${index}.jpg`))
+  return social<Post>(`/posts?${localDayQuery()}`, { method: 'POST', body: form })
+}
+
+export const fetchAttachables = () => social<Attachables>(`/attachables?${localDayQuery()}`)
+export const fetchComments = (postId: string) => social<Comment[]>(`/posts/${encodeURIComponent(postId)}/comments`)
+export const addComment = (postId: string, body: string) =>
+  social<Comment>(`/posts/${encodeURIComponent(postId)}/comments`, jsonBody('POST', { body }))
+export const deleteComment = (id: string) => social<void>(`/comments/${id}`, { method: 'DELETE' })
+
+export const searchMembers = (q: string) => social<Member[]>(`/users?${new URLSearchParams({ q })}`)
+export const fetchMember = (username: string) => social<MemberProfile>(`/users/${encodeURIComponent(username)}`)
+export const fetchMemberPosts = (username: string, before?: string) =>
+  social<FeedPage>(`/users/${encodeURIComponent(username)}/posts?${beforeQuery(before)}`)
+export const fetchMemberList = (username: string, kind: 'followers' | 'following') =>
+  social<Member[]>(`/users/${encodeURIComponent(username)}/${kind}`)
+
+export const followMember = (id: string) =>
+  social<MemberProfile>(`/users/${id}/follow`, { method: 'PUT' }).then((profile) => {
+    invalidateInFlightFeeds()
+    lastFeeds.delete('following')
+    dropSocialSnapshot('feed:following')
+    return profile
+  })
+export const unfollowMember = (id: string) =>
+  social<void>(`/users/${id}/follow`, { method: 'DELETE' }).then(() => {
+    invalidateInFlightFeeds()
+    lastFeeds.delete('following')
+    dropSocialSnapshot('feed:following')
+  })
+export const removeFollower = (id: string) => social<void>(`/followers/${id}`, { method: 'DELETE' })
+export const fetchFollowRequests = () => social<Member[]>('/follow-requests')
+export const acceptFollowRequest = (id: string) => social<void>(`/follow-requests/${id}/accept`, { method: 'POST' })
+export const declineFollowRequest = (id: string) => social<void>(`/follow-requests/${id}`, { method: 'DELETE' })
+export const blockMember = (id: string) =>
+  social<void>(`/users/${id}/block`, { method: 'PUT' }).then(() => {
+    invalidateInFlightFeeds()
+    updateCachedFeeds((items) => items.filter((item) => item.author.id !== id))
+  })
+export const unblockMember = (id: string) =>
+  social<void>(`/users/${id}/block`, { method: 'DELETE' }).then(() => {
+    invalidateInFlightFeeds()
+    lastFeeds.clear()
+    dropSocialSnapshot('feed:following')
+    dropSocialSnapshot('feed:discover')
+  })
+export const fetchBlocked = () => social<Member[]>('/blocks')

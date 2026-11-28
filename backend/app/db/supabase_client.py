@@ -34,11 +34,27 @@ def get_supabase(admin: bool = False) -> Any | None:
     return create_client(settings.supabase_url, key, options=ClientOptions(httpx_client=http_client))
 
 
+@lru_cache
+def get_storage() -> Any | None:
+    """Storage on its own client, so file requests never touch the connection table queries use."""
+    client = get_supabase.__wrapped__(admin=True)
+    return None if client is None else client.storage
+
+
 def _warm_client(admin: bool) -> None:
     try:
         client = get_supabase(admin=True) if admin else get_supabase()
         if client is not None:
             client.table("users").select("id").limit(1).execute()
+    except Exception:
+        pass
+
+
+def _warm_storage() -> None:
+    try:
+        storage = get_storage()
+        if storage is not None:
+            storage.list_buckets()
     except Exception:
         pass
 
@@ -49,6 +65,9 @@ def warm_supabase() -> None:
     The first call to Supabase pays DNS, TLS and wake-up costs. Running it once
     at startup keeps the first save or dashboard load fast.
     """
-    threads = [threading.Thread(target=_warm_client, args=(admin,), daemon=True) for admin in (False, True)]
+    threads = [
+        *[threading.Thread(target=_warm_client, args=(admin,), daemon=True) for admin in (False, True)],
+        threading.Thread(target=_warm_storage, daemon=True),
+    ]
     for thread in threads:
         thread.start()

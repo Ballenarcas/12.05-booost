@@ -98,7 +98,7 @@ The backend talks to any API that follows the OpenAI chat format. Set three valu
 | Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.5-flash` |
 | Ollama (local) | `http://localhost:11434/v1` | `llama3.1` (any non-empty `AI_API_KEY`) |
 
-Plus `AI_API_KEY` from that provider. Models must support JSON output. The older `GROQ_API_KEY`, `GROQ_MODEL` and `GROQ_TIPS_MODEL` names still work.
+Plus `AI_API_KEY` from that provider. Models must support JSON output.
 
 ### Photo meal scanning
 

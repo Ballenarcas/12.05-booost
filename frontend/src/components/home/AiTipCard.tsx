@@ -2,7 +2,6 @@ import { CircleHelp } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { decideTip, fetchCurrentTip, undoTip, type AiTip } from '../../services/api'
 import { useDialogBehavior } from '../../utils/useDialogBehavior'
-import { usePageNavigate } from '../../utils/usePageNavigate'
 import closeIcon from '../../assets/home/close.svg'
 import { useT } from '../../i18n'
 
@@ -10,7 +9,6 @@ const UNDO_WINDOW_MS = 8000
 
 export default function AiTipCard({ onApplied }: { onApplied: () => void }) {
   const t = useT()
-  const navigate = usePageNavigate()
   const [tip, setTip] = useState<AiTip | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -93,17 +91,14 @@ export default function AiTipCard({ onApplied }: { onApplied: () => void }) {
             {undoTipId && <button type="button" className="hifi-pill" disabled={busy} onClick={undo}>{t('tip.undo')}</button>}
           </div>
         )}
-        <div className="ai-insight-actions">
-          {tip && (
+        {tip && (
+          <div className="ai-insight-actions">
             <button type="button" className="ai-insight-why" aria-label={t('tip.why')} onClick={() => setShowWhy(true)}>
               <CircleHelp size={18} aria-hidden="true" />
             </button>
-          )}
-          <button type="button" className="hifi-pill" onClick={() => navigate('/coach')}>{t('coach.ask')}</button>
-          {tip && (
             <button type="button" className="hifi-pill is-big" disabled={busy} onClick={() => decide('accepted')}>{t('tip.accept')}</button>
-          )}
-        </div>
+          </div>
+        )}
       </section>
 
       {showWhy && tip && (

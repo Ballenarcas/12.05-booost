@@ -212,12 +212,13 @@ def ask_model(candidates: list[dict[str, Any]], remaining: dict[str, float], obj
         "messages": [{"role": "system", "content": instruction}, {"role": "user", "content": json.dumps(payload)}],
         "response_format": {"type": "json_object"},
     }
+    from app.services.ai_service import apply_reasoning_params, get_ai_client  # imported late: it needs AI settings only when used
+
     if "gpt-oss" in settings.ai_model:
         request["reasoning_effort"] = "low"  # reasoning models spend completion tokens on thinking first
         request["max_completion_tokens"] = 800
     else:
-        request["max_tokens"] = 300
-    from app.services.ai_service import get_ai_client  # imported late: it needs AI settings only when used
+        apply_reasoning_params(request, settings.ai_model, max_tokens=300, reasoning_max_tokens=1500)
 
     client = get_ai_client().with_options(timeout=MODEL_TIMEOUT_SECONDS, max_retries=0)
     response = client.chat.completions.create(**request)

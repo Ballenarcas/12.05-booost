@@ -1,3 +1,4 @@
+import { resizeImage } from '../utils/resizeImage'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -25,6 +26,7 @@ import frameImage from '../assets/scan/frame.svg'
 import shutterImage from '../assets/scan/shutter.svg'
 import { locale, t as tr, useT } from '../i18n'
 import '../styles/scan-meal.css'
+import Collapse from '../components/ui/Collapse'
 
 type ScanPhase = 'idle' | 'analyzing' | 'results' | 'saving' | 'error'
 
@@ -62,29 +64,6 @@ function editableItem(item: MealScanItem): EditableItem {
 function per100(total: number, grams: number, maximum: number): number {
   if (!Number.isFinite(total) || !Number.isFinite(grams) || grams <= 0) return 0
   return Math.max(0, Math.min(maximum, Math.round(((total / grams) * 100) * 10) / 10))
-}
-
-async function prepareImage(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file)
-  const maximumSide = 1600
-  const scale = Math.min(1, maximumSide / Math.max(bitmap.width, bitmap.height))
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-  const context = canvas.getContext('2d')
-  if (!context) {
-    bitmap.close()
-    throw new Error(tr('scan.errorRead'))
-  }
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-  bitmap.close()
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error(tr('scan.errorPrepare')))),
-      'image/jpeg',
-      0.85,
-    )
-  })
 }
 
 function todayLabel(): string {
@@ -202,7 +181,7 @@ export default function ScanMeal() {
     }
     setPhase('analyzing')
     try {
-      const blob = await prepareImage(file)
+      const blob = await resizeImage(file, tr('scan.errorRead'), tr('scan.errorPrepare'))
       if (blob.size > 8 * 1024 * 1024) {
         throw new Error(t('scan.errorStillLarge'))
       }
@@ -482,13 +461,13 @@ export default function ScanMeal() {
                       {expanded ? <ChevronUp size={15} aria-hidden="true" /> : <ChevronDown size={15} aria-hidden="true" />}
                       {t('scan.macros')}
                     </button>
-                    {expanded && (
+                    <Collapse open={expanded}>
                       <div className="scan-macros">
                         <label>{t('scan.proteinG')}<input type="number" min="0" value={item.protein} onChange={(event) => updateItem(item.key, 'protein', event.target.value)} /></label>
                         <label>{t('scan.carbsG')}<input type="number" min="0" value={item.carbs} onChange={(event) => updateItem(item.key, 'carbs', event.target.value)} /></label>
                         <label>{t('scan.fatG')}<input type="number" min="0" value={item.fat} onChange={(event) => updateItem(item.key, 'fat', event.target.value)} /></label>
                       </div>
-                    )}
+                    </Collapse>
                   </article>
                 )
               })}

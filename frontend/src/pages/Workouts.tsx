@@ -1,4 +1,5 @@
 import { ChevronDown, Crown, Sparkles } from 'lucide-react'
+import Collapse from '../components/ui/Collapse'
 import { useEffect, useMemo, useState } from 'react'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
@@ -477,7 +478,7 @@ function Workouts() {
                   </span>
                   <ChevronDown className="workouts-item-chevron" size={20} aria-hidden="true" />
                 </button>
-                {isOpen && (
+                <Collapse open={isOpen}>
                   <div className="workouts-item-details">
                     <ul className="workouts-history-rows">
                       {routine.exercises.map((exercise) => {
@@ -502,7 +503,7 @@ function Workouts() {
                       <button className="hifi-pill" type="button" onClick={() => startWorkout(routine)}>{t('workouts.startWorkout')}</button>
                     </div>
                   </div>
-                )}
+                </Collapse>
               </article>
             )
           })}

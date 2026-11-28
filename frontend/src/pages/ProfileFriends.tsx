@@ -1,186 +1,176 @@
-import { BellRing, ChevronRight, MoreHorizontal } from 'lucide-react'
-import { useState } from 'react'
-import { getCurrentUser } from '../services/api'
-import { MONTHLY_CHALLENGE, PROFILE_FRIENDS_PREVIEW } from '../data/profileMockups'
+import { ArrowLeft } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import MemberRow from '../components/community/MemberRow'
+import { RowSkeleton } from '../components/community/Skeleton'
+import {
+  acceptFollowRequest,
+  declineFollowRequest,
+  fetchBlocked,
+  fetchFollowRequests,
+  fetchMemberList,
+  removeFollower,
+  unblockMember,
+  unfollowMember,
+} from '../services/api'
+import type { Member } from '../types/social'
+import { describeError } from '../utils/errors.js'
 import { usePageNavigate } from '../utils/usePageNavigate'
-import backIcon from '../assets/scan/back.svg'
-import { locale, useT } from '../i18n'
-import '../styles/profile.css'
+import { useSocialMe } from '../utils/useSocialMe'
+import { useT, type MessageKey } from '../i18n'
+import '../styles/community.css'
 
-export default function ProfileFriends() {
+type Tab = 'followers' | 'following' | 'requests' | 'blocked'
+type Action = { label: MessageKey; primary?: boolean; run: (id: string) => Promise<void> }
+
+const TABS: { id: Tab; label: MessageKey; actions: Action[] }[] = [
+  { id: 'followers', label: 'community.followers', actions: [{ label: 'community.remove', run: removeFollower }] },
+  { id: 'following', label: 'community.following', actions: [{ label: 'community.unfollow', run: unfollowMember }] },
+  {
+    id: 'requests',
+    label: 'community.requests',
+    actions: [
+      { label: 'community.accept', primary: true, run: acceptFollowRequest },
+      { label: 'community.decline', run: declineFollowRequest },
+    ],
+  },
+  { id: 'blocked', label: 'community.blocked', actions: [{ label: 'community.unblock', run: unblockMember }] },
+]
+
+function load(tab: Tab, username: string): Promise<Member[]> {
+  if (tab === 'requests') return fetchFollowRequests()
+  if (tab === 'blocked') return fetchBlocked()
+  return fetchMemberList(username, tab)
+}
+
+function MemberList({ tab, username, actions }: { tab: Tab; username: string; actions: Action[] }) {
   const t = useT()
-  const user = getCurrentUser()
-  const navigate = usePageNavigate()
-  const [infoOpen, setInfoOpen] = useState(false)
-  const [buzzMessage, setBuzzMessage] = useState<string | null>(null)
+  const [members, setMembers] = useState<Member[] | null>(null)
+  const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set())
+  const [error, setError] = useState<string | null>(null)
 
-  const firstName = user?.name?.trim().split(' ')[0] || t('friends.you')
-  const userInitials = [user?.name, user?.surname]
-    .map((part) => part?.trim()[0] ?? '')
-    .join('')
-    .toUpperCase() || 'ME'
+  useEffect(() => {
+    let current = true
+    load(tab, username)
+      .then((value) => { if (current) setMembers(value) })
+      .catch((failure) => { if (current) setError(describeError(failure, t('community.error'))) })
+    return () => { current = false }
+  }, [tab, username, t])
 
-  const challengeTotal = MONTHLY_CHALLENGE.userWorkouts + MONTHLY_CHALLENGE.partnerWorkouts
-  const challengePct = Math.min(100, Math.round((challengeTotal / MONTHLY_CHALLENGE.targetWorkouts) * 100))
-  const currentMonthName = new Date().toLocaleDateString(locale(), { month: 'long' })
-
-  function sendBuzz() {
-    setBuzzMessage(t('friends.buzzed', { name: MONTHLY_CHALLENGE.partnerName }))
+  function act(action: Action, id: string) {
+    const index = members?.findIndex((member) => member.id === id) ?? -1
+    const removed = index >= 0 ? members?.[index] : undefined
+    setBusyIds((current) => new Set(current).add(id))
+    setError(null)
+    setMembers((current) => current?.filter((member) => member.id !== id) ?? null)
+    action.run(id)
+      .catch((failure) => {
+        // Only this row comes back: other rows may have been changed meanwhile.
+        if (removed) {
+          setMembers((current) => {
+            if (!current || current.some((member) => member.id === removed.id)) return current
+            const at = Math.min(index, current.length)
+            return [...current.slice(0, at), removed, ...current.slice(at)]
+          })
+        }
+        setError(describeError(failure, t('community.error')))
+      })
+      .finally(() => {
+        setBusyIds((current) => {
+          const next = new Set(current)
+          next.delete(id)
+          return next
+        })
+      })
   }
 
   return (
-    <div className="screen hifi-screen hifi-theme friends-screen">
-      <header className="friends-header">
-        <button
-          type="button"
-          className="scan-back"
-          aria-label={t('body.back')}
-          onClick={() => navigate('/profile', { direction: 'back' })}
-        >
-          <img src={backIcon} alt="" width={36} height={37} />
-        </button>
-        <h1>{t('profile.friends')}</h1>
-        <button
-          type="button"
-          className="friends-more-btn"
-          aria-expanded={infoOpen}
-          aria-label={t('friends.options')}
-          onClick={() => setInfoOpen((open) => !open)}
-        >
-          <MoreHorizontal size={20} aria-hidden="true" />
-        </button>
-      </header>
-
-      <div className="preview-banner" role="note">
-        <strong>{t('friends.socialPreview')}</strong>
-        <span>{t('friends.mockup')}</span>
-      </div>
-
-      {infoOpen && (
-        <div className="preview-banner" role="status">
-          <span>{t('friends.addSoon')}</span>
+    <section>
+      {members === null && !error && <RowSkeleton />}
+      {members?.length === 0 && (
+        <div className="cm-empty">
+          <p>{t('community.listEmpty')}</p>
         </div>
       )}
-
-      <section className="challenge-section" aria-labelledby="challenge-heading">
-        <div className="profile-section-head">
-          <h2 className="hifi-section-title" id="challenge-heading">
-            {t('friends.challenge', { month: currentMonthName })}
-          </h2>
-          <span className="profile-section-since">{MONTHLY_CHALLENGE.daysLeft}D</span>
-        </div>
-
-        <div className="challenge-pair" aria-hidden="true">
-          <span
-            className="challenge-pair-avatar"
-            style={{ background: 'linear-gradient(145deg, #2d6eb5 0%, #72b6d9 100%)' }}
-          >
-            {userInitials}
-          </span>
-          <span
-            className="challenge-pair-avatar"
-            style={{ background: 'linear-gradient(145deg, #4b7999 0%, #8dcfe8 100%)' }}
-          >
-            {MONTHLY_CHALLENGE.partnerInitials}
-          </span>
-        </div>
-
-        <div className="challenge-card">
-          <h3 className="challenge-card-title">{t('friends.complete', { count: MONTHLY_CHALLENGE.targetWorkouts })}</h3>
-          <div>
-            <p className="challenge-progress-copy">
-              <strong>{challengeTotal}</strong>/{MONTHLY_CHALLENGE.targetWorkouts}w
-            </p>
-            <span
-              className="challenge-track"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={MONTHLY_CHALLENGE.targetWorkouts}
-              aria-valuenow={challengeTotal}
-              aria-label={t('friends.progressAria', { done: challengeTotal, total: MONTHLY_CHALLENGE.targetWorkouts })}
-            >
-              <span className="challenge-fill" style={{ width: `${challengePct}%` }} />
-            </span>
-          </div>
-
-          <ul className="challenge-rows" aria-label={t('friends.participants')}>
-            <li>
-              <strong>{firstName}</strong>
-              <span>{t('stats.workoutMany', { count: MONTHLY_CHALLENGE.userWorkouts })}</span>
-            </li>
-            <li>
-              <strong>{MONTHLY_CHALLENGE.partnerName}</strong>
-              <span>{t('stats.workoutMany', { count: MONTHLY_CHALLENGE.partnerWorkouts })}</span>
-            </li>
-          </ul>
-
-          <button type="button" className="buzz-btn" onClick={sendBuzz}>
-            <span>{t('friends.buzz')}</span>
-            <BellRing size={15} aria-hidden="true" />
-          </button>
-
-          {buzzMessage && (
-            <p className="hifi-muted" role="status">
-              {buzzMessage}
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section className="hifi-section" aria-labelledby="your-friends-title">
-        <h2 className="hifi-section-title" id="your-friends-title">{t('friends.yours')}</h2>
-        <div className="friends-list">
-          {PROFILE_FRIENDS_PREVIEW.map((friend) => (
-            <details className="friend-card" key={friend.id} open={friend.defaultOpen}>
-              <summary className="friend-summary">
-                <span className="friend-summary-left">
-                  <span
-                    className="friend-avatar"
-                    style={{ background: friend.tone }}
-                    aria-hidden="true"
-                  >
-                    {friend.initials}
-                  </span>
-                  <span className="friend-meta">
-                    <span className="friend-name">{friend.name}</span>
-                    <span className="friend-since">{friend.since}</span>
-                  </span>
-                </span>
-                <ChevronRight className="friend-chevron" size={20} aria-hidden="true" />
-              </summary>
-
-              <div className="friend-stats">
-                <div className="friend-stat-box">
-                  <span className="friend-stat-label">{t('stats.workoutsTab')}</span>
-                  <p className="friend-stat-num">
-                    {friend.workoutsDays}
-                    <small>d</small>
-                  </p>
-                  <span className="friend-stat-delta">
-                    <svg width="10" height="9" viewBox="0 0 10 9" fill="currentColor" aria-hidden="true">
-                      <path d="M5 0L10 9H0L5 0Z" />
-                    </svg>
-                    {t('friends.fromYear', { pct: friend.workoutsDeltaPct, year: 2024 })}
-                  </span>
-                </div>
-                <div className="friend-stat-box">
-                  <span className="friend-stat-label">{t('stats.time')}</span>
-                  <p className="friend-stat-num">
-                    {friend.timeHours}
-                    <small>h</small>
-                  </p>
-                  <span className="friend-stat-delta">
-                    <svg width="10" height="9" viewBox="0 0 10 9" fill="currentColor" aria-hidden="true">
-                      <path d="M5 0L10 9H0L5 0Z" />
-                    </svg>
-                    {t('friends.fromYear', { pct: friend.timeDeltaPct, year: 2024 })}
-                  </span>
-                </div>
-              </div>
-            </details>
+      {error && <p className="cm-error cm-banner-error" role="alert">{error}</p>}
+      {members && members.length > 0 && (
+        <ul className="cm-members">
+          {members.map((member) => (
+            <MemberRow key={member.id} member={member}>
+              {actions.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  className={`${action.primary ? 'cm-btn-primary' : 'cm-btn-outline'} cm-btn-sm`}
+                  disabled={busyIds.has(member.id)}
+                  onClick={() => void act(action, member.id)}
+                >
+                  {t(action.label)}
+                </button>
+              ))}
+            </MemberRow>
           ))}
-        </div>
-      </section>
+        </ul>
+      )}
+    </section>
+  )
+}
+
+export default function ProfileFriends() {
+  const t = useT()
+  const navigate = usePageNavigate()
+  const [me, , meError] = useSocialMe()
+  const [tab, setTab] = useState<Tab>('followers')
+  const active = TABS.find((item) => item.id === tab) ?? TABS[0]
+  const joined = Boolean(me?.joined && me.username)
+
+  return (
+    <div className="screen hifi-screen hifi-theme friends-screen">
+      <div className="cm-topbar">
+        <header className={`cm-topbar-back${joined ? ' no-border' : ''}`}>
+          <button
+            type="button"
+            className="cm-icon-btn"
+            aria-label={t('body.back')}
+            onClick={() => navigate('/profile', { direction: 'back' })}
+          >
+            <ArrowLeft size={20} aria-hidden="true" />
+          </button>
+          <div className="cm-topbar-heading">
+            <h1>{t('profile.friends')}</h1>
+            {me?.username && <span className="cm-topbar-sub">@{me.username}</span>}
+          </div>
+        </header>
+
+        {joined && (
+          <div className="cm-tabs" role="tablist" aria-label={t('profile.friends')}>
+            {TABS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === item.id}
+                onClick={() => setTab(item.id)}
+              >
+                {t(item.label)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {meError && <p className="cm-error cm-banner-error" role="alert">{meError}</p>}
+      {!me && !meError && <RowSkeleton />}
+      {me && !me.joined && (
+        <section className="cm-empty">
+          <p>{t('community.joinFirst')}</p>
+          <Link to="/community" className="cm-btn-primary">{t('community.openCommunity')}</Link>
+        </section>
+      )}
+
+      {me?.joined && me.username && (
+        <MemberList key={tab} tab={tab} username={me.username} actions={active.actions} />
+      )}
     </div>
   )
 }

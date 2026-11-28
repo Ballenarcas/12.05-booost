@@ -16,6 +16,33 @@
   padding-bottom: calc(9.5rem + env(safe-area-inset-bottom));
 }
 
+/* AI Coach button, bottom right above the dock. Under the Meals "add" options (z 4) so it never covers them. */
+.coach-fab {
+  position: fixed;
+  z-index: 3;
+  right: max(1rem, calc((100vw - 28rem) / 2 + 1rem));
+  bottom: calc(76px + env(safe-area-inset-bottom) + 0.75rem);
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: radial-gradient(circle at 35% 30%, #4d97d4 0%, #1563a6 75%);
+  box-shadow: 0 6px 18px rgba(21, 99, 166, 0.4);
+  cursor: pointer;
+  view-transition-name: coach-fab;
+}
+.coach-fab:active { transform: scale(0.96); }
+.coach-fab:focus-visible { outline: 2px solid #0052b1; outline-offset: 3px; }
+::view-transition-group(coach-fab) { animation: none; }
+/* Room to scroll the last content clear of the button; the workout bar pushes both up. */
+.app-shell:has(.coach-fab) .app-main { padding-bottom: calc(10rem + env(safe-area-inset-bottom)); }
+.app-shell:has(.workout-progress-bar) .coach-fab { bottom: calc(76px + env(safe-area-inset-bottom) + 5rem); }
+.app-shell:has(.workout-progress-bar):has(.coach-fab) .app-main { padding-bottom: calc(13.5rem + env(safe-area-inset-bottom)); }
+
 .session-main {
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
 }
@@ -687,6 +714,11 @@ select.settings-input { appearance: none; padding-right: 2rem; background-image:
 .gdock { view-transition-name: dock; }
 .workout-progress-bar { view-transition-name: workout-bar; }
 ::view-transition-group(dock), ::view-transition-group(workout-bar) { animation: none; }
+/* A page without them drops them at once. The whole group goes, because the browser puts the dock's
+   backdrop blur on the group, so hiding only its image leaves the blur behind. */
+:root:not(:has(.gdock))::view-transition-group(dock),
+:root:not(:has(.workout-progress-bar))::view-transition-group(workout-bar),
+:root:not(:has(.coach-fab))::view-transition-group(coach-fab) { display: none; }
 :root { --page-slide: 2.5rem; --page-ease: cubic-bezier(0.32, 0.72, 0, 1); }
 ::view-transition-old(root) { animation: page-old-out 260ms var(--page-ease) both; }
 ::view-transition-new(root) { animation: page-new-in 340ms var(--page-ease) both; }

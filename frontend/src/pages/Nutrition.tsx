@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AlertTriangle, ChefHat, ChevronDown, ChevronLeft, ChevronRight, Heart, Loader2, Plus, Scale, Search, Trash2, X } from 'lucide-react';
+import Collapse from '../components/ui/Collapse';
 import { usePageNavigate } from '../utils/usePageNavigate';
 import {
   addFavoriteMeal,
@@ -594,7 +595,7 @@ export default function Nutrition() {
                       <span className="meals-card-kcal">{meal.item_calories}kcal</span>
                     </span>
                   </div>
-                  {openMealId === meal.id && (
+                  <Collapse open={openMealId === meal.id}>
                     <div className="meals-card-details">
                       {meal.ingredients?.length ? (
                         <ul className="meals-card-foods" aria-label={t('meals.contents', { name: meal.meal_name })}>
@@ -610,7 +611,7 @@ export default function Nutrition() {
                       )}
                       <button className="hifi-link-button meals-card-edit" type="button" onClick={() => openEditModal(meal)}>{t('common.edit')}</button>
                     </div>
-                  )}
+                  </Collapse>
                 </article>
               );
             })

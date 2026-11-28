@@ -23,6 +23,7 @@ from openai import (
 
 from app.core.config import get_settings
 from app.schemas.meal_scan import MealScanItem, MealScanResult
+from app.services.ai_service import apply_reasoning_params, is_reasoning_model
 
 logger = logging.getLogger(__name__)
 
@@ -166,12 +167,12 @@ def estimate_meal_from_image(image_bytes: bytes, content_type: str) -> MealScanR
     data_url = f"data:{content_type};base64,{encoded}"
     try:
         client = OpenAI(api_key=api_key, base_url=base_url).with_options(
-            timeout=VISION_TIMEOUT_SECONDS, max_retries=0,
+            timeout=VISION_TIMEOUT_SECONDS,
+            max_retries=1 if is_reasoning_model(settings.ai_vision_model) else 0,
         )
         request: dict[str, Any] = {
             "model": settings.ai_vision_model,
             "temperature": 0.2,
-            "max_tokens": 1200,
             "messages": [
                 {"role": "system", "content": SCAN_SYSTEM_PROMPT},
                 {
@@ -183,6 +184,7 @@ def estimate_meal_from_image(image_bytes: bytes, content_type: str) -> MealScanR
                 },
             ],
         }
+        apply_reasoning_params(request, settings.ai_vision_model, max_tokens=1200, reasoning_max_tokens=2500)
         if "openrouter.ai" in base_url:
             # Reasoning models can spend the whole token budget thinking and
             # return no JSON. This extraction task wants the answer, not a plan.

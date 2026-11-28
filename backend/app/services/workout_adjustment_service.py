@@ -21,7 +21,7 @@ from app.core.i18n import (
     translate_stored_plan_text,
 )
 from app.core.local_day import LocalDay
-from app.services import overtraining_service
+from app.services.ai_service import apply_reasoning_params, is_reasoning_model
 from app.services.ai_tip_history import clean_name, instant
 from app.services.ai_tips_service import accepted_training_notes
 from app.services.health_service import get_activity_summary
@@ -116,6 +116,16 @@ async def _request_json(prompt: str, schema: dict[str, Any]) -> Any:
                 "schema": response_schema,
             },
         }
+    elif is_reasoning_model(settings.ai_model):
+        apply_reasoning_params(request, settings.ai_model, max_tokens=2048, reasoning_max_tokens=3072)
+        request["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "workout_suggestions" if is_array else "workout_plan",
+                "strict": True,
+                "schema": response_schema,
+            },
+        }
     else:
         request["max_tokens"] = 2048
         request["response_format"] = {"type": "json_object"}
@@ -124,7 +134,7 @@ async def _request_json(prompt: str, schema: dict[str, Any]) -> Any:
         api_key=settings.ai_api_key,
         base_url=settings.ai_base_url,
         timeout=AI_TIMEOUT_SECONDS,
-        max_retries=0,
+        max_retries=1 if is_reasoning_model(settings.ai_model) else 0,
     )
     try:
         for attempt in range(2):

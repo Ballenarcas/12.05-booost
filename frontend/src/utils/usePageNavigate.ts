@@ -1,53 +1,49 @@
-import { useCallback } from 'react'
-import { flushSync } from 'react-dom'
-import { useNavigate, type NavigateOptions, type To } from 'react-router-dom'
-import { prefersStillness } from './useSpring'
+import { useCallback, useLayoutEffect, useRef } from 'react'
+import { useLocation, useNavigate, useNavigationType, type NavigateOptions, type To } from 'react-router-dom'
 
-/** Which way the new page slides in: deeper pages come from the right, going back from the left. */
-export type PageDirection = 'forward' | 'back'
+/**
+ * How the new page arrives: deeper pages slide in from the right, going back from the left,
+ * and a tab from the dock fades in place, as iOS switches tabs.
+ */
+export type PageDirection = 'forward' | 'back' | 'tab'
 
 type PageNavigateOptions = NavigateOptions & { direction?: PageDirection }
 
-/** The element of the page on screen: the routed page inside the app shell, or a full-screen page. */
-function currentPage(): Element | null {
-  return document.querySelector('.app-main > *') ?? document.querySelector('#root > *')
-}
+// A direction asked for by usePageNavigate wins over the one guessed from the route.
+let asked: PageDirection | null = null
 
 /**
- * Router updates run as React transitions, and a page opened for the first time also suspends, so
- * the new page can land a moment after navigate(). Wait for it, so the transition's new snapshot is
- * the new page and not the old one or an empty frame. Frames are paused during this step, so this
- * listens to DOM changes instead of animation frames, and gives up after 400 ms.
+ * Drop-in for useNavigate. The page changes at once and the new page animates in by itself
+ * (motion.css). A View Transition used to do this, but it froze the screen for about half a
+ * second while it captured the old page, which made every tap feel late.
  */
-function newPageShown(previous: Element | null): Promise<void> {
-  const shown = () => currentPage() !== previous && !document.querySelector('[data-page-loading]')
-  if (shown()) return Promise.resolve()
-  return new Promise((done) => {
-    const observer = new MutationObserver(() => { if (shown()) finish() })
-    const timer = window.setTimeout(finish, 400)
-    function finish() { observer.disconnect(); window.clearTimeout(timer); done() }
-    observer.observe(document.getElementById('root') ?? document.body, { childList: true, subtree: true })
-  })
-}
-
-/** Drop-in for useNavigate that slides between pages with a View Transition where the browser has one. */
 export function usePageNavigate() {
   const navigate = useNavigate()
   // Stable like useNavigate's function, so effects that list it as a dependency don't rerun.
   return useCallback((to: To | number, options: PageNavigateOptions = {}) => {
     const { direction = typeof to === 'number' && to < 0 ? 'back' : 'forward', ...navigateOptions } = options
-    const go = () => (typeof to === 'number' ? navigate(to) : navigate(to, navigateOptions))
-    // Same page (e.g. clearing router state): nothing to slide.
-    const samePage = typeof to === 'string' && to.split(/[?#]/)[0] === window.location.pathname
-    if (samePage || !document.startViewTransition || prefersStillness()) {
-      void go()
-      return
-    }
-    document.documentElement.dataset.pageDirection = direction
-    const previous = currentPage()
-    document.startViewTransition(async () => {
-      flushSync(() => { void go() })
-      await newPageShown(previous)
-    })
+    asked = direction
+    void (typeof to === 'number' ? navigate(to) : navigate(to, navigateOptions))
   }, [navigate])
+}
+
+const depth = (path: string) => path.split('/').filter(Boolean).length
+
+/**
+ * Sets the direction for every page change, including plain links and the browser's Back button,
+ * so each new page animates the right way. Runs before paint, so the animation picks it up.
+ */
+export function usePageDirection() {
+  const { pathname } = useLocation()
+  const navigationType = useNavigationType()
+  const previous = useRef(pathname)
+
+  useLayoutEffect(() => {
+    const from = previous.current
+    previous.current = pathname
+    if (from === pathname) return
+    const guessed: PageDirection = navigationType === 'POP' || depth(pathname) < depth(from) ? 'back' : 'forward'
+    document.documentElement.dataset.pageDirection = asked ?? guessed
+    asked = null
+  }, [pathname, navigationType])
 }

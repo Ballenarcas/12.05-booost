@@ -57,3 +57,16 @@
 .coach-history li button[aria-current="true"] { border-color: var(--primary); }
 
 .coach-screen button:focus-visible, .coach-history li button:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+
+/* While the coach answers: its current step, with typing dots, in an assistant bubble. */
+.coach-progress { display: flex; align-items: center; gap: 10px; color: var(--hifi-muted); font-size: 14px; animation: coach-step-in 260ms var(--ease-out); }
+.coach-progress-step { animation: coach-step-in 320ms var(--ease-out); }
+.coach-dots { display: inline-flex; gap: 4px; }
+.coach-dots i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.35; animation: coach-dot 1.2s ease-in-out infinite; }
+.coach-dots i:nth-child(2) { animation-delay: 0.15s; }
+.coach-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes coach-step-in { from { opacity: 0; transform: translateY(4px); } }
+@keyframes coach-dot { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .coach-progress, .coach-progress-step, .coach-dots i { animation: none; }
+}
