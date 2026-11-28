@@ -493,7 +493,7 @@ def collect_metrics(session: Any, user_id: UUID, today: str | None = None) -> di
             continue
         volume = 0.0
         for set_row in workout.get("workout_sets") or []:
-            if set_row.get("is_done") is False:
+            if set_row.get("is_done") is not True:
                 continue
             cached = get_cached_exercise(str(set_row.get("exercise_id") or ""))
             if cached and "cardio" in (cached.category or "").lower():

@@ -317,8 +317,8 @@ def test_workout_plan_reasoning_localizes_in_spanish(monkeypatch):
         meals=[],
         routines=[],
         workout_sets=[
-            {"workout_id": "w1", "exercise_id": "ex-chest"},
-            {"workout_id": "w1", "exercise_id": "ex-legs"},
+            {"workout_id": "w1", "exercise_id": "ex-chest", "is_done": True},
+            {"workout_id": "w1", "exercise_id": "ex-legs", "is_done": True},
         ],
         exercises=[
             {"id": "ex-chest", "name": "Bench Press", "muscle_group": "Chest", "owner_id": None},

@@ -93,7 +93,7 @@ def summarize_workouts(rows: list[dict[str, Any]], day: LocalDay) -> dict[str, A
         if latest is None or age < latest[0]:
             latest = (age, clean_name(workout.get("name")))
         for item in workout.get("workout_sets") or []:
-            if item.get("is_done") is False:
+            if item.get("is_done") is not True:
                 continue
             exercise = item.get("exercises") or {}
             muscle = exercise.get("muscle_group")

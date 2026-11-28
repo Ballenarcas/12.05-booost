@@ -971,26 +971,29 @@ function ActiveWorkout() {
       exercises: currentSession.exercises.map(({ exercise_id, sets, is_cardio, is_bodyweight }, exerciseIndex) => ({
         exercise_id,
         is_cardio: Boolean(is_cardio),
-        sets: sets.map((rawSet) => {
-          const set = is_cardio ? finalizeCardioSet(rawSet) : rawSet
-          return {
-            ...set,
-            ...(is_cardio
-              ? {
-                  weight_kg: 0,
-                  reps: 0,
-                  duration_seconds: set.duration_seconds ?? null,
-                  distance_km: set.distance_km ?? null,
-                  rpe: null,
-                }
-              : {
-                  // The weight field is hidden for bodyweight exercises, so never save a stale value.
-                  ...(is_bodyweight ? { weight_kg: 0 } : {}),
-                  rpe: rpeValues[`${exerciseIndex}:${set.set_number}`] ?? set.rpe ?? null,
-                }),
-          }
-        }),
-      })),
+        sets: sets
+          .map((rawSet) => {
+            const set = is_cardio ? finalizeCardioSet(rawSet) : rawSet
+            return {
+              ...set,
+              ...(is_cardio
+                ? {
+                    weight_kg: 0,
+                    reps: 0,
+                    duration_seconds: set.duration_seconds ?? null,
+                    distance_km: set.distance_km ?? null,
+                    rpe: null,
+                  }
+                : {
+                    // The weight field is hidden for bodyweight exercises, so never save a stale value.
+                    ...(is_bodyweight ? { weight_kg: 0 } : {}),
+                    rpe: rpeValues[`${exerciseIndex}:${rawSet.set_number}`] ?? set.rpe ?? null,
+                  }),
+            }
+          })
+          .filter((set) => Boolean(set.is_completed))
+          .map((set, index) => ({ ...set, set_number: index + 1 })),
+      })).filter((exercise) => exercise.sets.length > 0),
     }
     try {
       if (currentSession.editWorkoutId) {

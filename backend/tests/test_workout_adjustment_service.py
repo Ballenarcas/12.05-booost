@@ -105,10 +105,8 @@ class FakeQuery:
             allowed = {str(value) for value in values}
             rows = [row for row in rows if str(row.get(column)) in allowed]
         rows = [row for row in rows if all(check(row) for check in self.date_checks)]
-        if self.table_name == "workout_sets" and self.filters.get("is_done") is True:
-            rows = [row for row in rows if row.get("is_done")]
-        elif self.table_name == "workout_sets" and self.columns != "id":
-            rows = [row for row in rows if not row.get("is_done")]
+        if self.table_name == "workout_sets" and "is_done" in self.filters:
+            rows = [row for row in rows if bool(row.get("is_done")) is bool(self.filters["is_done"])]
         if self.range_bounds is not None:
             start, end = self.range_bounds
             rows = rows[start:end + 1]
@@ -296,7 +294,7 @@ def recent_set(database, exercise_id):
     database.rows["workout_sets"] = [{
         "workout_id": database.workout_id,
         "exercise_id": exercise_id,
-        "is_done": False,
+        "is_done": True,
     }]
 
 
@@ -854,7 +852,7 @@ async def test_daily_plan_cascades_weekly_to_saved_routine_then_generated(monkey
 
     # Now BOTH Chest and Back (both upper) are trained -> Tier 2 empty -> Tier 3 builds fresh Legs workout from catalog.
     database.rows["workout_plans"] = []
-    database.rows["workout_sets"].append({"workout_id": database.workout_id, "exercise_id": back_ex, "is_done": False})
+    database.rows["workout_sets"].append({"workout_id": database.workout_id, "exercise_id": back_ex, "is_done": True})
     await service.plan_daily_workout(UUID(database.rows["users"][0]["id"]), database, day=monday)
     assert prompts[1]["available_routines"] == []
     assert [ex["id"] for ex in prompts[1]["available_exercises"]] == [legs_ex]
@@ -894,8 +892,8 @@ async def test_daily_plan_ppl_72h_window_prevents_repeating_push_on_day_3(monkey
          "start_time": (now - timedelta(hours=24)).isoformat(), "end_time": (now - timedelta(hours=23)).isoformat()},
     ]
     database.rows["workout_sets"] = [
-        {"workout_id": w_push, "exercise_id": push_ex, "is_done": False},
-        {"workout_id": w_pull, "exercise_id": pull_ex, "is_done": False},
+        {"workout_id": w_push, "exercise_id": push_ex, "is_done": True},
+        {"workout_id": w_pull, "exercise_id": pull_ex, "is_done": True},
     ]
 
     prompts = []
@@ -954,9 +952,9 @@ async def test_daily_plan_6day_ppl_48h_failsafe_rotates_to_oldest_trained_muscle
          "start_time": (now - timedelta(hours=20)).isoformat(), "end_time": (now - timedelta(hours=19)).isoformat()},
     ]
     database.rows["workout_sets"] = [
-        {"workout_id": w_push, "exercise_id": push_ex, "is_done": False},
-        {"workout_id": w_pull, "exercise_id": pull_ex, "is_done": False},
-        {"workout_id": w_legs, "exercise_id": legs_ex, "is_done": False},
+        {"workout_id": w_push, "exercise_id": push_ex, "is_done": True},
+        {"workout_id": w_pull, "exercise_id": pull_ex, "is_done": True},
+        {"workout_id": w_legs, "exercise_id": legs_ex, "is_done": True},
     ]
 
     prompts = []
@@ -1013,8 +1011,8 @@ async def test_daily_plan_catalog_tier3_respects_72h_then_falls_back_to_48h(monk
          "start_time": (now - timedelta(hours=24)).isoformat(), "end_time": (now - timedelta(hours=23)).isoformat()},
     ]
     database.rows["workout_sets"] = [
-        {"workout_id": w_push, "exercise_id": push_ex, "is_done": False},
-        {"workout_id": w_pull, "exercise_id": pull_ex, "is_done": False},
+        {"workout_id": w_push, "exercise_id": push_ex, "is_done": True},
+        {"workout_id": w_pull, "exercise_id": pull_ex, "is_done": True},
     ]
 
     prompts = []
@@ -1041,7 +1039,7 @@ async def test_daily_plan_catalog_tier3_respects_72h_then_falls_back_to_48h(monk
         "id": w_legs, "routine_id": None, "name": "Legs",
         "start_time": (now - timedelta(hours=20)).isoformat(), "end_time": (now - timedelta(hours=19)).isoformat(),
     })
-    database.rows["workout_sets"].append({"workout_id": w_legs, "exercise_id": legs_ex, "is_done": False})
+    database.rows["workout_sets"].append({"workout_id": w_legs, "exercise_id": legs_ex, "is_done": True})
     res_b = await service.plan_daily_workout(UUID(database.rows["users"][0]["id"]), database, day=today)
     assert res_b["rest_day"] is False
     assert [ex["id"] for ex in prompts[1]["available_exercises"]] == [push_ex]
@@ -1051,4 +1049,49 @@ async def test_daily_plan_catalog_tier3_respects_72h_then_falls_back_to_48h(monk
     database.rows["workouts"][0]["start_time"] = (now - timedelta(hours=30)).isoformat()
     res_c = await service.plan_daily_workout(UUID(database.rows["users"][0]["id"]), database, day=today)
     assert res_c["rest_day"] is True
+
+
+@pytest.mark.asyncio
+async def test_daily_plan_ignores_unchecked_sets_in_recent_workouts(monkeypatch):
+    database = FakeDatabase()
+    chest_ex = database.exercise_id
+    now = datetime.now(timezone.utc)
+    today = LocalDay(now.date(), now - timedelta(hours=1), now + timedelta(hours=23))
+
+    database.rows["routines"] = [
+        {"id": database.routine_id, "name": "Push", "scheduled_day": None},
+    ]
+    database.rows["routine_exercises"] = [
+        {"routine_id": database.routine_id, "exercise_id": chest_ex, "target_sets": 3, "target_reps": 10,
+         "set_order": 1, "exercises": {"name": "Bench Press", "muscle_group": "Chest"}},
+    ]
+    database.rows["exercises"] = [
+        {"id": chest_ex, "name": "Bench Press", "muscle_group": "Chest", "muscles": ["chest"], "equipment": ["barbell"]},
+    ]
+    database.rows["workouts"] = [
+        {"id": database.workout_id, "routine_id": database.routine_id, "name": "Push",
+         "start_time": (now - timedelta(hours=12)).isoformat(), "end_time": (now - timedelta(hours=11)).isoformat()},
+    ]
+    # Weight and reps entered, but user never marked the done checkbox (is_done=False).
+    database.rows["workout_sets"] = [
+        {"workout_id": database.workout_id, "exercise_id": chest_ex, "weight": 80, "reps": 10, "is_done": False},
+    ]
+
+    prompts = []
+
+    async def recommend(prompt, _schema):
+        prompts.append(json.loads(prompt))
+        return {
+            "routine_id": database.routine_id, "workout_name": "Push", "rest_day": False,
+            "adjusted": False, "reasoning": "Chest sets were not marked done.",
+            "exercises": [{"exercise_id": chest_ex, "sets": 3, "reps": 10}],
+        }
+
+    monkeypatch.setattr(service, "_request_json", recommend)
+    result = await service.plan_daily_workout(UUID(database.rows["users"][0]["id"]), database, day=today)
+
+    assert result["rest_day"] is False
+    assert [r["id"] for r in prompts[0]["available_routines"]] == [database.routine_id]
+    assert prompts[0]["recent_muscle_groups"] == []
+    assert prompts[0]["recent_muscle_groups_72h"] == []
 

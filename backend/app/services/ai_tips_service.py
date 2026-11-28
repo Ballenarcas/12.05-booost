@@ -746,7 +746,7 @@ def collect_state(session: Any, user_id: UUID, day: LocalDay) -> dict[str, Any]:
         started = instant(workout.get("start_time"))
         if started is None or started < prev_start:
             continue
-        sets = sum(1 for row in workout.get("workout_sets") or [] if row.get("is_done") is not False)
+        sets = sum(1 for row in workout.get("workout_sets") or [] if row.get("is_done") is True)
         if started >= week_start:
             sets_last_7d += sets
         else:

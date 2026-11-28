@@ -577,7 +577,7 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
             return empty
         recent_sets = _data(
             db_session.table("workout_sets").select("workout_id,exercise_id")
-            .in_("workout_id", list(workout_started)).execute()
+            .in_("workout_id", list(workout_started)).eq("is_done", True).execute()
         )
         ex_48h: set[str] = set()
         ex_72h: set[str] = set()

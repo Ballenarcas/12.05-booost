@@ -56,7 +56,7 @@ function formatCardioDuration(seconds: number | null | undefined): string | null
 }
 
 function formatCardioSummary(sets: WorkoutHistoryEntry['exercises'][number]['sets']): string {
-  const set = sets.find((item) => item.is_completed) ?? sets[0]
+  const set = sets.find((item) => item.is_completed)
   if (!set) return tr('workouts.cardio')
   const parts: string[] = []
   const duration = formatCardioDuration(set.duration_seconds)
@@ -128,7 +128,11 @@ function describeSets(sets: number, reps: number[], weightKg: number | null): Se
 }
 
 function summarizeSets(sets: WorkoutHistoryEntry['exercises'][number]['sets']): SetSummary {
-  return describeSets(sets.length, sets.map((set) => set.reps), Math.max(0, ...sets.map((set) => set.weight_kg)))
+  const completed = sets.filter((set) => set.is_completed)
+  if (completed.length === 0) {
+    return { text: '0S', label: tr('workouts.setMany', { count: 0 }) }
+  }
+  return describeSets(completed.length, completed.map((set) => set.reps), Math.max(0, ...completed.map((set) => set.weight_kg)))
 }
 
 const LIST_PREVIEW_SIZE = 3
@@ -217,7 +221,11 @@ function Workouts() {
   function repeatWorkout(workout: WorkoutHistoryEntry) {
     const deloadPct = getActiveDeloadPct(currentUserId)
     const modActive = deloadPct > 0
-    const exercises: ActiveExercise[] = workout.exercises.map((exercise) => {
+    const completedOnly = workout.exercises
+      .map((exercise) => ({ ...exercise, sets: exercise.sets.filter((set) => set.is_completed) }))
+      .filter((exercise) => exercise.sets.length > 0)
+    const sourceExercises = completedOnly.length > 0 ? completedOnly : workout.exercises
+    const exercises: ActiveExercise[] = sourceExercises.map((exercise) => {
       const isCardio = isCardioExercise(exercise)
       const previousSets = [...exercise.sets].sort((first, second) => first.set_number - second.set_number)
       const lastSet = previousSets[previousSets.length - 1]
@@ -529,6 +537,9 @@ function Workouts() {
           <div className="workouts-list">
             {visibleHistory.map((workout) => {
               const isOpen = openWorkoutId === workout.id
+              const completedExercises = workout.exercises
+                .map((exercise) => ({ ...exercise, sets: exercise.sets.filter((set) => set.is_completed) }))
+                .filter((exercise) => exercise.sets.length > 0)
               return (
                 <article className="hifi-card workouts-item is-history" key={workout.id}>
                   <button className="workouts-item-toggle" type="button" aria-expanded={isOpen} onClick={() => setOpenWorkoutId(isOpen ? null : workout.id)}>
@@ -536,16 +547,16 @@ function Workouts() {
                       <span className="workouts-item-name">{workout.name}</span>
                       <span className="workouts-item-meta is-muted">
                         <span>{formatWorkoutDuration(workout.duration_seconds)}</span>
-                        <span>{t('workouts.exerciseCount', { count: workout.exercises.length })}</span>
+                        <span>{t(completedExercises.length === 1 ? 'workouts.exerciseOne' : 'workouts.exerciseCount', { count: completedExercises.length })}</span>
                       </span>
                     </span>
                     <span className="workouts-item-date">{formatRelativeDay(workout.started_at)}</span>
                   </button>
                   {isOpen && (
                     <div className="workouts-item-details">
-                      {workout.exercises.length > 0 && (
+                      {completedExercises.length > 0 && (
                         <ul className="workouts-history-rows">
-                          {workout.exercises.map((exercise) => (
+                          {completedExercises.map((exercise) => (
                             <li key={exercise.exercise_id}>
                               <span>{exercise.name}</span>
                               {isCardioExercise(exercise)
