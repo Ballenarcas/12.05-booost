@@ -21,6 +21,7 @@ from app.core.i18n import (
     translate_stored_plan_text,
 )
 from app.core.local_day import LocalDay
+from app.services import overtraining_service
 from app.services.ai_service import apply_reasoning_params, is_reasoning_model
 from app.services.ai_tip_history import clean_name, instant
 from app.services.ai_tips_service import accepted_training_notes
