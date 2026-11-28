@@ -5,6 +5,7 @@ and it caps every select at ``max_rows`` the way Supabase does.
 """
 
 import re
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -118,7 +119,9 @@ class FakeTable:
         return self
 
     def execute(self):
+        started = time.perf_counter()
         time.sleep(self.db.latency)  # a round trip to Supabase
+        self.db.record_round_trip(started, time.perf_counter())
         rows = self.db.tables[self.name]
         if self.action in ("insert", "upsert"):
             return SimpleNamespace(data=self._write(rows), count=None)
@@ -194,7 +197,10 @@ class FakeBucket:
         self.storage, self.name = storage, name
 
     def upload(self, path, file, file_options=None):
+        started = time.perf_counter()
         time.sleep(self.storage.latency)
+        if self.storage.on_round_trip:
+            self.storage.on_round_trip(started, time.perf_counter())
         self.storage.uploads += 1
         if self.storage.fail_on_upload == self.storage.uploads:
             raise RuntimeError("upload failed")
@@ -202,7 +208,10 @@ class FakeBucket:
         self.storage.objects[(self.name, path)] = file
 
     def download(self, path):
+        started = time.perf_counter()
         time.sleep(self.storage.latency)
+        if self.storage.on_round_trip:
+            self.storage.on_round_trip(started, time.perf_counter())
         self.storage.downloads += 1
         return self.storage.objects[(self.name, path)]
 
@@ -212,9 +221,10 @@ class FakeBucket:
 
 
 class FakeStorage:
-    def __init__(self, latency=0.0):
+    def __init__(self, latency=0.0, on_round_trip=None):
         self.objects, self.uploads, self.downloads, self.fail_on_upload = {}, 0, 0, None
         self.latency = latency
+        self.on_round_trip = on_round_trip
 
     def from_(self, name):
         return FakeBucket(self, name)
@@ -224,7 +234,15 @@ class FakeSupabase:
     def __init__(self, max_rows=1000, latency=0.0):
         self.tables = {name: [] for name in TABLES}
         self.latency = latency
-        self.max_rows, self.selects, self.storage, self._ticks = max_rows, [], FakeStorage(latency), 0
+        self._round_trips_lock = threading.Lock()
+        self.round_trips: list[tuple[float, float]] = []
+        self.max_rows, self.selects, self.storage, self._ticks = (
+            max_rows, [], FakeStorage(latency, on_round_trip=self.record_round_trip), 0,
+        )
+
+    def record_round_trip(self, started: float, ended: float) -> None:
+        with self._round_trips_lock:
+            self.round_trips.append((started, ended))
 
     def table(self, name):
         return FakeTable(self, name)

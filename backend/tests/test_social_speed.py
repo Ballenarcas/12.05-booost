@@ -4,9 +4,6 @@ The fake sleeps on every query like a real round trip, so a request's time shows
 waves of queries it runs. Independent queries in one wave run together.
 """
 
-import gc
-import time
-
 import pytest
 
 from app.facades import social_facade
@@ -34,17 +31,17 @@ def world(monkeypatch):
     return world
 
 
-def timed(send):
-    # A garbage-collection pause from earlier tests would read as an extra round trip.
-    gc.collect()
-    gc.disable()
-    try:
-        started = time.perf_counter()
-        response = send()
-    finally:
-        gc.enable()
+def measure_waves(world, send) -> int:
+    world.db.round_trips.clear()
+    response = send()
     assert response.status_code < 300, response.text
-    return (time.perf_counter() - started) / LATENCY
+    waves = 0
+    wave_end = -1.0
+    for started, ended in sorted(world.db.round_trips, key=lambda span: span[1]):
+        if started >= wave_end:
+            waves += 1
+            wave_end = ended
+    return waves
 
 
 @pytest.mark.parametrize("name,waves,send", [
@@ -62,7 +59,7 @@ def timed(send):
     ("delete post", 3, lambda w: w.delete(f"/posts/{w.own_post}", w.me)),
 ])
 def test_requests_run_their_queries_in_few_waves(world, name, waves, send):
-    assert timed(lambda: send(world)) < waves + 0.6, name
+    assert measure_waves(world, lambda: send(world)) <= waves, name
 
 
 def test_me_lists_who_you_follow_for_the_profile_card(world):
@@ -91,5 +88,5 @@ def test_photos_are_read_from_storage_once_and_never_after_delete(world):
 def test_a_post_with_four_photos_uploads_them_together(world):
     del world.post  # the fixture's post id hides the World.post method
     # 4 photos one after another would be 4 more round trips on their own.
-    assert timed(lambda: world.publish(world.me, photos=4)) < 6
+    assert measure_waves(world, lambda: world.publish(world.me, photos=4)) < 6
     assert world.db.storage.uploads == 4
