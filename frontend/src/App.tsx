@@ -8,6 +8,9 @@ const pages = {
   Home: () => import('./pages/Home'),
   ActiveWorkout: () => import('./pages/ActiveWorkout'),
   AiCoach: () => import('./pages/AiCoach'),
+  Community: () => import('./pages/Community'),
+  CommunityPost: () => import('./pages/CommunityPost'),
+  CommunityProfile: () => import('./pages/CommunityProfile'),
   CreateRoutine: () => import('./pages/CreateRoutine'),
   CustomExercise: () => import('./pages/CustomExercise'),
   ExercisePicker: () => import('./pages/ExercisePicker'),
@@ -49,6 +52,9 @@ if (typeof window !== 'undefined') {
 const Home = lazy(pages.Home)
 const ActiveWorkout = lazy(pages.ActiveWorkout)
 const AiCoach = lazy(pages.AiCoach)
+const Community = lazy(pages.Community)
+const CommunityPost = lazy(pages.CommunityPost)
+const CommunityProfile = lazy(pages.CommunityProfile)
 const CreateRoutine = lazy(pages.CreateRoutine)
 const CustomExercise = lazy(pages.CustomExercise)
 const ExercisePicker = lazy(pages.ExercisePicker)
@@ -105,6 +111,9 @@ function App() {
             <Route path="/scan-meal" element={<ScanMeal />} />
             <Route path="/hydration/history" element={<HydrationHistory />} />
             <Route path="/premium" element={<Premium />} />
+            <Route path="/community" element={<Community />} />
+            <Route path="/community/post/:id" element={<CommunityPost />} />
+            <Route path="/community/u/:username" element={<CommunityProfile />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/profile/friends" element={<ProfileFriends />} />
             <Route path="/profile/body-measurements" element={<BodyMeasurements />} />

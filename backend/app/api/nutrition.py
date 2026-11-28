@@ -20,6 +20,7 @@ from app.schemas.nutrition import (
 )
 from app.schemas.nutrition_statistics import NutritionStatisticsRange, NutritionStatisticsResponse
 from app.facades.nutrition_facade import nutrition_facade
+from app.services.image_service import ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, looks_like_image
 from app.services.meal_recommendation_service import AlreadyHandled, RefreshLimitReached
 from app.services.meal_scan_service import MealScanFailed, MealScanNoFood, MealScanUnavailable
 from app.services.nutrition_service import (
@@ -30,10 +31,6 @@ from app.services.nutrition_service import (
 
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
 logger = logging.getLogger(__name__)
-
-MAX_IMAGE_BYTES = 8 * 1024 * 1024
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
-
 
 @router.get("/search-foods", response_model=list[FoodSearchItem])
 def search_food_items(
@@ -74,14 +71,6 @@ def get_nutrition_statistics(
     return nutrition_facade.get_statistics(user_id, range_key, timezone_offset_minutes)
 
 
-def _looks_like_image(data: bytes) -> bool:
-    if data.startswith(b"\xff\xd8\xff"):
-        return True
-    if data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return True
-    return data[:4] == b"RIFF" and data[8:12] == b"WEBP"
-
-
 @router.post("/scan", response_model=MealScanResult)
 def scan_meal_photo(
     file: UploadFile = File(...),
@@ -93,7 +82,7 @@ def scan_meal_photo(
     data = file.file.read(MAX_IMAGE_BYTES + 1)
     if len(data) > MAX_IMAGE_BYTES:
         raise HTTPException(status_code=413, detail="That photo is too large. Use one under 8 MB.")
-    if not data or not _looks_like_image(data):
+    if not data or not looks_like_image(data):
         raise HTTPException(status_code=415, detail="That file is not a supported photo.")
 
     try:

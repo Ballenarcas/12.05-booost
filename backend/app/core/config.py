@@ -1,6 +1,5 @@
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,18 +8,17 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_key: str = ""
     supabase_service_role_key: str = ""
-    # Any OpenAI-compatible chat API (Groq, OpenAI, OpenRouter, Gemini, Ollama...).
-    # The older GROQ_* names still work, so existing .env files keep running.
+    # Any OpenAI-compatible chat API (Groq, OpenAI, OpenRouter, Gemini, Ollama...): one key for every AI feature.
     ai_base_url: str = "https://api.groq.com/openai/v1"
-    ai_api_key: str = Field("", validation_alias=AliasChoices("AI_API_KEY", "GROQ_API_KEY"))
-    ai_model: str = Field("openai/gpt-oss-20b", validation_alias=AliasChoices("AI_MODEL", "GROQ_MODEL"))
-    ai_tips_model: str = Field("openai/gpt-oss-120b", validation_alias=AliasChoices("AI_TIPS_MODEL", "GROQ_TIPS_MODEL"))
+    ai_api_key: str = ""
+    ai_model: str = "openai/gpt-oss-20b"
+    ai_tips_model: str = "openai/gpt-oss-120b"
     ai_tips_model_enabled: bool = False
     # Photo meal scanning needs an image-capable model. It may use a different
     # OpenAI-compatible provider from the text model, so the keys are separate.
-    ai_vision_model: str = Field("", validation_alias=AliasChoices("AI_VISION_MODEL"))
-    ai_vision_base_url: str = Field("", validation_alias=AliasChoices("AI_VISION_BASE_URL"))
-    ai_vision_api_key: str = Field("", validation_alias=AliasChoices("AI_VISION_API_KEY"))
+    ai_vision_model: str = ""
+    ai_vision_base_url: str = ""
+    ai_vision_api_key: str = ""
     cors_origins: str = "http://localhost:5173"
 
     # Session signing. Falls back to the Supabase service-role key when no

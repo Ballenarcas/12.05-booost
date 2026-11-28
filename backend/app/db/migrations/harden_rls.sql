@@ -25,7 +25,12 @@ BEGIN
     'ai_calorie_adjustments',
     'ai_tips',
     'ai_chat_conversations',
-    'ai_chat_messages'
+    'ai_chat_messages',
+    'social_posts',
+    'social_post_likes',
+    'social_comments',
+    'social_follows',
+    'social_blocks'
   ] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', target);
 

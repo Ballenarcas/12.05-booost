@@ -88,13 +88,17 @@ export default function CoachActions({ message }: { message: ChatMessage }) {
 
   if (!exercises.length && !meals.length) return null
 
+  const canStartWorkout = exercises.length >= 2 || (exercises.length === 1 && exercises[0].is_cardio)
+
   return (
     <>
       {exercises.length > 0 && (
         <div className="coach-actions">
-          <button type="button" className="hifi-pill" onClick={() => (hasWorkoutInProgress() ? setDialog('replace') : startWorkout())}>
-            <Play size={14} aria-hidden="true" /> {t('coach.startWorkout')}
-          </button>
+          {canStartWorkout && (
+            <button type="button" className="hifi-pill" onClick={() => (hasWorkoutInProgress() ? setDialog('replace') : startWorkout())}>
+              <Play size={14} aria-hidden="true" /> {t('coach.startWorkout')}
+            </button>
+          )}
           <button type="button" className="hifi-pill" onClick={chooseRoutine}>
             <Plus size={14} aria-hidden="true" /> {t('coach.addToRoutine')}
           </button>
