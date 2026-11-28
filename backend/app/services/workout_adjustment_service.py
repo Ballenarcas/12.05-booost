@@ -21,6 +21,7 @@ from app.core.i18n import (
     translate_stored_plan_text,
 )
 from app.core.local_day import LocalDay
+from app.services import overtraining_service
 from app.services.ai_service import apply_reasoning_params, is_reasoning_model
 from app.services.ai_tip_history import clean_name, instant
 from app.services.ai_tips_service import accepted_training_notes
@@ -46,6 +47,8 @@ _DEFICIT_RATIO = 0.8
 _SURPLUS_RATIO = 1.2
 
 MIN_PLAN_EXERCISES = MIN_EXERCISES  # shorter routines and past sessions are not a full day's training
+RECOVERY_PREFERRED_HOURS = 72
+RECOVERY_MIN_HOURS = 48
 HISTORY_DAYS = 60
 MAX_HISTORY_OPTIONS = 3
 FATIGUE_WINDOW_DAYS = 7
@@ -203,6 +206,35 @@ def _recent_fatigue(db_session: Any, user_id: UUID) -> dict[str, Any]:
     return {"average": average, "latest": latest, "workouts": len(levels)}
 
 
+def _recent_joint_pain(db_session: Any, user_id: UUID) -> dict[str, list[str]]:
+    """Recent and repeated post-workout joint pain over the last 14 days."""
+    since = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+    recent_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    try:
+        rows = _data(
+            db_session.table("workouts").select("joint_pain,start_time")
+            .eq("user_id", str(user_id)).gte("start_time", since).execute()
+        )
+    except Exception:
+        return {"recent": [], "repeated": []}
+    counts: Counter[str] = Counter()
+    recent: set[str] = set()
+    for row in rows:
+        raw_joints = row.get("joint_pain") or []
+        if not isinstance(raw_joints, list):
+            continue
+        unique = {str(j).strip().lower() for j in raw_joints if isinstance(j, str) and j.strip()}
+        for j in unique:
+            counts[j] += 1
+        started = instant(row.get("start_time"))
+        if started is None or started >= recent_cutoff:
+            recent.update(unique)
+    return {
+        "recent": sorted(recent),
+        "repeated": sorted(j for j, count in counts.items() if count >= 2),
+    }
+
+
 def _exercise_name(row: dict[str, Any]) -> str:
     exercise = row.get("exercises")
     if isinstance(exercise, list):
@@ -354,7 +386,11 @@ def history_sessions(
 
 
 def _load_history_sessions(
-    db_session: Any, user_id: UUID, blocked_muscle_groups: set[str], guidance: dict[str, Any],
+    db_session: Any,
+    user_id: UUID,
+    blocked_muscle_groups: set[str],
+    guidance: dict[str, Any],
+    fallback_blocked_muscle_groups: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """A failed read only costs the personal plan: the generic template still works."""
     now = datetime.now(timezone.utc)
@@ -373,7 +409,40 @@ def _load_history_sessions(
     except Exception:
         logger.exception("Could not load workout history")
         return []
-    return history_sessions(workouts, sets, blocked_muscle_groups, guidance, now)[:MAX_HISTORY_OPTIONS]
+    preferred = history_sessions(workouts, sets, blocked_muscle_groups, guidance, now)[:MAX_HISTORY_OPTIONS]
+    if preferred or fallback_blocked_muscle_groups is None:
+        return preferred
+    return history_sessions(workouts, sets, fallback_blocked_muscle_groups, guidance, now)[:MAX_HISTORY_OPTIONS]
+
+
+def _filter_routines_for_recovery(
+    routines: list[dict[str, Any]],
+    muscles_72h: set[str],
+    muscles_48h: set[str],
+    muscle_last_trained: dict[str, datetime],
+    latest_workout_muscles: set[str],
+) -> tuple[list[dict[str, Any]], bool]:
+    """Prefer routines rested >=72h; fall back to >=48h sorted oldest-trained first."""
+    preferred = [routine for routine in routines if not (set(routine["muscle_groups"]) & muscles_72h)]
+    if preferred:
+        return preferred, False
+    candidates = [routine for routine in routines if not (set(routine["muscle_groups"]) & muscles_48h)]
+    if not candidates:
+        return [], False
+    if len(candidates) > 1 and latest_workout_muscles:
+        non_repeating = [
+            routine for routine in candidates if not (set(routine["muscle_groups"]) & latest_workout_muscles)
+        ]
+        if non_repeating:
+            candidates = non_repeating
+    epoch = datetime.min.replace(tzinfo=timezone.utc)
+    candidates.sort(
+        key=lambda routine: max(
+            (muscle_last_trained[m] for m in routine["muscle_groups"] if m in muscle_last_trained),
+            default=epoch,
+        )
+    )
+    return candidates, True
 
 
 def _plan_retry_is_usable(
@@ -451,7 +520,10 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
     """Build today's training plan and store it as a document, apart from completed workouts."""
     start, end = (day.start, day.end) if day else _today_window()
     today = (day.local_date if day else start.date()).isoformat()
-    since = datetime.now(timezone.utc) - timedelta(hours=48)
+    now = datetime.now(timezone.utc)
+    since_meals = now - timedelta(hours=48)
+    since_48h = now - timedelta(hours=RECOVERY_MIN_HOURS)
+    since_72h = now - timedelta(hours=RECOVERY_PREFERRED_HOURS)
     uid = str(user_id)
 
     def existing_plan_today() -> list[dict[str, Any]]:
@@ -473,31 +545,91 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
     def recent_meals() -> list[dict[str, Any]]:
         return _data(
             db_session.table("meals").select("calories,proteins,carbs,fats,consumed_at").eq("user_id", uid)
-            .gte("consumed_at", since.isoformat()).lt("consumed_at", end.isoformat()).execute()
+            .gte("consumed_at", since_meals.isoformat()).lt("consumed_at", end.isoformat()).execute()
         )
 
     def user_routines() -> list[dict[str, Any]]:
-        return _data(db_session.table("routines").select("id,name").eq("user_id", uid).execute())
+        return _data(db_session.table("routines").select("id,name,scheduled_day").eq("user_id", uid).execute())
 
-    def recently_trained() -> tuple[set[str], set[str]]:
-        """Exercise ids and muscle groups of the last 48 hours: three steps that depend on each other."""
+    def recently_trained() -> dict[str, Any]:
+        """Exercise ids and muscle groups trained in the last 72h (preferred) and 48h (minimum)."""
+        empty: dict[str, Any] = {
+            "ex_48h": set(),
+            "muscles_48h": set(),
+            "ex_72h": set(),
+            "muscles_72h": set(),
+            "muscle_last_trained": {},
+            "latest_workout_muscles": set(),
+        }
         recent_workouts = _data(
-            db_session.table("workouts").select("id").eq("user_id", uid)
-            .gte("start_time", since.isoformat()).execute()
+            db_session.table("workouts").select("id,start_time").eq("user_id", uid)
+            .gte("start_time", since_72h.isoformat()).execute()
         )
         if not recent_workouts:
-            return set(), set()
+            return empty
+        # Missing start_time (e.g. test fixtures) defaults to now so it counts in both 48h and 72h windows.
+        workout_started = {
+            str(row["id"]): (instant(row.get("start_time")) or now)
+            for row in recent_workouts
+            if row.get("id") is not None
+        }
+        if not workout_started:
+            return empty
         recent_sets = _data(
-            db_session.table("workout_sets").select("exercise_id")
-            .in_("workout_id", [str(row["id"]) for row in recent_workouts]).execute()
+            db_session.table("workout_sets").select("workout_id,exercise_id")
+            .in_("workout_id", list(workout_started)).execute()
         )
-        exercise_ids = {str(row["exercise_id"]) for row in recent_sets if row.get("exercise_id")}
-        if not exercise_ids:
-            return exercise_ids, set()
+        ex_48h: set[str] = set()
+        ex_72h: set[str] = set()
+        for row in recent_sets:
+            if not row.get("exercise_id"):
+                continue
+            ex_id = str(row["exercise_id"])
+            wid = str(row.get("workout_id") or "")
+            started = workout_started.get(wid, now)
+            ex_72h.add(ex_id)
+            if started >= since_48h:
+                ex_48h.add(ex_id)
+        if not ex_72h:
+            return empty
         recent_rows = _data(
-            db_session.table("exercises").select("id,muscle_group").in_("id", sorted(exercise_ids)).execute()
+            db_session.table("exercises").select("id,muscle_group").in_("id", sorted(ex_72h)).execute()
         )
-        return exercise_ids, {row["muscle_group"] for row in recent_rows if row.get("muscle_group")}
+        exercise_muscle = {
+            str(row["id"]): row["muscle_group"]
+            for row in recent_rows
+            if row.get("id") and row.get("muscle_group")
+        }
+        muscles_48h: set[str] = set()
+        muscles_72h: set[str] = set()
+        muscle_last_trained: dict[str, datetime] = {}
+        muscles_by_workout: dict[str, set[str]] = {}
+        for row in recent_sets:
+            ex_id = str(row.get("exercise_id") or "")
+            mg = exercise_muscle.get(ex_id)
+            if not mg:
+                continue
+            wid = str(row.get("workout_id") or "")
+            started = workout_started.get(wid, now)
+            muscles_72h.add(mg)
+            if started >= since_48h:
+                muscles_48h.add(mg)
+            prev = muscle_last_trained.get(mg)
+            if prev is None or started > prev:
+                muscle_last_trained[mg] = started
+            muscles_by_workout.setdefault(wid, set()).add(mg)
+        latest_workout_muscles: set[str] = set()
+        if muscles_by_workout:
+            latest_wid = max(muscles_by_workout, key=lambda wid: workout_started.get(wid, now))
+            latest_workout_muscles = muscles_by_workout[latest_wid]
+        return {
+            "ex_48h": ex_48h,
+            "muscles_48h": muscles_48h,
+            "ex_72h": ex_72h,
+            "muscles_72h": muscles_72h,
+            "muscle_last_trained": muscle_last_trained,
+            "latest_workout_muscles": latest_workout_muscles,
+        }
 
     try:
         # A plan that already exists, or a workout already finished today, ends the request early,
@@ -519,7 +651,13 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
                 activity = activity_future.result()
                 meals = meals_future.result()
                 routines = routines_future.result()
-                recent_exercise_ids, recent_muscle_groups = recent_future.result()
+                trained = recent_future.result()
+                ex_48h = trained["ex_48h"]
+                muscles_48h = trained["muscles_48h"]
+                ex_72h = trained["ex_72h"]
+                muscles_72h = trained["muscles_72h"]
+                muscle_last_trained = trained["muscle_last_trained"]
+                latest_workout_muscles = trained["latest_workout_muscles"]
             if not users:
                 raise HTTPException(status_code=404, detail="User not found")
             user = users[0]
@@ -539,7 +677,8 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         return {"plan_id": None, "ai_adjusted": False, "reasoning": None, "rest_day": False,
                 "sets_created": False}
 
-    available_routines: list[dict[str, Any]] = []
+    today_weekday = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")[(day.local_date if day else start.date()).weekday()]
+    all_routines: list[dict[str, Any]] = []
     if routines:
         routine_ids = [str(row["id"]) for row in routines]
         routine_rows = _data(
@@ -550,7 +689,7 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         exercises_by_routine: dict[str, list[dict[str, Any]]] = {routine_id: [] for routine_id in routine_ids}
         for exercise in routine_rows:
             exercises_by_routine.setdefault(str(exercise["routine_id"]), []).append(exercise)
-        available_routines = [
+        all_routines = [
             {
                 **routine,
                 "exercises": exercises_by_routine.get(str(routine["id"]), []),
@@ -560,40 +699,77 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
                 }),
             }
             for routine in routines
-            if len(exercises_by_routine.get(str(routine["id"]), [])) >= MIN_PLAN_EXERCISES
+            if len(exercises_by_routine.get(str(routine["id"]), [])) >= 1
         ]
-    safe_routines = [
-        routine for routine in available_routines
-        if not (set(routine["muscle_groups"]) & recent_muscle_groups)
-    ]
+
+    # Priority 1: Accepted weekly plan (scheduled_day) -> Priority 2: Saved routines -> Priority 3: New generated workout.
+    scheduled_routines = [r for r in all_routines if r.get("scheduled_day")]
+    using_weekly_plan = False
+    used_48h_failsafe = False
+    safe_routines: list[dict[str, Any]] = []
+    if scheduled_routines:
+        today_scheduled = [r for r in scheduled_routines if r.get("scheduled_day") == today_weekday]
+        if not today_scheduled:
+            return _save_rest_day(
+                db_session,
+                user_id,
+                today,
+                pick(
+                    "Today is a scheduled rest day in your weekly plan. Focus on recovery and nutrition.",
+                    "Hoy es día de descanso programado en tu plan semanal. Céntrate en recuperar y en tu nutrición.",
+                ),
+                adjusted=False,
+            )
+        safe_scheduled = [r for r in today_scheduled if not (set(r["muscle_groups"]) & muscles_48h)]
+        if safe_scheduled:
+            safe_routines = safe_scheduled
+            using_weekly_plan = True
+
+    if not safe_routines:
+        eligible_routines = [
+            routine for routine in all_routines if len(routine["exercises"]) >= MIN_PLAN_EXERCISES
+        ]
+        safe_routines, used_48h_failsafe = _filter_routines_for_recovery(
+            eligible_routines, muscles_72h, muscles_48h, muscle_last_trained, latest_workout_muscles,
+        )
     objective = user.get("objective")
     fatigue = _recent_fatigue(db_session, user_id)
     fatigue_is_high = fatigue["latest"] >= FATIGUE_HIGH
+    joint_pain = _recent_joint_pain(db_session, user_id)
+    active_deload_pct = overtraining_service.get_active_deload_pct(user_id, db_session)
     guidance = fatigue_adjusted_guidance(objective_guidance(objective), fatigue["latest"])
     from_history = False
     if not safe_routines:
-        safe_routines = _load_history_sessions(db_session, user_id, recent_muscle_groups, guidance)
+        safe_routines = _load_history_sessions(
+            db_session, user_id, muscles_72h, guidance, fallback_blocked_muscle_groups=muscles_48h,
+        )
         from_history = bool(safe_routines)
     session: dict[str, Any] | None = None
     available_exercises: list[dict[str, Any]] = []
     if not safe_routines:
         catalog = _load_exercise_catalog(db_session)
         seed = f"{user_id}:{today}"
-        session = build_session(catalog, recent_muscle_groups, recent_exercise_ids, seed)
+        session = build_session(catalog, muscles_72h, ex_72h, seed)
         if session:
             available_exercises = session_pool(session)
-        elif recent_covers_whole_body(recent_muscle_groups):
-            return _save_rest_day(
-                db_session, user_id, today,
-                pick(
-                    "Every major muscle group was trained in the last 48 hours. Today is a rest day.",
-                    "Todos los grupos musculares principales se entrenaron en las últimas 48 horas. Hoy es día de descanso.",
-                ),
-                adjusted=True,
-            )
-        else:
+        elif recent_covers_whole_body(muscles_72h):
+            if recent_covers_whole_body(muscles_48h):
+                return _save_rest_day(
+                    db_session, user_id, today,
+                    pick(
+                        "Every major muscle group was trained in the last 48 hours. Today is a rest day.",
+                        "Todos los grupos musculares principales se entrenaron en las últimas 48 horas. Hoy es día de descanso.",
+                    ),
+                    adjusted=True,
+                )
+            session = build_session(catalog, muscles_48h, ex_48h, seed)
+            if session:
+                available_exercises = session_pool(session)
+        if not session:
             available_exercises = _sample_exercise_pool(
-                catalog, recent_muscle_groups, recent_exercise_ids, seed=seed,
+                catalog, muscles_72h, ex_72h, seed=seed,
+            ) or _sample_exercise_pool(
+                catalog, muscles_48h, ex_48h, seed=seed,
             )
         if not available_exercises:
             if not catalog:
@@ -647,11 +823,27 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         f"({guidance['summary']}), resting about {guidance['rest_seconds']} seconds between sets."
     )
     if safe_routines:
-        plan_instruction = (
-            "Choose one of the user's past sessions in available_routines and return its id. They are ordered "
-            "best first, so take the first unless user_commitments point to another. Return every exercise in it, "
-            "preserving exercise_id. Keep its sets and reps, lowering them only if the nutrition context calls for it."
-        ) if from_history else "Choose one supplied routine and return its id. Return every exercise in that routine, preserving exercise_id. Adjust set and rep counts based on the nutrition context."
+        if from_history:
+            plan_instruction = (
+                "Choose one of the user's past sessions in available_routines and return its id. They are ordered "
+                "best first, so take the first unless user_commitments point to another. Return every exercise in it, "
+                "preserving exercise_id. Keep its sets and reps, lowering them only if the nutrition context calls for it."
+            )
+        elif using_weekly_plan:
+            plan_instruction = (
+                "Use today's scheduled routine from the user's weekly plan in available_routines and return its id. "
+                "Return every exercise in it, preserving exercise_id. Only trim sets/reps if fatigue, joint pain, "
+                "deload week, or severe calorie deficit calls for recovery."
+            )
+        else:
+            order_hint = (
+                " They are ordered most-rested muscles first, so prefer the first unless user_commitments point to another."
+                if used_48h_failsafe else ""
+            )
+            plan_instruction = (
+                "Choose one supplied routine and return its id. Return every exercise in that routine, "
+                "preserving exercise_id. Adjust set and rep counts based on the nutrition context." + order_hint
+            )
         routine_context = safe_routines
         program_context = None
         exercise_context: list[dict[str, Any]] = []
@@ -686,8 +878,8 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
             }
         else:
             plan_instruction = (
-                "Build a complete workout from the supplied exercise pool only. The pool already excludes every muscle "
-                "group trained in the last 48 hours. Select a balanced group of exercises and choose practical sets and "
+                "Build a complete workout from the supplied exercise pool only. The pool already excludes "
+                "recently trained muscle groups (72h preferred, 48h minimum recovery). Select a balanced group of exercises and choose practical sets and "
                 f"reps for each. Use {target_range} Return routine_id as null and provide a concise workout_name. "
                 "Do not invent exercise IDs or names."
             )
@@ -707,13 +899,16 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         "activity_burn_48h": round(activity_burn_48h),
         "health_activity": activity.model_dump(mode="json") if activity.connected else None,
         "calorie_status": calorie_status,
-        "recent_muscle_groups": sorted(recent_muscle_groups),
+        "recent_muscle_groups": sorted(muscles_48h),
+        "recent_muscle_groups_72h": sorted(muscles_72h),
         "workout_fatigue": {
             "latest": fatigue["latest"],
             "average_last_7_days": fatigue["average"],
             "workouts": fatigue["workouts"],
             "status": "high" if fatigue_is_high else "normal",
         } if fatigue["workouts"] else None,
+        "joint_pain": joint_pain if (joint_pain["recent"] or joint_pain["repeated"]) else None,
+        "deload_week": {"active": True, "reduction_pct": active_deload_pct, "rpe_cap": 6} if active_deload_pct > 0 else None,
         "program": program_context,
         "available_routines": routine_context,
         "available_exercises": exercise_context if not routine_context else [],
@@ -728,6 +923,15 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
                 " Keep sets at the lower end of the range, hold or lower the load, and prefer technique and recovery"
                 " over extra volume while respecting the user's goal."
                 if fatigue_is_high else ""
+            )
+            + (
+                f" Recent or repeated joint pain was reported in {', '.join(joint_pain['repeated'] or joint_pain['recent'])}."
+                " Avoid heavy axial or high-stress loading on those joints and prefer lower-stress alternatives."
+                if (joint_pain["repeated"] or joint_pain["recent"]) else ""
+            )
+            + (
+                f" A 7-day deload week (-{active_deload_pct}% volume and load, RPE 6 cap) is active; keep volume light."
+                if active_deload_pct > 0 else ""
             )
             + (
                 " Write \"reasoning\" (and \"workout_name\" when creating a new workout or rest day) in natural Spanish."
@@ -841,6 +1045,17 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         )
         existing = result["reasoning"].strip()
         result["reasoning"] = f"{existing} {note}" if existing else note
+        result["adjusted"] = True
+
+    if active_deload_pct > 0:
+        plan_exercises = overtraining_service._apply_deload_to_exercises(plan_exercises, active_deload_pct)
+        deload_note = pick(
+            f"Deload week active: volume and load reduced by {active_deload_pct}%, target RPE capped at 6.",
+            f"Semana de descarga activa: volumen y carga reducidos un {active_deload_pct} %, RPE objetivo limitado a 6.",
+        )
+        existing = result["reasoning"].strip()
+        if deload_note not in existing:
+            result["reasoning"] = f"{existing} {deload_note}".strip() if existing else deload_note
         result["adjusted"] = True
 
     try:

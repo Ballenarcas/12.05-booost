@@ -11,6 +11,7 @@ export interface Routine {
   name: string
   exercises: RoutineExercise[]
   estimated_duration_minutes: number | null
+  scheduled_day?: Weekday | null
 }
 
 export interface RoutineCreatePayload {
@@ -24,6 +25,8 @@ export interface RoutineCreatePayload {
 }
 
 export type SetKind = 'normal' | 'warmup' | 'drop' | 'failure'
+
+export type JointLocation = 'shoulder' | 'elbow' | 'wrist' | 'lower_back' | 'hip' | 'knee' | 'ankle'
 
 export interface WorkoutSet {
   set_number: number
@@ -62,6 +65,7 @@ export interface ActiveSession {
   routineId?: string
   editWorkoutId?: string
   fatigueLevel?: number | null
+  jointPain?: JointLocation[]
   name: string
   startedAt: string
   exercises: ActiveExercise[]
@@ -80,6 +84,7 @@ export interface WorkoutLogCreate {
   started_at: string
   completed_at: string
   fatigue_level?: number | null
+  joint_pain?: JointLocation[]
   exercises: Array<{
     exercise_id: string
     is_cardio?: boolean
@@ -95,6 +100,7 @@ export interface WorkoutHistoryEntry {
   completed_at: string | null
   duration_seconds: number
   fatigue_level: number | null
+  joint_pain?: string[]
   exercises: Array<{
     exercise_id: string
     name: string
@@ -226,4 +232,69 @@ export interface WarmupRecommendationRequest {
     working_weight_kg?: number | null
     target_reps?: number | null
   }>
+}
+
+export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+
+export type EquipmentKey =
+  | 'full_gym'
+  | 'barbell'
+  | 'dumbbell'
+  | 'machine'
+  | 'cable'
+  | 'bodyweight'
+  | 'kettlebell'
+  | 'bands'
+
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced'
+
+export type TrainingPhilosophy = 'heavy_duty' | 'high_volume' | 'powerbuilding' | 'minimalist'
+
+export interface WeeklyRoutineExercise {
+  exercise_id: string
+  name: string
+  muscle_group: string
+  equipment: string[]
+  target_sets: number
+  target_reps: number
+}
+
+export interface WeeklyRoutineDay {
+  day: Weekday
+  routine_name: string
+  focus: string
+  estimated_duration_minutes: number
+  exercises: WeeklyRoutineExercise[]
+}
+
+export interface WeeklyRoutineDraft {
+  plan_title: string
+  split_name: string
+  objective: string
+  experience_level?: ExperienceLevel
+  training_philosophy?: TrainingPhilosophy | null
+  summary: string
+  change_summary: string | null
+  days: WeeklyRoutineDay[]
+}
+
+export interface WeeklyRoutineGenerateRequest {
+  days: Weekday[]
+  duration_minutes: number
+  equipment: EquipmentKey[]
+  objective?: string | null
+  experience_level?: ExperienceLevel
+  training_philosophy?: TrainingPhilosophy | null
+  notes?: string | null
+}
+
+export interface WeeklyRoutineModifyRequest {
+  preferences: WeeklyRoutineGenerateRequest
+  current_draft: WeeklyRoutineDraft
+  feedback: string
+  feedback_history: string[]
+}
+
+export interface WeeklyRoutineAcceptResponse {
+  routines: Routine[]
 }

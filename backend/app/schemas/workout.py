@@ -30,6 +30,7 @@ class RoutineSummary(BaseModel):
     name: str
     exercises: list[RoutineExerciseSummary]
     estimated_duration_minutes: int | None = Field(default=None, ge=0)
+    scheduled_day: Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"] | None = None
 
 
 class RoutineExerciseCreate(BaseModel):
@@ -55,6 +56,7 @@ class RoutineExerciseCreate(BaseModel):
 class RoutineCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     exercises: list[RoutineExerciseCreate] = Field(min_length=1)
+    scheduled_day: Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"] | None = None
 
     @field_validator("name", mode="before")
     @classmethod

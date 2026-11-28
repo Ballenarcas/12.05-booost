@@ -31,7 +31,7 @@ INFO_TIP = build_candidates(_state(meals_count=2, eaten_kcal=1100, protein_eaten
 
 
 RICH_STATE = _state(
-    meals_count=2, eaten_kcal=900, protein_eaten=70, objective="Hypertrophy", local_hour=20, today_rpe=9,
+    meals_count=2, eaten_kcal=900, protein_eaten=70, objective="Hypertrophy", local_hour=20, today_rpe=9, today_effort_load=20.0,
     last_meal={"name": "Chicken rice", "protein": 45}, yesterday={"kcal": 2100, "protein": 110},
     week_days_logged=6, week_protein_avg=80, week_days_on_goal=5, days_since_workout=5, last_workout_name="Push day",
     lift_progress={"exercise": "Bench Press", "before": "60", "after": "65"}, muscle_gap={"muscle": "Legs", "days": 12},

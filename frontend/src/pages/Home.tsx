@@ -7,6 +7,7 @@ import { percent } from '../utils/percent'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchDashboardSummary, getActiveDeloadPct, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
+import { OvertrainingPopup } from '../components/workout/OvertrainingPopup'
 import WorkoutPhoto from '../components/workout/WorkoutPhoto'
 import { planWorkoutState } from '../utils/workoutPlan'
 import { locale, useT } from '../i18n'
@@ -41,6 +42,7 @@ function Home() {
   const [planning, setPlanning] = useState(false)
   const user = getCurrentUser()
   const userId = user?.id
+  const [activeDeloadPct, setActiveDeloadPct] = useState<number>(() => getActiveDeloadPct(userId))
   const navigate = usePageNavigate()
 
   useEffect(() => {
@@ -122,6 +124,10 @@ function Home() {
 
         <AiTipCard onApplied={() => fetchDashboardSummary({ forceRefresh: true }).then(setSummary).catch(() => undefined)} />
 
+        <OvertrainingPopup
+          onStatusChange={(next) => setActiveDeloadPct(next.deload_active ? next.volume_reduction_pct : 0)}
+        />
+
         <section className="hifi-card" aria-labelledby="home-activity" aria-busy={!summary}>
           <h2 className="hifi-card-label" id="home-activity">{t('home.activity')}</h2>
           {activity?.connected ? (
@@ -171,7 +177,7 @@ function Home() {
                       {duration ? <span>{t('home.minutes', { value: duration })}</span> : null}
                       <span>{t(plan.exercises.length === 1 ? 'workouts.exerciseOne' : 'workouts.exerciseCount', { count: plan.exercises.length })}</span>
                     </p>
-                    <button className="hifi-pill" type="button" onClick={() => navigate('/workouts/active', { state: planWorkoutState(plan, getActiveDeloadPct(userId)) })}>{t('home.start')}</button>
+                    <button className="hifi-pill" type="button" onClick={() => navigate('/workouts/active', { state: planWorkoutState(plan, activeDeloadPct) })}>{t('home.start')}</button>
                   </div>
                 </div>
               </div>

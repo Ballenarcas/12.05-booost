@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
 MAX_WORKOUT_AGE = timedelta(days=365)
 CLOCK_TOLERANCE = timedelta(days=1)  # a phone's clock or time zone can be slightly off
+JointLocation = Literal["shoulder", "elbow", "wrist", "lower_back", "hip", "knee", "ankle"]
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -36,6 +38,7 @@ class WorkoutLogCreate(BaseModel):
     completed_at: datetime
     # 1 = fresh, 10 = exhausted. The AI trainer uses it for next-day calories and training.
     fatigue_level: int | None = Field(default=None, ge=1, le=10)
+    joint_pain: list[JointLocation] = Field(default_factory=list, max_length=7)
     exercises: list[ExerciseLogItem] = Field(min_length=1, max_length=50)
 
     @model_validator(mode="after")
@@ -51,6 +54,7 @@ class WorkoutLogCreate(BaseModel):
 class WorkoutLogUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     fatigue_level: int | None = Field(default=None, ge=1, le=10)
+    joint_pain: list[JointLocation] | None = Field(default=None, max_length=7)
     exercises: list[ExerciseLogItem] = Field(default_factory=list, max_length=50)
 
 
@@ -84,6 +88,7 @@ class WorkoutHistoryEntry(BaseModel):
     completed_at: datetime | None = None
     duration_seconds: int
     fatigue_level: int | None = None
+    joint_pain: list[str] = Field(default_factory=list)
     exercises: list[WorkoutHistoryExercise]
 
 

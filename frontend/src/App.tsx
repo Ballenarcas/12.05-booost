@@ -11,6 +11,7 @@ const pages = {
   Community: () => import('./pages/Community'),
   CommunityPost: () => import('./pages/CommunityPost'),
   CommunityProfile: () => import('./pages/CommunityProfile'),
+  AiWeeklyRoutine: () => import('./pages/AiWeeklyRoutine'),
   CreateRoutine: () => import('./pages/CreateRoutine'),
   CustomExercise: () => import('./pages/CustomExercise'),
   ExercisePicker: () => import('./pages/ExercisePicker'),
@@ -55,6 +56,7 @@ const AiCoach = lazy(pages.AiCoach)
 const Community = lazy(pages.Community)
 const CommunityPost = lazy(pages.CommunityPost)
 const CommunityProfile = lazy(pages.CommunityProfile)
+const AiWeeklyRoutine = lazy(pages.AiWeeklyRoutine)
 const CreateRoutine = lazy(pages.CreateRoutine)
 const CustomExercise = lazy(pages.CustomExercise)
 const ExercisePicker = lazy(pages.ExercisePicker)
@@ -98,6 +100,7 @@ function App() {
           <Route element={<ProtectedLayout />}>
             <Route path="/" element={<Home />} />
             <Route path="/workouts" element={<Workouts />} />
+            <Route path="/workouts/ai-weekly" element={<AiWeeklyRoutine />} />
             <Route path="/workouts/statistics" element={<WorkoutStatistics />} />
             <Route path="/statistics" element={<WorkoutStatistics />} />
             <Route path="/workouts/create" element={<CreateRoutine />} />

@@ -8,9 +8,13 @@ from app.core.ai_quota import use_ai_call
 from app.core.local_day import LocalDay
 from app.db.supabase_client import get_supabase
 from app.schemas.exercise import Exercise
-from app.schemas.overtraining import (
-    FatigueFeedbackCreate,
-    OvertrainingStatusResponse,
+from app.schemas.overtraining import OvertrainingStatusResponse
+from app.schemas.weekly_routine import (
+    WeeklyRoutineAcceptRequest,
+    WeeklyRoutineAcceptResponse,
+    WeeklyRoutineDraft,
+    WeeklyRoutineGenerateRequest,
+    WeeklyRoutineModifyRequest,
 )
 from app.schemas.workout import (
     CustomExerciseCreate,
@@ -23,7 +27,7 @@ from app.schemas.workout import (
 )
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
 from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
-from app.services import overtraining_service, workout_service, workout_statistics_service
+from app.services import overtraining_service, weekly_routine_service, workout_service, workout_statistics_service
 from app.services.exercise_guide_service import guide_for
 from app.services.premium_service import has_premium_flag
 from app.services.warmup_service import build_warmup_recommendation
@@ -44,23 +48,80 @@ class WorkoutFacade:
     async def suggest_adjustment(self, payload: LiveWorkoutAdjustmentRequest) -> list[LiveWorkoutAdjustmentSuggestion]:
         return await suggest_live_adjustment(payload.model_dump(mode="json"))
 
-    def recommend_warmup(
-        self,
-        user_id: UUID,
-        payload: WarmupRecommendationRequest,
-    ) -> WarmupRecommendationResponse:
+    def _require_premium(self, user_id: UUID, detail: str) -> None:
         try:
             is_premium = has_premium_flag(str(user_id))
         except Exception as error:
             logger.exception("Could not check the premium flag")
             raise HTTPException(status_code=503, detail="Could not check your Premium status. Please try again.") from error
         if not is_premium:
-            raise HTTPException(
-                status_code=403,
-                detail="Warm-up recommendations are a Premium feature. Upgrade to Premium to unlock them.",
-            )
+            raise HTTPException(status_code=403, detail=detail)
+
+    def recommend_warmup(
+        self,
+        user_id: UUID,
+        payload: WarmupRecommendationRequest,
+    ) -> WarmupRecommendationResponse:
+        self._require_premium(
+            user_id,
+            "Warm-up recommendations are a Premium feature. Upgrade to Premium to unlock them.",
+        )
         use_ai_call(user_id)
         return build_warmup_recommendation(payload)
+
+    def _read_user_objective(self, user_id: UUID) -> str | None:
+        supabase = get_supabase(admin=True)
+        if supabase is None:
+            return None
+        try:
+            rows = (
+                supabase.table("users")
+                .select("objective")
+                .eq("id", str(user_id))
+                .limit(1)
+                .execute()
+            ).data or []
+            return rows[0].get("objective") if rows else None
+        except Exception as err:
+            logger.warning("Could not read user objective for weekly routine: %s", err)
+            return None
+
+    def generate_weekly_routine(
+        self,
+        user_id: UUID,
+        payload: WeeklyRoutineGenerateRequest,
+    ) -> WeeklyRoutineDraft:
+        self._require_premium(
+            user_id,
+            "AI weekly routines are a Premium feature. Upgrade to Premium to unlock them.",
+        )
+        use_ai_call(user_id)
+        user_objective = payload.objective or self._read_user_objective(user_id)
+        return weekly_routine_service.generate_weekly_routine(payload, user_objective=user_objective)
+
+    def modify_weekly_routine(
+        self,
+        user_id: UUID,
+        payload: WeeklyRoutineModifyRequest,
+    ) -> WeeklyRoutineDraft:
+        self._require_premium(
+            user_id,
+            "AI weekly routines are a Premium feature. Upgrade to Premium to unlock them.",
+        )
+        use_ai_call(user_id)
+        return weekly_routine_service.modify_weekly_routine(payload)
+
+    def accept_weekly_routine(
+        self,
+        user_id: UUID,
+        payload: WeeklyRoutineAcceptRequest,
+        day: LocalDay | None = None,
+    ) -> WeeklyRoutineAcceptResponse:
+        self._require_premium(
+            user_id,
+            "AI weekly routines are a Premium feature. Upgrade to Premium to unlock them.",
+        )
+        return weekly_routine_service.accept_weekly_routine(user_id, payload, day)
 
     def save_log(self, user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResponse:
         saved = workout_service.save_workout_log(user_id, payload)
@@ -130,22 +191,6 @@ class WorkoutFacade:
 
     def get_overtraining_status(self, user_id: UUID, day: LocalDay | None = None) -> OvertrainingStatusResponse:
         return overtraining_service.evaluate_overtraining(user_id, day)
-
-    def submit_fatigue_feedback(
-        self,
-        user_id: UUID,
-        payload: FatigueFeedbackCreate,
-        day: LocalDay | None = None,
-    ) -> OvertrainingStatusResponse:
-        return overtraining_service.record_fatigue_feedback(user_id, payload, day)
-
-    def delete_fatigue_feedback(
-        self,
-        user_id: UUID,
-        entry_id: str,
-        day: LocalDay | None = None,
-    ) -> OvertrainingStatusResponse:
-        return overtraining_service.delete_fatigue_feedback(user_id, entry_id, day)
 
     def apply_overtraining_mods(self, user_id: UUID, day: LocalDay | None = None) -> OvertrainingStatusResponse:
         return overtraining_service.apply_overtraining_mods(user_id, day)

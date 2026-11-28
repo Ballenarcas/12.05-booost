@@ -253,22 +253,41 @@ def test_ai_tips_switching_from_english_to_spanish_rerenders_pending_tip(monkeyp
 
 def test_overtraining_status_localizes_headlines_signals_and_recommendations(monkeypatch):
     monkeypatch.setattr(overtraining_service, "get_supabase", lambda admin=False: None)
-    overtraining_service._FALLBACK_CHECKINS.clear()
-    overtraining_service._FALLBACK_STATES.clear()
+    monkeypatch.setattr(overtraining_service, "_FALLBACK_STATES", {})
+    monkeypatch.setattr(overtraining_service, "_fetch_todays_plan", lambda *_: None)
+    monkeypatch.setattr(overtraining_service, "_fetch_nutrition_3d", lambda *_: (0, {}))
+    monkeypatch.setattr(overtraining_service, "get_cached_exercise", lambda _id: None)
+    monkeypatch.setattr(
+        overtraining_service.health_service,
+        "get_activity_summary",
+        lambda *_: SimpleNamespace(connected=False, steps_avg_7d=0, active_calories_avg_7d=0),
+    )
 
-    # High-fatigue check-in with Chest soreness triggers alert + recommendations.
-    overtraining_service._FALLBACK_CHECKINS[USER] = [
+    now = _now()
+    workouts = [
         {
-            "id": str(uuid4()),
+            "id": f"w-{idx}",
+            "name": "Chest Day",
             "fatigue_level": 9,
-            "soreness_level": 8,
-            "sleep_quality": "poor",
-            "joint_strain": "sharp",
-            "sore_muscles": ["Chest"],
-            "notes": None,
-            "created_at": _now().isoformat(),
+            "joint_pain": ["knee"],
+            "start_time": (now - timedelta(days=idx)).isoformat(),
+            "end_time": (now - timedelta(days=idx)).isoformat(),
+            "workout_sets": [
+                {
+                    "exercise_id": "ex-chest",
+                    "set_number": s,
+                    "reps": 8,
+                    "weight": 100,
+                    "rpe": 9.5,
+                    "is_done": True,
+                    "exercises": {"name": "Bench Press", "muscle_group": "Chest"},
+                }
+                for s in range(1, 5)
+            ],
         }
+        for idx in range(6)
     ]
+    monkeypatch.setattr(overtraining_service, "_fetch_workouts_35d", lambda *_: workouts)
 
     es_resp = client.get(
         "/api/v1/workouts/overtraining-alerts",
@@ -277,13 +296,15 @@ def test_overtraining_status_localizes_headlines_signals_and_recommendations(mon
     assert es_resp.status_code == 200
     body = es_resp.json()
     assert body["risk_level"] == "high"
-    assert "deuda de recuperación" in body["headline"].lower()
+    assert "sobreentrenamiento" in body["headline"].lower()
     assert "Disponibilidad en" in body["summary"]
+    assert body["deload_week_recommended"] is True
+    assert "rodilla" in (body["deload_week_reason"] or "").lower()
     assert any("descarga" in rec.lower() for rec in body["recommendations"])
     assert any("pecho" in rec.lower() for rec in body["recommendations"])
     # Canonical English muscle names stay intact for the frontend body map SVG.
     assert "Chest" in body["strained_muscles"]
-    assert any(sig["label"] == "Registros de recuperación" for sig in body["signals"])
+    assert any(sig["label"] == "Molestia articular repetida" for sig in body["signals"])
 
 
 def test_workout_plan_reasoning_localizes_in_spanish(monkeypatch):

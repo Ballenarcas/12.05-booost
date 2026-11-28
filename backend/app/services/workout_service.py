@@ -302,7 +302,7 @@ def list_user_routines(user_id: UUID) -> list[RoutineSummary]:
     if supabase is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
 
-    routines = supabase.table("routines").select("id,name").eq("user_id", str(user_id)).execute().data or []
+    routines = supabase.table("routines").select("id,name,scheduled_day").eq("user_id", str(user_id)).execute().data or []
     if not routines:
         return []
 
@@ -334,7 +334,12 @@ def list_user_routines(user_id: UUID) -> list[RoutineSummary]:
             )
         )
     return [
-        RoutineSummary(id=str(routine["id"]), name=routine["name"], exercises=grouped.get(str(routine["id"]), []))
+        RoutineSummary(
+            id=str(routine["id"]),
+            name=routine["name"],
+            scheduled_day=routine.get("scheduled_day"),
+            exercises=grouped.get(str(routine["id"]), []),
+        )
         for routine in routines
     ]
 
@@ -375,9 +380,12 @@ def create_user_routine(user_id: UUID, payload: RoutineCreate) -> RoutineSummary
         if unknown_ids:
             raise HTTPException(status_code=400, detail="One or more selected exercises are unavailable")
 
+        routine_insert: dict[str, Any] = {"user_id": str(user_id), "name": payload.name.strip()}
+        if payload.scheduled_day is not None:
+            routine_insert["scheduled_day"] = payload.scheduled_day
         routine_response = (
             supabase.table("routines")
-            .insert({"user_id": str(user_id), "name": payload.name.strip()})
+            .insert(routine_insert)
             .select("id")
             .execute()
         )
@@ -413,9 +421,11 @@ def create_user_routine(user_id: UUID, payload: RoutineCreate) -> RoutineSummary
                 logger.exception("Failed to clean up incomplete routine")
         raise HTTPException(status_code=502, detail="Could not save this routine.") from err
 
+    resolved_scheduled_day = payload.scheduled_day if payload.scheduled_day is not None else routine_rows[0].get("scheduled_day")
     return RoutineSummary(
         id=str(routine_id),
         name=payload.name.strip(),
+        scheduled_day=resolved_scheduled_day,
         exercises=[
             RoutineExerciseSummary(
                 exercise_id=resolved_exercise_id,
@@ -436,7 +446,7 @@ def update_user_routine(user_id: UUID, routine_id: UUID, payload: RoutineCreate)
 
     routine_rows = (
         supabase.table("routines")
-        .select("id,name")
+        .select("id,name,scheduled_day")
         .eq("id", str(routine_id))
         .eq("user_id", str(user_id))
         .execute()
@@ -503,9 +513,11 @@ def update_user_routine(user_id: UUID, routine_id: UUID, payload: RoutineCreate)
             logger.exception("Failed to restore routine exercises after update failure")
         raise HTTPException(status_code=502, detail="Could not update this routine.") from err
 
+    resolved_scheduled_day = payload.scheduled_day if payload.scheduled_day is not None else routine_rows[0].get("scheduled_day")
     return RoutineSummary(
         id=str(routine_id),
         name=payload.name.strip(),
+        scheduled_day=resolved_scheduled_day,
         exercises=[
             RoutineExerciseSummary(
                 exercise_id=exercise_id,
@@ -694,6 +706,7 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
             "start_time": payload.started_at.isoformat(),
             "end_time": payload.completed_at.isoformat(),
             "fatigue_level": payload.fatigue_level,
+            "joint_pain": list(dict.fromkeys(payload.joint_pain)),
         }
         if plan is not None:
             record["ai_adjusted"] = bool(plan.get("ai_adjusted"))
@@ -741,7 +754,7 @@ def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryRespon
     rows = (
         supabase.table("workouts")
         .select(
-            "id,routine_id,name,start_time,end_time,fatigue_level,routines(name),"
+            "id,routine_id,name,start_time,end_time,fatigue_level,joint_pain,routines(name),"
             "workout_sets(exercise_id,exercise_order,set_number,reps,weight,rpe,is_done,duration_seconds,distance_km,exercises(name,muscle_group))"
         )
         .eq("user_id", str(user_id))
@@ -809,6 +822,7 @@ def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryRespon
             completed_at=completed_at,
             duration_seconds=max(0, int((completed_at - started_at).total_seconds())) if completed_at else 0,
             fatigue_level=row.get("fatigue_level"),
+            joint_pain=list(row.get("joint_pain") or []),
             exercises=[WorkoutHistoryExercise(**exercise) for exercise in exercises.values()],
         ))
     return WorkoutHistoryResponse(items=history)
@@ -850,9 +864,11 @@ def update_workout_history_entry(
         updated_sets = True
         if set_records:
             _insert_workout_sets(supabase, set_records)
-        workout_update = {"name": payload.name.strip()}
+        workout_update: dict[str, object] = {"name": payload.name.strip()}
         if payload.fatigue_level is not None:
             workout_update["fatigue_level"] = payload.fatigue_level
+        if payload.joint_pain is not None:
+            workout_update["joint_pain"] = list(dict.fromkeys(payload.joint_pain))
         response = (
             supabase.table("workouts")
             .update(workout_update)

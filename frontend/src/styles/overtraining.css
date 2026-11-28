@@ -1,4 +1,4 @@
-/* Overtraining & Recovery Alert styles matching redesign.css / ui/redesign tokens. */
+/* Overtraining Detection & 7-Day Deload Week styles matching redesign.css / ui/redesign tokens. */
 
 .app-shell:has(.ot-screen) {
   background: linear-gradient(161.7deg, rgb(0, 59, 210) -10%, rgb(249, 249, 249) 22%, rgb(233, 246, 251) 83%, rgb(0, 59, 210) 125%) fixed;
@@ -7,7 +7,7 @@
   background: linear-gradient(161.7deg, rgb(0, 40, 140) -10%, #0f1115 22%, #10151b 83%, rgb(0, 40, 140) 125%) fixed;
 }
 
-/* Workouts banner */
+/* Alert / Deload banner (Home & Workouts) */
 .hifi-card.ot-banner {
   display: flex;
   flex-direction: row;
@@ -30,6 +30,10 @@
   border-color: rgba(168, 107, 0, 0.38);
   background: linear-gradient(135deg, rgba(224, 168, 58, 0.1) 0%, var(--hifi-card) 60%);
 }
+.hifi-card.ot-banner.is-deload {
+  border-color: rgba(21, 99, 166, 0.42);
+  background: linear-gradient(135deg, rgba(21, 99, 166, 0.1) 0%, var(--hifi-card) 60%);
+}
 .hifi-card.ot-banner:active { transform: scale(0.99); }
 .hifi-card.ot-banner:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
 
@@ -45,6 +49,8 @@
 }
 .ot-banner.is-high .ot-banner-icon { background: var(--negative-tint); color: var(--negative); }
 .ot-banner.is-moderate .ot-banner-icon { background: rgba(168, 107, 0, 0.14); color: var(--warning); }
+.ot-banner.is-deload .ot-banner-icon { background: rgba(21, 99, 166, 0.14); color: #1563a6; }
+:root[data-theme="dark"] .ot-banner.is-deload .ot-banner-icon { color: #6fb2ec; }
 
 .ot-banner-copy { display: grid; flex: 1; gap: 3px; min-width: 0; }
 .ot-banner-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
@@ -68,6 +74,8 @@
 .ot-tier-badge.is-high { background: var(--negative-tint); color: var(--negative); }
 .ot-tier-badge.is-moderate { background: rgba(168, 107, 0, 0.14); color: var(--warning); }
 .ot-tier-badge.is-ready { background: var(--green-tint); color: var(--green); }
+.ot-tier-badge.is-deload { background: rgba(21, 99, 166, 0.14); color: #1563a6; }
+:root[data-theme="dark"] .ot-tier-badge.is-deload { color: #6fb2ec; }
 
 /* Recovery screen */
 .ot-screen { gap: 16px; }
@@ -144,6 +152,32 @@
 @media (max-width: 360px) {
   .ot-overview { grid-template-columns: 1fr; justify-items: start; }
   .ot-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.ot-deload-card {
+  border-color: rgba(21, 99, 166, 0.35);
+  background: linear-gradient(135deg, rgba(21, 99, 166, 0.08) 0%, var(--hifi-card) 65%);
+}
+.ot-deload-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ot-deload-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 500;
+}
+.ot-deload-copy {
+  margin: 0;
+  color: var(--hifi-muted);
+  font-size: 13.5px;
+  line-height: 1.45;
 }
 
 .ot-notice {
@@ -228,90 +262,163 @@
   border: 1px solid var(--line);
 }
 
-/* Recovery check-in form */
-.ot-form { animation: content-in var(--motion) var(--ease-out); }
-.ot-slider-field { display: grid; gap: 6px; font-size: 14px; }
-.ot-slider-head { display: flex; justify-content: space-between; align-items: baseline; }
-.ot-slider-head strong { color: var(--primary); font-family: var(--hifi-mono); }
-.ot-slider-field input[type="range"] { width: 100%; accent-color: var(--primary); cursor: pointer; }
-.ot-choice-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.ot-choice {
-  min-height: 40px;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--hifi-well);
-  color: var(--hifi-muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
+@media (prefers-reduced-motion: reduce) {
+  .ot-banner, .ot-action-btn, .ot-gauge-value { transition: none; }
 }
-.ot-choice.is-selected {
-  border-color: var(--primary);
-  background: rgba(21, 99, 166, 0.14);
-  color: var(--primary);
-}
-.ot-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.ot-chip {
-  min-height: 34px;
-  padding: 4px 11px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--hifi-well);
-  color: var(--hifi-muted);
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.ot-chip.is-selected {
-  border-color: var(--primary);
-  background: rgba(21, 99, 166, 0.16);
-  color: var(--primary);
-  font-weight: 500;
-}
-.ot-notes-input {
-  width: 100%;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--hifi-well);
-  color: var(--hifi-ink);
-  font: inherit;
-  font-size: 14px;
-}
-.ot-notes-input:focus { outline: 2px solid #0052b1; outline-offset: 1px; }
 
-/* Recent check-ins list */
-.ot-checkins { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.ot-checkin-item {
+/* Home overtraining modal popup */
+dialog.ot-popup {
+  margin: auto;
+  width: min(calc(100vw - 24px), 440px);
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--hifi-card);
+  color: var(--hifi-ink);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+dialog.ot-popup[open] {
+  display: block;
+}
+dialog.ot-popup:modal {
+  overscroll-behavior: contain;
+}
+dialog.ot-popup::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgba(10, 14, 22, 0.52);
+  backdrop-filter: blur(4px);
+}
+dialog.ot-popup.is-high {
+  border-color: rgba(198, 47, 69, 0.45);
+}
+dialog.ot-popup.is-moderate {
+  border-color: rgba(168, 107, 0, 0.38);
+}
+
+.ot-popup-surface {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+.ot-popup-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  padding: 12px;
-  border-radius: 10px;
-  background: var(--hifi-well);
 }
-.ot-checkin-body { display: grid; gap: 4px; min-width: 0; }
-.ot-checkin-scores { font-family: var(--hifi-mono); font-size: 13px; }
-.ot-checkin-meta { color: var(--hifi-muted); font-size: 12.5px; line-height: 1.4; }
-.ot-checkin-delete {
+.ot-popup-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+.ot-popup-icon {
   display: grid;
   flex: none;
   width: 38px;
   height: 38px;
   place-items: center;
+  border-radius: 50%;
+  background: var(--hifi-well);
+}
+.ot-popup-icon.is-high {
+  background: var(--negative-tint);
+  color: var(--negative);
+}
+.ot-popup-icon.is-moderate {
+  background: rgba(168, 107, 0, 0.14);
+  color: var(--warning);
+}
+.ot-popup-title-wrap {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.ot-popup-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+.ot-popup-subtitle {
+  margin: 0;
+  color: var(--hifi-muted);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+.ot-popup-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin: -8px -8px 0 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 50%;
   background: transparent;
-  color: var(--hifi-faint);
+  color: var(--hifi-muted);
   cursor: pointer;
 }
-.ot-checkin-delete:hover { color: var(--negative); }
-.ot-checkin-delete:focus-visible { outline: 2px solid #0052b1; outline-offset: 2px; }
+.ot-popup-close:hover {
+  background: var(--hifi-well);
+  color: var(--hifi-ink);
+}
+.ot-popup-close:focus-visible {
+  outline: 2px solid #0052b1;
+  outline-offset: 2px;
+}
+.ot-popup-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
 
-@media (prefers-reduced-motion: reduce) {
-  .ot-banner, .ot-action-btn, .ot-gauge-value, .ot-form { transition: none; animation: none; }
+.ot-popup-signals {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ot-popup-signal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--hifi-well);
+}
+
+.ot-popup-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--hifi-well);
+}
+.ot-popup-toggle-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.ot-popup-toggle-copy strong {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+.ot-popup-toggle-copy span {
+  color: var(--hifi-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ot-popup-actions {
+  display: grid;
+  gap: 8px;
 }

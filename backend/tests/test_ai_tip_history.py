@@ -85,7 +85,23 @@ def test_muscle_gap_needs_eight_days_and_skips_cardio():
 def test_today_effort_and_days_since_workout():
     summary = summarize_workouts([_session(0, _set("A", 10, rpe=8), _set("B", 10, rpe=9)), _session(3)], DAY)
     assert summary["today_rpe"] == 8.5
+    assert summary["today_effort_load"] == 2.4
     assert summary["days_since_workout"] == 0
+
+
+def test_hard_session_tip_requires_volume_and_effort():
+    low_volume_hit = summarize_workouts([_session(0, *[_set("Press", 100, rpe=9.5) for _ in range(6)])], DAY)
+    assert low_volume_hit["today_rpe"] == 9.5
+    assert low_volume_hit["today_effort_load"] == 10.2
+    assert "hard_session" not in _kinds(_state(
+        today_rpe=low_volume_hit["today_rpe"], today_effort_load=low_volume_hit["today_effort_load"],
+    ))
+
+    high_volume_hard = summarize_workouts([_session(0, *[_set("Press", 100, rpe=9.5) for _ in range(12)])], DAY)
+    assert high_volume_hard["today_effort_load"] == 20.4
+    assert "hard_session" in _kinds(_state(
+        today_rpe=high_volume_hard["today_rpe"], today_effort_load=high_volume_hard["today_effort_load"],
+    ))
 
 
 def test_numbers_in_a_meal_name_never_become_trusted_figures():

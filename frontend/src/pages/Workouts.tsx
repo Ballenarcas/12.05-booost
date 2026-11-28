@@ -1,9 +1,9 @@
-import { ChevronDown, Sparkles } from 'lucide-react'
+import { ChevronDown, Crown, Sparkles } from 'lucide-react'
 import Collapse from '../components/ui/Collapse'
 import { useEffect, useMemo, useState } from 'react'
 import { usePageNavigate } from '../utils/usePageNavigate'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { activeWorkoutStorageKey, clearOvertrainingMods, deleteRoutine, deleteWorkoutHistoryEntry, fetchDashboardSummary, fetchRoutines, fetchWorkoutHistory, getActiveDeloadPct, getCachedDashboardSummary, getCurrentUser, overtrainingModPctStorageKey, readSavedCopy, type DashboardSummary } from '../services/api'
+import { activeWorkoutStorageKey, deleteRoutine, deleteWorkoutHistoryEntry, fetchDashboardSummary, fetchRoutines, fetchWorkoutHistory, getActiveDeloadPct, getCachedDashboardSummary, getCurrentUser, readSavedCopy, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import { lastLifts, type LastLift } from '../utils/lastLifts'
 import { OvertrainingBanner } from '../components/workout/OvertrainingBanner'
@@ -11,7 +11,8 @@ import WorkoutPhoto from '../components/workout/WorkoutPhoto'
 import { planWorkoutState } from '../utils/workoutPlan'
 import { locale, t as tr, useT } from '../i18n'
 import '../styles/workouts.css'
-import type { ActiveExercise, Routine, WorkoutHistoryEntry } from '../types/workout'
+import '../styles/ai-weekly-routine.css'
+import type { ActiveExercise, JointLocation, Routine, WorkoutHistoryEntry } from '../types/workout'
 
 function formatWorkoutDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return tr('workouts.unavailable')
@@ -200,12 +201,13 @@ function Workouts() {
   }, [currentUserId, t])
 
   function startWorkout(routine?: Routine) {
-    const modActive = getActiveDeloadPct(currentUserId) > 0
+    const deloadPct = getActiveDeloadPct(currentUserId)
+    const modActive = deloadPct > 0
     const baseName = routine?.name ?? t('workouts.emptyWorkout')
     navigate('/workouts/active', {
       state: {
         routineId: routine?.id,
-        name: modActive && routine ? t('workouts.deloadName', { name: baseName }) : baseName,
+        name: modActive && routine ? t('workouts.deloadName', { name: baseName, pct: deloadPct }) : baseName,
         startedAt: new Date().toISOString(),
         exercises: routine ? createActiveExercises(routine, lifts, currentUserId) : [],
       },
@@ -213,7 +215,8 @@ function Workouts() {
   }
 
   function repeatWorkout(workout: WorkoutHistoryEntry) {
-    const modActive = getActiveDeloadPct(currentUserId) > 0
+    const deloadPct = getActiveDeloadPct(currentUserId)
+    const modActive = deloadPct > 0
     const exercises: ActiveExercise[] = workout.exercises.map((exercise) => {
       const isCardio = isCardioExercise(exercise)
       const previousSets = [...exercise.sets].sort((first, second) => first.set_number - second.set_number)
@@ -265,7 +268,7 @@ function Workouts() {
 
     navigate('/workouts/active', {
       state: {
-        name: modActive ? `${workout.name} (AI Deload -15%)` : workout.name,
+        name: modActive ? t('workouts.deloadName', { name: workout.name, pct: deloadPct }) : workout.name,
         startedAt: new Date().toISOString(),
         exercises,
       },
@@ -309,6 +312,7 @@ function Workouts() {
         name: workout.name,
         startedAt: new Date().toISOString(),
         fatigueLevel: workout.fatigue_level,
+        jointPain: (workout.joint_pain ?? []) as JointLocation[],
         exercises,
       },
     })
@@ -338,18 +342,6 @@ function Workouts() {
     sessionStorage.removeItem('booost_pending_exercise')
     setShowDiscardActiveWorkout(false)
     startWorkout()
-  }
-
-  async function clearDeloadModification() {
-    const modKey = overtrainingModPctStorageKey(currentUserId)
-    if (modKey) localStorage.removeItem(modKey)
-    setActiveDeloadPct(0)
-    try {
-      const next = await clearOvertrainingMods()
-      setActiveDeloadPct(next.deload_active ? next.volume_reduction_pct : 0)
-    } catch {
-      // Keep local deload disabled if offline.
-    }
   }
 
   async function confirmDeleteRoutine() {
@@ -403,17 +395,6 @@ function Workouts() {
         onStatusChange={(next) => setActiveDeloadPct(next.deload_active ? next.volume_reduction_pct : 0)}
       />
 
-      {activeDeloadPct > 0 && (
-        <div className="hifi-card workouts-deload" role="status">
-          <Sparkles size={18} aria-hidden="true" />
-          <div>
-            <p className="workouts-deload-title">{t('workouts.deloadTitle', { pct: activeDeloadPct })}</p>
-            <p className="hifi-muted">{t('workouts.deloadBody', { pct: activeDeloadPct })}</p>
-          </div>
-          <button className="hifi-pill" type="button" onClick={clearDeloadModification}>{t('workouts.disable')}</button>
-        </div>
-      )}
-
       <section className="hifi-section" aria-labelledby="ai-workout-title">
         <div className="hifi-section-heading">
           <h2 className="hifi-section-title" id="ai-workout-title">{t('welcome.aiWorkout')}</h2>
@@ -463,6 +444,22 @@ function Workouts() {
               {showAllRoutines ? t('workouts.showLess') : t('workouts.seeAll')}
             </button>
           )}
+        </div>
+        <div className="workouts-ai-weekly-banner">
+          <div className="workouts-ai-weekly-copy">
+            <p className="workouts-ai-weekly-title">
+              <Sparkles size={15} aria-hidden="true" />
+              <span>{t('workouts.aiWeeklyTitle')}</span>
+              <span className="workouts-ai-weekly-badge">
+                <Crown size={11} aria-hidden="true" />
+                {t('workouts.aiWeeklyPremiumTag')}
+              </span>
+            </p>
+            <p className="hifi-muted">{t('workouts.aiWeeklyBody')}</p>
+          </div>
+          <button className="hifi-pill" type="button" onClick={() => navigate('/workouts/ai-weekly')}>
+            {t('workouts.aiWeeklyCta')}
+          </button>
         </div>
         {!isLoading && !error && routines.length === 0 && <p className="hifi-card hifi-muted">{t('workouts.noRoutines')}</p>}
         <div className="workouts-list">

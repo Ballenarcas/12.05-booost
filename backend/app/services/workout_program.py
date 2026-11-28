@@ -53,6 +53,8 @@ FILL_ORDER = [
 
 UPPER_GROUPS = {"chest", "back", "shoulders", "arms", "abs"}
 LOWER_GROUPS = {"legs", "calves"}
+PUSH_GROUPS = {"chest", "shoulders"}
+PULL_GROUPS = {"back"}
 
 _COMPOUND_MOVEMENTS = frozenset({
     "squat", "hinge", "lunge", "horizontal_push", "vertical_push",
@@ -94,14 +96,20 @@ def _staple_index_by_supabase_id() -> dict[str, dict[str, Any]]:
 
 def recent_covers_whole_body(recent_muscle_groups: set[str]) -> bool:
     trained = {group.strip().lower() for group in recent_muscle_groups if group}
-    return bool(trained & UPPER_GROUPS) and bool(trained & LOWER_GROUPS)
+    return bool(trained & PUSH_GROUPS) and bool(trained & PULL_GROUPS) and bool(trained & LOWER_GROUPS)
 
 
 def choose_template(recent_muscle_groups: set[str]) -> str:
-    """Pick a split that does not repeat the side trained in the last 48 hours."""
+    """Pick a split that avoids repeating recently trained muscle regions."""
     trained = {group.strip().lower() for group in recent_muscle_groups if group}
+    trained_push = bool(trained & PUSH_GROUPS)
+    trained_pull = bool(trained & PULL_GROUPS)
     trained_upper = bool(trained & UPPER_GROUPS)
     trained_lower = bool(trained & LOWER_GROUPS)
+    if trained_lower and trained_pull and not trained_push:
+        return "push"
+    if trained_lower and trained_push and not trained_pull:
+        return "pull"
     if trained_upper and not trained_lower:
         return "lower"
     if trained_lower and not trained_upper:

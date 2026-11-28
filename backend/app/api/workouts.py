@@ -8,7 +8,7 @@ from app.core.auth import current_user, optional_user
 from app.core.local_day import LocalDay, local_day
 from app.facades.workout_facade import workout_facade
 from app.schemas.exercise import Exercise, ExerciseListResponse
-from app.schemas.overtraining import FatigueFeedbackCreate, OvertrainingStatusResponse
+from app.schemas.overtraining import OvertrainingStatusResponse
 from app.schemas.workout import (
     CustomExerciseCreate,
     LiveWorkoutAdjustmentRequest,
@@ -124,28 +124,6 @@ def get_overtraining_alerts(
 ) -> OvertrainingStatusResponse:
     response.headers["Cache-Control"] = "no-store"
     return workout_facade.get_overtraining_status(user_id, day)
-
-
-@router.post("/fatigue-feedback", response_model=OvertrainingStatusResponse)
-def submit_fatigue_feedback(
-    payload: FatigueFeedbackCreate,
-    response: Response,
-    user_id: UUID = Depends(current_user),
-    day: LocalDay = Depends(local_day),
-) -> OvertrainingStatusResponse:
-    response.headers["Cache-Control"] = "no-store"
-    return workout_facade.submit_fatigue_feedback(user_id, payload, day)
-
-
-@router.delete("/fatigue-feedback/{entry_id}", response_model=OvertrainingStatusResponse)
-def remove_fatigue_feedback(
-    entry_id: UUID,
-    response: Response,
-    user_id: UUID = Depends(current_user),
-    day: LocalDay = Depends(local_day),
-) -> OvertrainingStatusResponse:
-    response.headers["Cache-Control"] = "no-store"
-    return workout_facade.delete_fatigue_feedback(user_id, str(entry_id), day)
 
 
 @router.post("/overtraining-alerts/apply", response_model=OvertrainingStatusResponse)

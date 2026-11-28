@@ -2,7 +2,9 @@ import type { WorkoutPlanSummary } from '../services/api'
 
 /** Navigation state that opens today's plan in the active workout screen. */
 export function planWorkoutState(plan: WorkoutPlanSummary, deloadPct = 0) {
-  const alreadyDeloaded = Boolean(plan.ai_reasoning?.includes('Deload active'))
+  const alreadyDeloaded = Boolean(
+    plan.ai_reasoning && /(?:deload(?: week)? active|descarga(?:.*)?activa)/i.test(plan.ai_reasoning),
+  )
   const factor = deloadPct > 0 && !alreadyDeloaded ? 1 - deloadPct / 100 : 1
   const applyDeload = factor < 1
 
